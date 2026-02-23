@@ -1,142 +1,142 @@
-import type { JSONContent } from '@tiptap/core';
+import type { JSONContent } from "@tiptap/core";
 
 /**
  * Convert TipTap JSONContent (ProseMirror document) -> Markdown string
  * This is the reverse of remark-to-prosemirror.ts and runs synchronously.
  */
 export function tiptapDocToMarkdown(doc: JSONContent): string {
-	if (doc.type !== 'doc' || !doc.content) {
-		return '';
+	if (doc.type !== "doc" || !doc.content) {
+		return "";
 	}
 
 	const blocks = doc.content.map(blockToMarkdown);
-	return blocks.join('\n\n');
+	return blocks.join("\n\n");
 }
 
 function blockToMarkdown(node: JSONContent): string {
-	if (!node.type) return '';
+	if (!node.type) return "";
 
 	switch (node.type) {
-		case 'paragraph': {
+		case "paragraph": {
 			const content = inlineToMarkdown(node.content ?? []);
 			// Empty paragraphs should produce a blank line
-			return content || '';
+			return content || "";
 		}
 
-		case 'heading': {
+		case "heading": {
 			const level = node.attrs?.level ?? 1;
 			const content = inlineToMarkdown(node.content ?? []);
-			const hashes = '#'.repeat(Math.min(Math.max(level, 1), 6));
+			const hashes = "#".repeat(Math.min(Math.max(level, 1), 6));
 			return `${hashes} ${content}`;
 		}
 
-		case 'blockquote': {
+		case "blockquote": {
 			const blockContent = (node.content ?? [])
 				.map(blockToMarkdown)
 				.filter(Boolean)
-				.join('\n\n');
+				.join("\n\n");
 			// Add '> ' prefix to each line
 			return blockContent
-				.split('\n')
+				.split("\n")
 				.map((line) => `> ${line}`)
-				.join('\n');
+				.join("\n");
 		}
 
-		case 'codeBlock': {
-			const content = node.content?.[0]?.text ?? '';
+		case "codeBlock": {
+			const content = node.content?.[0]?.text ?? "";
 			// Use triple backticks for code blocks
 			return `\`\`\`\n${content}\n\`\`\``;
 		}
 
-		case 'horizontalRule': {
-			return '---';
+		case "horizontalRule": {
+			return "---";
 		}
 
-		case 'orderedList': {
+		case "orderedList": {
 			const start = node.attrs?.start ?? 1;
 			return (node.content ?? [])
 				.map((item, index) => listItemToMarkdown(item, start + index))
 				.filter(Boolean)
-				.join('\n');
+				.join("\n");
 		}
 
-		case 'bulletList': {
+		case "bulletList": {
 			return (node.content ?? [])
 				.map((item) => listItemToMarkdown(item))
 				.filter(Boolean)
-				.join('\n');
+				.join("\n");
 		}
 
-		case 'image': {
-			const src = node.attrs?.src ?? '';
-			const alt = node.attrs?.alt ?? '';
+		case "image": {
+			const src = node.attrs?.src ?? "";
+			const alt = node.attrs?.alt ?? "";
 
 			return `![${alt}](${src})`;
 		}
 
 		default:
-			return '';
+			return "";
 	}
 }
 
 function listItemToMarkdown(item: JSONContent, number?: number): string {
-	if (item.type !== 'listItem') return '';
+	if (item.type !== "listItem") return "";
 
 	const isBullet = number === undefined;
 	const content = (item.content ?? [])
 		.map((node, index) => {
-			if (index === 0 && node.type === 'paragraph') {
+			if (index === 0 && node.type === "paragraph") {
 				// First paragraph content goes inline with the bullet/number or checkbox
 				return inlineToMarkdown(node.content ?? []);
 			}
 			// Additional blocks are indented
 			return blockToMarkdown(node)
-				.split('\n')
+				.split("\n")
 				.map((line) => `  ${line}`)
-				.join('\n');
+				.join("\n");
 		})
 		.filter(Boolean)
-		.join('\n');
+		.join("\n");
 
 	// If this is a bullet item and it has a checked attribute (true/false), render as a task item
-	const hasCheckedAttr = item.attrs && 'checked' in item.attrs;
+	const hasCheckedAttr = item.attrs && "checked" in item.attrs;
 	const checked = hasCheckedAttr ? item.attrs?.checked : null;
 
 	if (isBullet && checked !== null && checked !== undefined) {
-		const checkbox = checked ? '[x]' : '[ ]';
+		const checkbox = checked ? "[x]" : "[ ]";
 		return `- ${checkbox} ${content}`;
 	}
 
-	const prefix = isBullet ? '-' : `${number}.`;
+	const prefix = isBullet ? "-" : `${number}.`;
 	return `${prefix} ${content}`;
 }
 
 function inlineToMarkdown(nodes: JSONContent[]): string {
-	return nodes.map(nodeToMarkdown).join('');
+	return nodes.map(nodeToMarkdown).join("");
 }
 
 function nodeToMarkdown(node: JSONContent): string {
-	if (!node.type) return '';
+	if (!node.type) return "";
 
 	switch (node.type) {
-		case 'text': {
-			let text = node.text ?? '';
+		case "text": {
+			let text = node.text ?? "";
 
 			// Apply marks in the correct order for Markdown
 			const marks = node.marks ?? [];
 
 			for (const mark of marks) {
 				switch (mark.type) {
-					case 'code':
+					case "code":
 						text = `\`${text}\``;
 						break;
-					case 'bold':
+					case "bold":
 						text = `**${text}**`;
 						break;
-					case 'italic':
+					case "italic":
 						text = `*${text}*`;
 						break;
-					case 'strike':
+					case "strike":
 						text = `~~${text}~~`;
 						break;
 				}
@@ -145,11 +145,11 @@ function nodeToMarkdown(node: JSONContent): string {
 			return text;
 		}
 
-		case 'hardBreak': {
-			return '  \n'; // Two spaces + newline creates a line break in Markdown
+		case "hardBreak": {
+			return "  \n"; // Two spaces + newline creates a line break in Markdown
 		}
 
 		default:
-			return '';
+			return "";
 	}
 }

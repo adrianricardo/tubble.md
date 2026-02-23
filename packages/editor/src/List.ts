@@ -1,12 +1,12 @@
-import { Extension } from '@tiptap/core';
-import { ListItem } from '@tiptap/extension-list';
-import type { Node as PMNode } from '@tiptap/pm/model';
-import type { EditorState, Transaction } from '@tiptap/pm/state';
-import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
-import { canJoin } from '@tiptap/pm/transform';
-import { isSelectionAtStartOfNode, nearestSharedParentOfType } from './utils';
+import { Extension } from "@tiptap/core";
+import { ListItem } from "@tiptap/extension-list";
+import type { Node as PMNode } from "@tiptap/pm/model";
+import type { EditorState, Transaction } from "@tiptap/pm/state";
+import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
+import { canJoin } from "@tiptap/pm/transform";
+import { isSelectionAtStartOfNode, nearestSharedParentOfType } from "./utils";
 
-const LIST_NODE_NAMES = ['bulletList', 'orderedList'];
+const LIST_NODE_NAMES = ["bulletList", "orderedList"];
 
 export const ListItemExtension = ListItem.extend({
 	addAttributes() {
@@ -15,35 +15,35 @@ export const ListItemExtension = ListItem.extend({
 				default: null,
 				keepOnSplit: true,
 				parseHTML: (element) => {
-					const dataChecked = element.getAttribute('data-checked');
+					const dataChecked = element.getAttribute("data-checked");
 					if (dataChecked === null) return null;
-					return dataChecked === '' || dataChecked === 'true';
+					return dataChecked === "" || dataChecked === "true";
 				},
 				renderHTML: (attributes) =>
 					attributes.checked !== null
-						? { 'data-checked': attributes.checked }
+						? { "data-checked": attributes.checked }
 						: {},
 			},
 		};
 	},
 	addNodeView() {
 		return ({ node, HTMLAttributes, getPos, editor }) => {
-			const listItem = document.createElement('li');
-			const checkboxWrapper = document.createElement('label');
-			const checkboxStyler = document.createElement('span');
-			const checkbox = document.createElement('input');
-			const content = document.createElement('div');
+			const listItem = document.createElement("li");
+			const checkboxWrapper = document.createElement("label");
+			const checkboxStyler = document.createElement("span");
+			const checkbox = document.createElement("input");
+			const content = document.createElement("div");
 
 			const updateA11Y = (currentNode: PMNode) => {
-				checkbox.ariaLabel = `Task item checkbox for ${currentNode.textContent || 'empty task item'}`;
+				checkbox.ariaLabel = `Task item checkbox for ${currentNode.textContent || "empty task item"}`;
 			};
 
 			updateA11Y(node);
 
-			checkboxWrapper.contentEditable = 'false';
-			checkbox.type = 'checkbox';
-			checkbox.addEventListener('mousedown', (event) => event.preventDefault());
-			checkbox.addEventListener('change', (event) => {
+			checkboxWrapper.contentEditable = "false";
+			checkbox.type = "checkbox";
+			checkbox.addEventListener("mousedown", (event) => event.preventDefault());
+			checkbox.addEventListener("change", (event) => {
 				// if the editor isn't editable and we don't have a handler for
 				// readonly checks we have to undo the latest change
 				if (!editor.isEditable) {
@@ -54,14 +54,14 @@ export const ListItemExtension = ListItem.extend({
 
 				const { checked } = event.target as HTMLInputElement;
 
-				if (editor.isEditable && typeof getPos === 'function') {
+				if (editor.isEditable && typeof getPos === "function") {
 					editor
 						.chain()
 						.focus(undefined, { scrollIntoView: false })
 						.command(({ tr }) => {
 							const position = getPos();
 
-							if (typeof position !== 'number') {
+							if (typeof position !== "number") {
 								return false;
 							}
 							const currentNode = tr.doc.nodeAt(position);
@@ -89,7 +89,7 @@ export const ListItemExtension = ListItem.extend({
 				checkbox.checked = node.attrs.checked;
 				checkbox.hidden = false;
 			} else {
-				listItem.removeAttribute('data-checked');
+				listItem.removeAttribute("data-checked");
 				checkbox.hidden = true;
 			}
 
@@ -113,7 +113,7 @@ export const ListItemExtension = ListItem.extend({
 						checkbox.checked = updatedNode.attrs.checked;
 						checkbox.hidden = false;
 					} else {
-						listItem.removeAttribute('data-checked');
+						listItem.removeAttribute("data-checked");
 						checkbox.hidden = true;
 					}
 					updateA11Y(updatedNode);
@@ -126,7 +126,7 @@ export const ListItemExtension = ListItem.extend({
 });
 
 export const ListToggleExtension = Extension.create({
-	name: 'ListToggleExtension',
+	name: "ListToggleExtension",
 	priority: 2000,
 	addCommands() {
 		return {
@@ -144,7 +144,7 @@ export const ListToggleExtension = Extension.create({
 						return chain().toggleBulletList().run();
 					}
 
-					const hasChangedAny = setListItemType('item', tr, nearestListPos);
+					const hasChangedAny = setListItemType("item", tr, nearestListPos);
 					if (!hasChangedAny) {
 						return chain().toggleBulletList().run();
 					}
@@ -163,7 +163,7 @@ export const ListToggleExtension = Extension.create({
 					if (nearestListPos === null) {
 						return chain().toggleOrderedList().run();
 					}
-					setListItemType('item', tr, nearestListPos);
+					setListItemType("item", tr, nearestListPos);
 					return chain().toggleOrderedList().run();
 				},
 			toggleParentTaskList:
@@ -177,23 +177,23 @@ export const ListToggleExtension = Extension.create({
 					);
 					if (nearestListPos === null) {
 						if (nearestShouldBeBulletList) {
-							throw new Error('FATAL: Bullet list should exist but does not');
+							throw new Error("FATAL: Bullet list should exist but does not");
 						}
 						return chain().toggleBulletList().toggleParentTaskList(true).run();
 					}
 					const nearestList = tr.doc.nodeAt(nearestListPos);
 					if (!nearestList) return false;
 
-					if (nearestList.type.name === 'orderedList') {
+					if (nearestList.type.name === "orderedList") {
 						if (nearestShouldBeBulletList) {
 							throw new Error(
-								'FATAL: Bullet list should exist, but was still a numbered list',
+								"FATAL: Bullet list should exist, but was still a numbered list",
 							);
 						}
 						return chain().toggleBulletList().toggleParentTaskList(true).run();
 					}
 					return setListItemType(
-						isTaskList(nearestList) ? 'item' : 'task',
+						isTaskList(nearestList) ? "item" : "task",
 						tr,
 						nearestListPos,
 					);
@@ -203,18 +203,18 @@ export const ListToggleExtension = Extension.create({
 
 	addKeyboardShortcuts() {
 		return {
-			'Mod-Shift-7': () => this.editor.commands.toggleParentOrderedList(),
-			'Mod-Shift-8': () => this.editor.commands.toggleParentBulletList(),
-			'Mod-Shift-9': () => this.editor.commands.toggleParentTaskList(),
+			"Mod-Shift-7": () => this.editor.commands.toggleParentOrderedList(),
+			"Mod-Shift-8": () => this.editor.commands.toggleParentBulletList(),
+			"Mod-Shift-9": () => this.editor.commands.toggleParentTaskList(),
 			Backspace: ({ editor }) => {
 				if (isSelectionAtStartOfNode(editor.view.state.selection)) {
-					return editor.commands.liftListItem('listItem');
+					return editor.commands.liftListItem("listItem");
 				}
 				return false;
 			},
 			Enter: ({ editor }) => {
 				if (isSelectionAtStartOfNode(editor.view.state.selection)) {
-					return editor.commands.liftListItem('listItem');
+					return editor.commands.liftListItem("listItem");
 				}
 				return false;
 			},
@@ -222,7 +222,7 @@ export const ListToggleExtension = Extension.create({
 	},
 
 	addProseMirrorPlugins() {
-		const key = new PluginKey('ClearTaskItemsForNumberedLists');
+		const key = new PluginKey("ClearTaskItemsForNumberedLists");
 
 		return [
 			new Plugin({
@@ -239,7 +239,7 @@ export const ListToggleExtension = Extension.create({
 					let modified = false;
 
 					newState.doc.descendants((node: PMNode, pos: number) => {
-						if (node.type.name === 'orderedList') {
+						if (node.type.name === "orderedList") {
 							node.forEach((child: PMNode, offset: number) => {
 								if (isTaskItem(child)) {
 									const childPos = pos + offset + 1;
@@ -261,10 +261,10 @@ export const ListToggleExtension = Extension.create({
 });
 
 export const ListAutoJoinExtension = Extension.create({
-	name: 'ListAutoJoinExtension',
+	name: "ListAutoJoinExtension",
 
 	addProseMirrorPlugins() {
-		const key = new PluginKey('ListAutoJoinExtension');
+		const key = new PluginKey("ListAutoJoinExtension");
 
 		return [
 			new Plugin({
@@ -306,7 +306,7 @@ export const ListAutoJoinExtension = Extension.create({
 							if (!LIST_NODE_NAMES.includes(left.type.name)) continue;
 
 							// If ordered lists have differing attrs, normalize right to left attrs so join is allowed
-							if (left.type.name === 'orderedList') {
+							if (left.type.name === "orderedList") {
 								const sameAttrs =
 									JSON.stringify(left.attrs) === JSON.stringify(right.attrs);
 								if (!sameAttrs) {
@@ -353,18 +353,18 @@ export const ListAutoJoinExtension = Extension.create({
 });
 
 function isListItem(node: PMNode) {
-	return node.type.name === 'listItem';
+	return node.type.name === "listItem";
 }
 
 function isTaskItem(node: PMNode) {
 	return isListItem(node) && node.attrs.checked !== null;
 }
 
-function itemType(node: PMNode): 'task' | 'item' {
-	return isTaskItem(node) ? 'task' : 'item';
+function itemType(node: PMNode): "task" | "item" {
+	return isTaskItem(node) ? "task" : "item";
 }
 
-declare module '@tiptap/core' {
+declare module "@tiptap/core" {
 	interface Commands<ReturnType> {
 		ListToggleExtension: {
 			/** Convert selected block items to taskList */
@@ -390,7 +390,7 @@ function isTaskList(listNode: PMNode) {
 }
 
 function setListItemType(
-	type: 'task' | 'item',
+	type: "task" | "item",
 	tr: Transaction,
 	nearestListPos: number,
 ): boolean {
@@ -408,7 +408,7 @@ function setListItemType(
 			if ($pos.depth <= $nearestListPos.depth) return true;
 			hasChangedAny = itemType(node) !== type;
 			tr.setNodeMarkup(pos, undefined, {
-				checked: type === 'task' ? false : null,
+				checked: type === "task" ? false : null,
 			});
 			return false;
 		},

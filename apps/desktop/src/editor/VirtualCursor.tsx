@@ -1,9 +1,14 @@
 import { getMarkdownRolloverBoundaryState } from "@hubble.md/editor";
 import type { Editor } from "@tiptap/core";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 
 type CursorStyle = "hidden" | "solid" | "blinking";
-type CursorPosition = { left: number; top: number; width: number; height: number };
+type CursorPosition = {
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+};
 
 const CURSOR_SCALE = 1.5;
 const BLINK_DELAY_MS = 500;
@@ -16,7 +21,9 @@ export function VirtualCursor({
 	containerRef: RefObject<HTMLDivElement | null>;
 }) {
 	const [cursorStyle, setCursorStyle] = useState<CursorStyle>("hidden");
-	const [cursorPosition, setCursorPosition] = useState<CursorPosition | null>(null);
+	const [cursorPosition, setCursorPosition] = useState<CursorPosition | null>(
+		null,
+	);
 	const [animatePosition, setAnimatePosition] = useState(true);
 	const blinkTimeoutRef = useRef<number | null>(null);
 	const inputModeRef = useRef<"pointer" | "keyboard">("keyboard");

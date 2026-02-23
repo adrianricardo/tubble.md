@@ -1,11 +1,11 @@
-import type { JSONContent } from '@tiptap/core';
-import type { Element as HastElement, Root as HastRoot } from 'hast';
-import { fromHtml } from 'hast-util-from-html';
-import type { Content, Image, List, ListItem, Paragraph, Root } from 'mdast';
-import remarkGfm from 'remark-gfm';
-import remarkParse from 'remark-parse';
-import { type Plugin, unified } from 'unified';
-import { visit } from 'unist-util-visit';
+import type { JSONContent } from "@tiptap/core";
+import type { Element as HastElement, Root as HastRoot } from "hast";
+import { fromHtml } from "hast-util-from-html";
+import type { Content, Image, List, ListItem, Paragraph, Root } from "mdast";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import { type Plugin, unified } from "unified";
+import { visit } from "unist-util-visit";
 
 // Convert Markdown (string) -> TipTap JSONContent (ProseMirror document)
 export function markdownToTiptapDoc(markdown: string): JSONContent {
@@ -17,7 +17,7 @@ export function markdownToTiptapDoc(markdown: string): JSONContent {
 	const parsed = processor.parse(input);
 	const tree = processor.runSync(parsed) as Root;
 	return {
-		type: 'doc',
+		type: "doc",
 		content: normalizeBlockContent(tree.children).flatMap(blockToPM),
 	} satisfies JSONContent;
 }
@@ -29,53 +29,53 @@ function normalizeBlockContent(children: Content[]): Content[] {
 
 function blockToPM(node: Content): JSONContent[] {
 	switch (node.type) {
-		case 'paragraph': {
+		case "paragraph": {
 			const [maybeImage] = node.children;
-			if (maybeImage?.type === 'image') {
+			if (maybeImage?.type === "image") {
 				return imageToPM(maybeImage);
 			}
 
 			return [
 				{
-					type: 'paragraph',
+					type: "paragraph",
 					content: inlineToPM(node.children ?? []),
 				},
 			];
 		}
-		case 'heading':
+		case "heading":
 			return [
 				{
-					type: 'heading',
+					type: "heading",
 					attrs: { level: node.depth ?? 1 },
 					content: inlineToPM(node.children ?? []),
 				},
 			];
-		case 'blockquote':
+		case "blockquote":
 			return [
 				{
-					type: 'blockquote',
+					type: "blockquote",
 					content: (node.children ?? []).flatMap((n) =>
 						blockToPM(n as Content),
 					),
 				},
 			];
-		case 'code':
+		case "code":
 			return [
 				{
-					type: 'codeBlock',
+					type: "codeBlock",
 					// TipTap CodeBlock (not Lowlight) doesn’t have a language attr in StarterKit; keep plain.
-					content: node.value ? [{ type: 'text', text: node.value }] : [],
+					content: node.value ? [{ type: "text", text: node.value }] : [],
 				},
 			];
-		case 'thematicBreak':
-			return [{ type: 'horizontalRule' }];
-		case 'list': {
+		case "thematicBreak":
+			return [{ type: "horizontalRule" }];
+		case "list": {
 			const list = node as List;
 			if (list.ordered) {
 				// Ordered list: ignore any task checkbox semantics
 				return [
 					{
-						type: 'orderedList',
+						type: "orderedList",
 						attrs: { start: list.start ?? 1 },
 						content: list.children.flatMap((li) =>
 							listItemToPM(li as ListItem, /* allowChecked */ false),
@@ -87,17 +87,17 @@ function blockToPM(node: Content): JSONContent[] {
 			// Bullet list: allow listItem.checked to flow into attrs.checked
 			return [
 				{
-					type: 'bulletList',
+					type: "bulletList",
 					content: list.children.flatMap((li) =>
 						listItemToPM(li as ListItem, /* allowChecked */ true),
 					),
 				},
 			];
 		}
-		case 'html': {
+		case "html": {
 			// Parse HTML to extract img tags, fallback to text for everything else
-			const raw = node.value ?? '';
-			if (raw.trim() === '') return [];
+			const raw = node.value ?? "";
+			if (raw.trim() === "") return [];
 
 			// Try to parse as HTML and extract img tags
 			try {
@@ -113,15 +113,15 @@ function blockToPM(node: Content): JSONContent[] {
 			// Fallback: keep raw HTML as a text paragraph to avoid data loss
 			return [
 				{
-					type: 'paragraph',
-					content: [{ type: 'text', text: raw }],
+					type: "paragraph",
+					content: [{ type: "text", text: raw }],
 				},
 			];
 		}
-		case 'table':
-		case 'tableRow':
-		case 'tableCell':
-		case 'image': {
+		case "table":
+		case "tableRow":
+		case "tableCell":
+		case "image": {
 			return imageToPM(node as Image);
 		}
 		default: {
@@ -137,18 +137,18 @@ function listItemToPM(li: ListItem, allowChecked: boolean): JSONContent[] {
 	const blocks = (li.children ?? []) as Content[];
 	const first = blocks[0];
 	const paragraphContent =
-		first && first.type === 'paragraph' ? inlineToPM(first.children ?? []) : [];
+		first && first.type === "paragraph" ? inlineToPM(first.children ?? []) : [];
 	const restBlocks = (
-		first && first.type === 'paragraph' ? blocks.slice(1) : blocks
+		first && first.type === "paragraph" ? blocks.slice(1) : blocks
 	).flatMap(blockToPM);
 	const content: JSONContent[] = [];
-	content.push({ type: 'paragraph', content: paragraphContent });
+	content.push({ type: "paragraph", content: paragraphContent });
 	content.push(...restBlocks);
 
 	const checkedAttr = allowChecked && li.checked != null ? !!li.checked : null;
 	return [
 		{
-			type: 'listItem',
+			type: "listItem",
 			attrs: { checked: checkedAttr },
 			content,
 		},
@@ -158,10 +158,10 @@ function listItemToPM(li: ListItem, allowChecked: boolean): JSONContent[] {
 function imageToPM(imageNode: Image): JSONContent[] {
 	return [
 		{
-			type: 'image',
+			type: "image",
 			attrs: {
-				src: imageNode.url || '',
-				alt: imageNode.alt || '',
+				src: imageNode.url || "",
+				alt: imageNode.alt || "",
 				title: imageNode.title || undefined,
 			},
 		},
@@ -172,42 +172,42 @@ function inlineToPM(children: Content[]): JSONContent[] {
 	const out: JSONContent[] = [];
 	for (const child of children ?? []) {
 		switch (child.type) {
-			case 'text':
+			case "text":
 				if (child.value && child.value.length > 0) {
-					out.push({ type: 'text', text: child.value });
+					out.push({ type: "text", text: child.value });
 				}
 				break;
-			case 'strong':
-				out.push(...applyMark(inlineToPM(child.children ?? []), 'bold'));
+			case "strong":
+				out.push(...applyMark(inlineToPM(child.children ?? []), "bold"));
 				break;
-			case 'emphasis':
-				out.push(...applyMark(inlineToPM(child.children ?? []), 'italic'));
+			case "emphasis":
+				out.push(...applyMark(inlineToPM(child.children ?? []), "italic"));
 				break;
-			case 'delete':
-				out.push(...applyMark(inlineToPM(child.children ?? []), 'strike'));
+			case "delete":
+				out.push(...applyMark(inlineToPM(child.children ?? []), "strike"));
 				break;
-			case 'inlineCode':
+			case "inlineCode":
 				if (child.value) {
 					out.push({
-						type: 'text',
+						type: "text",
 						text: child.value,
-						marks: [{ type: 'code' }],
+						marks: [{ type: "code" }],
 					});
 				}
 				break;
-			case 'break':
-				out.push({ type: 'hardBreak' });
+			case "break":
+				out.push({ type: "hardBreak" });
 				break;
-			case 'link':
+			case "link":
 				// StarterKit doesn’t include Link by default; drop the link mark but keep the text.
 				out.push(...inlineToPM(child.children ?? []));
 				break;
-			case 'image':
+			case "image":
 				// Not supported; render alt text inline.
-				if (child.alt) out.push({ type: 'text', text: child.alt });
+				if (child.alt) out.push({ type: "text", text: child.alt });
 				break;
-			case 'html':
-				if (child.value) out.push({ type: 'text', text: child.value });
+			case "html":
+				if (child.value) out.push({ type: "text", text: child.value });
 				break;
 			default:
 				// Unknown inline; ignore.
@@ -219,10 +219,10 @@ function inlineToPM(children: Content[]): JSONContent[] {
 
 function applyMark(
 	nodes: JSONContent[],
-	markType: 'bold' | 'italic' | 'strike',
+	markType: "bold" | "italic" | "strike",
 ): JSONContent[] {
 	return nodes.map((n) => {
-		if (n.type === 'text') {
+		if (n.type === "text") {
 			const marks = [...(n.marks ?? []), { type: markType }];
 			return { ...n, marks };
 		}
@@ -231,13 +231,13 @@ function applyMark(
 	});
 }
 
-const EMPTY_PARKER = 'HUBBLE_INTERNAL_EMPTY_MARKER';
+const EMPTY_PARKER = "HUBBLE_INTERNAL_EMPTY_MARKER";
 
 function rawMarkdownAddEmptyMarkers(rawMarkdown: string) {
 	return (
 		rawMarkdown
 			// Handle empty paragraphs by double newlines
-			.split('\n\n')
+			.split("\n\n")
 			.map((line) => {
 				// Runs of empty lines are truncated into a single paragraph.
 				// Add a marker to force each empty line to be a new paragraph.
@@ -246,16 +246,16 @@ function rawMarkdownAddEmptyMarkers(rawMarkdown: string) {
 				}
 				return line;
 			})
-			.join('\n\n')
+			.join("\n\n")
 			// Handle empty checklist items by single newline
-			.split('\n')
+			.split("\n")
 			.map((line) => {
 				if (line.match(/^-\s\[(\s|x)\]\s*$/)) {
 					return `${line} ${EMPTY_PARKER}`;
 				}
 				return line;
 			})
-			.join('\n')
+			.join("\n")
 	);
 }
 
@@ -266,7 +266,7 @@ function extractImagesFromHast(hastTree: HastRoot): JSONContent[] {
 	const images: JSONContent[] = [];
 
 	function visitHastNode(node: HastRoot | HastElement) {
-		if (node.type === 'element' && node.tagName === 'img') {
+		if (node.type === "element" && node.tagName === "img") {
 			const attrs: {
 				src?: string;
 				alt?: string;
@@ -282,12 +282,12 @@ function extractImagesFromHast(hastTree: HastRoot): JSONContent[] {
 			if (node.properties?.height)
 				attrs.height = Number(node.properties.height) || undefined;
 
-			images.push({ type: 'image', attrs });
+			images.push({ type: "image", attrs });
 		}
 
-		if ('children' in node && node.children) {
+		if ("children" in node && node.children) {
 			for (const child of node.children) {
-				if (child.type === 'element') {
+				if (child.type === "element") {
 					visitHastNode(child);
 				}
 			}
@@ -300,11 +300,11 @@ function extractImagesFromHast(hastTree: HastRoot): JSONContent[] {
 
 const remarkRemoveEmptyMarkers: Plugin<[]> = () => {
 	return (tree) => {
-		visit(tree, 'paragraph', (node: Paragraph) => {
+		visit(tree, "paragraph", (node: Paragraph) => {
 			const paragraphText = node.children
-				.filter((child) => child.type === 'text')
+				.filter((child) => child.type === "text")
 				.map((child) => child.value)
-				.join('');
+				.join("");
 
 			if (paragraphText.includes(EMPTY_PARKER)) {
 				node.children = [];

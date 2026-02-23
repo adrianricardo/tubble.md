@@ -1,8 +1,8 @@
-import { Extension } from '@tiptap/core';
-import { type EditorState, Plugin, PluginKey } from '@tiptap/pm/state';
-import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { Extension } from "@tiptap/core";
+import { type EditorState, Plugin, PluginKey } from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
-const FakeSelectionKey = new PluginKey('fakeSelection');
+const FakeSelectionKey = new PluginKey("fakeSelection");
 
 export type FrozenSelection = { from: number; to: number } | null;
 
@@ -11,7 +11,7 @@ export type FrozenSelection = { from: number; to: number } | null;
  * It does this by rendering a decoration across the last frozen selection range.
  */
 export const FakeSelectionExtension = Extension.create({
-	name: 'fakeSelection',
+	name: "fakeSelection",
 
 	addStorage() {
 		return {
@@ -64,7 +64,7 @@ export const FakeSelectionExtension = Extension.create({
 						const { from, to } = frozen;
 						if (from === to) return null;
 						const deco = Decoration.inline(from, to, {
-							class: 'pm-fake-selection',
+							class: "pm-fake-selection",
 						});
 						return DecorationSet.create(state.doc, [deco]);
 					},
@@ -74,7 +74,7 @@ export const FakeSelectionExtension = Extension.create({
 	},
 });
 
-declare module '@tiptap/core' {
+declare module "@tiptap/core" {
 	interface ExtensionStorage {
 		fakeSelection: {
 			frozen: FrozenSelection;

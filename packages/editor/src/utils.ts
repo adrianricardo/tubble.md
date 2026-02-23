@@ -1,5 +1,5 @@
-import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
-import type { Selection as PMSelection } from '@tiptap/pm/state';
+import type { Node as PMNode, ResolvedPos } from "@tiptap/pm/model";
+import type { Selection as PMSelection } from "@tiptap/pm/state";
 
 /**
  * Get the position of where the first text node starts in the given node.
