@@ -1,5 +1,5 @@
 import { Schema } from "@tiptap/pm/model";
-import { EditorState, TextSelection } from "@tiptap/pm/state";
+import { EditorState, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 import { __testing } from "./MarkdownRolloverExtension";
 
@@ -31,6 +31,12 @@ function buildDoc() {
 			schema.text(" done"),
 		]),
 	]);
+}
+
+function transactionWithSelectionSet(selectionSet: boolean) {
+	// inferSideFromCursorMotion only reads Transaction.selectionSet in these tests.
+	// We pass the minimal shape and cast to avoid constructing a full ProseMirror Transaction.
+	return { selectionSet } as unknown as Transaction;
 }
 
 function stateAt(pos: number) {
@@ -89,7 +95,7 @@ describe("markdown rollover side transitions", () => {
 			__testing.inferSideFromCursorMotion(
 				oldState,
 				newState,
-				{ selectionSet: true } as any,
+				transactionWithSelectionSet(true),
 				{ markType: schema.marks.bold, boundary: "start" },
 			),
 		).toBe("inside");
@@ -102,7 +108,7 @@ describe("markdown rollover side transitions", () => {
 			__testing.inferSideFromCursorMotion(
 				oldState,
 				newState,
-				{ selectionSet: true } as any,
+				transactionWithSelectionSet(true),
 				{ markType: schema.marks.bold, boundary: "start" },
 			),
 		).toBe("inside");
@@ -115,7 +121,7 @@ describe("markdown rollover side transitions", () => {
 			__testing.inferSideFromCursorMotion(
 				oldState,
 				newState,
-				{ selectionSet: false } as any,
+				transactionWithSelectionSet(false),
 				{ markType: schema.marks.bold, boundary: "start" },
 			),
 		).toBeNull();
@@ -128,7 +134,7 @@ describe("markdown rollover side transitions", () => {
 			__testing.inferSideFromCursorMotion(
 				oldState,
 				newState,
-				{ selectionSet: true } as any,
+				transactionWithSelectionSet(true),
 				{ markType: schema.marks.bold, boundary: "end" },
 			),
 		).toBe("inside");

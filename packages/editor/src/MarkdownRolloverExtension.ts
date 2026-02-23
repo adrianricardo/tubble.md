@@ -512,7 +512,7 @@ function findByPriority(
 ): MarkType | null {
 	for (const markName of MARK_PRIORITY) {
 		const markType = state.schema.marks[markName];
-		if (markType && markType.isInSet(marks)) {
+		if (markType?.isInSet(marks)) {
 			return markType;
 		}
 	}
