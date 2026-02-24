@@ -4,7 +4,7 @@ import type { Editor } from "@tiptap/core";
 import { keymatch } from "keymatch";
 import { type RefObject, useEffect, useRef, useState } from "react";
 
-type LinkStatus = "idle" | "focused" | "hidden";
+type LinkStatus = "idle" | "focused";
 
 export function LinkPopover({
 	editor,
@@ -17,6 +17,10 @@ export function LinkPopover({
 	const [left, setLeft] = useState(0);
 	const [top, setTop] = useState(0);
 	const [hrefValue, setHrefValue] = useState("");
+	// Escape should dismiss only the current link rollover session.
+	// We scope dismissal to the active link range key (`from:to`) so moving
+	// out of a link and back in (or to a different link) shows the popover again.
+	const [dismissedKey, setDismissedKey] = useState<string | null>(null);
 	const [activeLink, setActiveLink] = useState<{
 		from: number;
 		to: number;
@@ -33,7 +37,7 @@ export function LinkPopover({
 				setHrefValue(link.href);
 			}
 			const container = containerRef.current;
-			if (!container || !link || status === "hidden") return;
+			if (!container || !link) return;
 			const coords = editor.view.coordsAtPos(editor.state.selection.from);
 			const containerRect = container.getBoundingClientRect();
 			const popoverWidth = 300;
@@ -70,14 +74,23 @@ export function LinkPopover({
 			window.removeEventListener("scroll", update, true);
 		};
 	}, [editor, containerRef, status]);
+	const activeKey = activeLink ? `${activeLink.from}:${activeLink.to}` : null;
+	const isDismissedForCurrent =
+		activeKey !== null && dismissedKey === activeKey;
 
 	useEffect(() => {
-		if (!activeLink) return;
-		setStatus((prev) => (prev === "hidden" ? "hidden" : "idle"));
-	}, [activeLink]);
+		if (!activeKey) {
+			setDismissedKey(null);
+			setStatus("idle");
+			return;
+		}
+		if (dismissedKey && dismissedKey !== activeKey) {
+			setDismissedKey(null);
+		}
+	}, [activeKey, dismissedKey]);
 
 	useEffect(() => {
-		if (!editor || !activeLink || status === "hidden") return;
+		if (!editor || !activeLink || isDismissedForCurrent) return;
 		const onKeyDown = (event: KeyboardEvent) => {
 			const isInputFocused = document.activeElement === inputRef.current;
 			const editorFocused = editor.isFocused;
@@ -103,7 +116,7 @@ export function LinkPopover({
 
 			if (editorFocused && keymatch(event, "Escape")) {
 				event.preventDefault();
-				setStatus("hidden");
+				setDismissedKey(activeKey);
 				return;
 			}
 
@@ -121,9 +134,9 @@ export function LinkPopover({
 
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [editor, activeLink, status]);
+	}, [editor, activeLink, status, isDismissedForCurrent, activeKey]);
 
-	if (!editor || !activeLink || status === "hidden") return null;
+	if (!editor || !activeLink || isDismissedForCurrent) return null;
 
 	const handleInput = (href: string) => {
 		setHrefValue(href);
