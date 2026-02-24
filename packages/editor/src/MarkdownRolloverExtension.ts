@@ -93,6 +93,10 @@ export const MarkdownRolloverExtension = Extension.create({
 							return false;
 						},
 					},
+					handleTextInput: (view) => {
+						maybeHandleMarksAtLinkBoundary(view);
+						return false;
+					},
 					handleKeyDown: (view, event) => {
 						if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
 							const next = getBoundaryTransition(view, event.key);
@@ -302,6 +306,43 @@ function maybeHandleDeleteAtDelimiter(view: EditorView): boolean {
 	return true;
 }
 
+/**
+ * Ensure text typed at a link boundary inherits the adjacent link mark only
+ * when the cursor side is currently resolved as "inside".
+ */
+function maybeHandleMarksAtLinkBoundary(view: EditorView): boolean {
+	const { state } = view;
+	const { selection } = state;
+	if (!selection.empty) return false;
+
+	const boundaryMatch = getBoundaryMatchAtPos(state, selection.from);
+	if (!boundaryMatch || boundaryMatch.markType.name !== "link") return false;
+
+	const boundaryState = MarkdownRolloverKey.getState(state) ?? null;
+	const currentSide = getCurrentCursorSide(
+		state,
+		boundaryMatch.markType,
+		boundaryState,
+	);
+	if (currentSide !== "inside") return false;
+
+	const mark = getAdjacentInsertionMark(state, boundaryMatch.markType);
+	if (!mark) return false;
+
+	const activeMarks = state.storedMarks ?? state.selection.$from.marks();
+	if (boundaryMatch.markType.isInSet(activeMarks ?? [])) return false;
+
+	const tr = state.tr.addStoredMark(mark);
+	tr.setMeta(MarkdownRolloverKey, {
+		boundaryPos: selection.from,
+		markName: boundaryMatch.markType.name,
+		boundary: boundaryMatch.boundary,
+		side: "inside",
+	} satisfies NonNullable<RolloverBoundaryState>);
+	view.dispatch(tr);
+	return true;
+}
+
 function inferSideFromCursorMotion(
 	oldState: EditorState,
 	newState: EditorState,
@@ -414,9 +455,13 @@ function deriveBoundaryState(
 		boundary: boundaryMatch.boundary,
 		side:
 			inferredSide ??
-			(isMarkActiveForInsertion(state, boundaryMatch.markType)
+			// Link marks are non-inclusive, so boundary typing would otherwise
+			// default outside unless we explicitly treat link boundaries as inside.
+			(boundaryMatch.markType.name === "link"
 				? "inside"
-				: "outside"),
+				: isMarkActiveForInsertion(state, boundaryMatch.markType)
+					? "inside"
+					: "outside"),
 	};
 }
 
@@ -494,7 +539,7 @@ function setStoredMarkIntent(
 	side: CursorSide,
 ) {
 	if (side === "inside") {
-		const mark = markType.create();
+		const mark = getAdjacentInsertionMark(state, markType) ?? markType.create();
 		const activeMarks = tr.storedMarks ?? state.selection.$from.marks();
 		if (!markType.isInSet(activeMarks ?? [])) {
 			tr.addStoredMark(mark);
@@ -503,6 +548,25 @@ function setStoredMarkIntent(
 	}
 
 	tr.removeStoredMark(markType);
+}
+
+/**
+ * Returns the adjacent mark instance at the current cursor position, preferring
+ * nodeAfter before nodeBefore. This keeps mark attributes (e.g. link href)
+ * when preparing stored marks for insertion at boundaries.
+ */
+function getAdjacentInsertionMark(
+	state: EditorState,
+	markType: MarkType,
+): Mark | null {
+	const { selection } = state;
+	if (!selection.empty) return null;
+	const $pos = state.doc.resolve(selection.from);
+	const afterMark = markType.isInSet($pos.nodeAfter?.marks ?? []);
+	if (afterMark) return afterMark;
+	const beforeMark = markType.isInSet($pos.nodeBefore?.marks ?? []);
+	if (beforeMark) return beforeMark;
+	return null;
 }
 
 function isMarkActiveForInsertion(state: EditorState, markType: MarkType) {
