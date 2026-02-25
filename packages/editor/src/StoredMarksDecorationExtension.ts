@@ -6,16 +6,14 @@ const StoredMarksDecorationKey = new PluginKey("storedMarksDecoration");
 
 /** Mark types that get a cursor decoration when stored on an empty selection. */
 const DECORATED_MARKS = ["bold", "italic", "strike"] as const;
-const MARK_PRIORITY = ["code", "bold", "italic", "strike", "link"] as const;
+const MARK_PRIORITY = ["bold", "italic", "strike"] as const;
 const DELIMITER_BY_MARK: Record<
 	string,
 	{ start: string; end: string } | undefined
 > = {
-	code: { start: "`", end: "`" },
 	bold: { start: "**", end: "**" },
 	italic: { start: "*", end: "*" },
 	strike: { start: "~~", end: "~~" },
-	link: { start: "[", end: "]" },
 };
 
 /**
