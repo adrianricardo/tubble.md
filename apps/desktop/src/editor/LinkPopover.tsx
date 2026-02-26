@@ -16,7 +16,6 @@ type PopoverMode = "hidden" | "preview" | "actions";
 type MachineState = {
 	mode: PopoverMode;
 	activeKey: string | null;
-	dismissedKey: string | null;
 };
 type MachineEvent =
 	| { type: "LINK_SESSION_CHANGED"; activeKey: string | null }
@@ -27,7 +26,6 @@ type MachineEvent =
 const INITIAL_MACHINE_STATE: MachineState = {
 	mode: "hidden",
 	activeKey: null,
-	dismissedKey: null,
 };
 
 function machineReducer(
@@ -39,18 +37,18 @@ function machineReducer(
 			const { activeKey } = event;
 			if (!activeKey) return INITIAL_MACHINE_STATE;
 			if (state.activeKey !== activeKey) {
-				return { mode: "preview", activeKey, dismissedKey: null };
+				return { mode: "preview", activeKey };
 			}
 			return { ...state, activeKey };
 		}
 		case "EXPAND_REQUESTED": {
 			if (!state.activeKey) return state;
-			return { ...state, mode: "actions", dismissedKey: null };
+			return { ...state, mode: "actions" };
 		}
 		case "TOGGLE_ACTIONS_REQUESTED": {
 			if (!state.activeKey) return state;
 			if (state.mode === "preview") {
-				return { ...state, mode: "actions", dismissedKey: null };
+				return { ...state, mode: "actions" };
 			}
 			if (state.mode === "actions") {
 				return { ...state, mode: "preview" };
@@ -65,7 +63,6 @@ function machineReducer(
 				return {
 					...state,
 					mode: "hidden",
-					dismissedKey: state.activeKey,
 				};
 			}
 			return state;
