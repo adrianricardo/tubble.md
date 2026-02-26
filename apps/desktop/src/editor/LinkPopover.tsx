@@ -22,6 +22,8 @@ type MachineEvent =
 	| { type: "EXPAND_REQUESTED" }
 	| { type: "TOGGLE_ACTIONS_REQUESTED" }
 	| { type: "ESCAPE_REQUESTED" };
+// Modes: hidden=dismissed for current link session, preview=compact chip,
+// actions=expanded menu (input focus is managed by effect, not machine state).
 
 const INITIAL_MACHINE_STATE: MachineState = {
 	mode: "hidden",
@@ -215,6 +217,7 @@ export function LinkPopover({
 
 			if (keymatch(event, "CmdOrCtrl+K")) {
 				if (!isVisible) return;
+				// Popover owns Cmd+K while visible to avoid editor shortcut races.
 				event.preventDefault();
 				event.stopPropagation();
 				dispatch({ type: "TOGGLE_ACTIONS_REQUESTED" });
