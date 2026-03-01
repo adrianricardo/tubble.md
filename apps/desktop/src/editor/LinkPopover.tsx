@@ -220,18 +220,6 @@ export function LinkPopover({
 	}, [editor, containerRef]);
 
 	useEffect(() => {
-		const floatingEl = popoverRef.current;
-		if (!floatingEl || typeof ResizeObserver === "undefined") return;
-		const observer = new ResizeObserver(() => {
-			positionUpdateRef.current?.();
-		});
-		observer.observe(floatingEl);
-		return () => {
-			observer.disconnect();
-		};
-	}, [machineState.mode]);
-
-	useEffect(() => {
 		const onFocusRequest = () => {
 			dispatchMachineEvent({ type: "EXPAND_REQUESTED" });
 		};
@@ -332,52 +320,58 @@ export function LinkPopover({
 	return (
 		<div
 			ref={popoverRef}
-			className={`fixed z-[2] ${styles.popover}`}
+			className="fixed z-[2] w-[238px] transition-[inset-inline-start,inset-block-start] duration-[130ms] [transition-timing-function:ease] motion-reduce:transition-none"
 			style={{
 				insetInlineStart: `${floatingX}px`,
 				insetBlockStart: `${floatingY}px`,
 			}}
 		>
 			{machineState.mode === "preview" ? (
-				<button
-					type="button"
-					className={`flex h-7 cursor-pointer overflow-hidden rounded-[2px] border border-zinc-300 bg-gradient-to-b from-white to-zinc-50 text-left shadow-[0_1px_3px_rgba(0,0,0,0.1)] ${styles.previewButton}${isPreviewEntering ? ` ${styles.previewButtonEnter}` : ""}`}
-					onTransitionEnd={() => {
-						positionUpdateRef.current?.();
-					}}
-					onClick={() => dispatchMachineEvent({ type: "EXPAND_REQUESTED" })}
-				>
-					<span
-						title={activeLink.href}
-						className="min-w-0 flex-1 overflow-hidden px-2 py-[5px] pr-3 text-[11px] leading-[16px] text-zinc-700 whitespace-nowrap [mask-image:linear-gradient(to_right,black_84%,transparent)] [-webkit-mask-image:linear-gradient(to_right,black_84%,transparent)]"
+				<div className="flex justify-center">
+					<button
+						type="button"
+						className={cn(
+							"flex h-7 cursor-pointer overflow-hidden rounded-[2px] border border-zinc-300 bg-gradient-to-b from-white to-zinc-50 text-left shadow-[0_1px_3px_rgba(0,0,0,0.1)]",
+							styles.previewButton,
+							isPreviewEntering && styles.previewButtonEnter,
+						)}
+						onTransitionEnd={() => {
+							positionUpdateRef.current?.();
+						}}
+						onClick={() => dispatchMachineEvent({ type: "EXPAND_REQUESTED" })}
 					>
-						{activeLink.href}
-					</span>
-					<span className="relative flex h-full w-[42px] items-center justify-center overflow-hidden rounded-ee-[2px] rounded-se-[2px] bg-accent text-white">
 						<span
-							className={cn(
-								"absolute inset-0 flex items-center justify-center text-[11px] font-semibold leading-[16px] tracking-[0.12em] transition-transform duration-200",
-								inputMode === "keyboard"
-									? "translate-y-0"
-									: "-translate-y-[120%]",
-							)}
+							title={activeLink.href}
+							className="min-w-0 flex-1 overflow-hidden px-2 py-[5px] pr-3 text-[11px] leading-[16px] text-zinc-700 whitespace-nowrap [mask-image:linear-gradient(to_right,black_84%,transparent)] [-webkit-mask-image:linear-gradient(to_right,black_84%,transparent)]"
 						>
-							⌘K
+							{activeLink.href}
 						</span>
-						<span
-							className={cn(
-								"absolute inset-0 flex items-center justify-center transition-transform duration-200",
-								inputMode === "keyboard"
-									? "translate-y-[120%]"
-									: "translate-y-0",
-							)}
-						>
-							<MingcutePencilFill aria-label="Edit link" className="h-3 w-3" />
+						<span className="relative flex h-full w-[42px] items-center justify-center overflow-hidden rounded-ee-[2px] rounded-se-[2px] bg-accent text-white">
+							<span
+								className={cn(
+									"absolute inset-0 flex items-center justify-center text-[11px] font-semibold leading-[16px] tracking-[0.12em] transition-transform duration-200",
+									inputMode === "keyboard"
+										? "translate-y-0"
+										: "-translate-y-[120%]",
+								)}
+							>
+								⌘K
+							</span>
+							<span
+								className={cn(
+									"absolute inset-0 flex items-center justify-center transition-transform duration-200",
+									inputMode === "keyboard"
+										? "translate-y-[120%]"
+										: "translate-y-0",
+								)}
+							>
+								<MingcutePencilFill aria-label="Edit link" className="h-3 w-3" />
+							</span>
 						</span>
-					</span>
-				</button>
+					</button>
+				</div>
 			) : (
-				<div className="w-[238px] overflow-hidden rounded-[2px] border border-zinc-300 bg-gradient-to-b from-white to-zinc-50 shadow-[0_1px_3px_rgba(0,0,0,0.1)]">
+				<div className="w-full overflow-hidden rounded-[2px] border border-zinc-300 bg-gradient-to-b from-white to-zinc-50 shadow-[0_1px_3px_rgba(0,0,0,0.1)]">
 					<input
 						ref={inputRef}
 						type="text"

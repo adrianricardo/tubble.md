@@ -1,16 +1,10 @@
 @import "open-props/easings";
 
-.popover {
-	transition:
-		inset-inline-start 130ms ease,
-		inset-block-start 130ms ease;
-}
-
 .previewButton {
-	--link-popover-preview-inline-size-start: 70px;
+	--link-popover-preview-inline-size-start: 100px;
 	--link-popover-preview-inline-size-end: 165px;
 	inline-size: var(--link-popover-preview-inline-size-end);
-	transition: inline-size 300ms var(--ease-spring-3);
+	transition: inline-size 200ms var(--ease-spring-2);
 }
 
 .previewButtonEnter {
@@ -18,9 +12,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.popover {
-		transition: none;
-	}
 
 	.previewButton {
 		transition: none;
