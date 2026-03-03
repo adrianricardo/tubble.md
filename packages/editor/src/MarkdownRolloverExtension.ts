@@ -18,6 +18,11 @@ export type RolloverBoundaryState = {
 	boundary: BoundaryType;
 	side: CursorSide;
 } | null;
+export type CaretFormattingState = {
+	activeMarkNames: string[];
+	boundary: RolloverBoundaryState;
+	canEscapeBoundary: boolean;
+};
 
 export const MARK_PRIORITY = [
 	"code",
@@ -43,6 +48,45 @@ export const MarkdownRolloverKey = new PluginKey<RolloverBoundaryState>(
 
 export function getMarkdownRolloverBoundaryState(state: EditorState) {
 	return MarkdownRolloverKey.getState(state) ?? null;
+}
+
+export function getCaretFormattingState(
+	state: EditorState,
+): CaretFormattingState {
+	if (!state.selection.empty) {
+		return {
+			activeMarkNames: [],
+			boundary: null,
+			canEscapeBoundary: false,
+		};
+	}
+
+	const activeMarkNames = getActiveMarkNamesAtCursor(state);
+	const boundaryMatch = getBoundaryMatchAtPos(state, state.selection.from);
+	if (!boundaryMatch) {
+		return {
+			activeMarkNames,
+			boundary: null,
+			canEscapeBoundary: false,
+		};
+	}
+
+	const boundaryState = getMarkdownRolloverBoundaryState(state);
+	const side = getCurrentCursorSide(
+		state,
+		boundaryMatch.markType,
+		boundaryState,
+	);
+	return {
+		activeMarkNames,
+		boundary: {
+			boundaryPos: state.selection.from,
+			markName: boundaryMatch.markType.name,
+			boundary: boundaryMatch.boundary,
+			side,
+		},
+		canEscapeBoundary: getNextSideForEscape(side) === "outside",
+	};
 }
 
 export const MarkdownRolloverExtension = Extension.create({
@@ -125,6 +169,12 @@ export const MarkdownRolloverExtension = Extension.create({
 
 						if (event.key === "Backspace" || event.key === "Delete") {
 							const handled = maybeHandleDeleteAtDelimiter(view);
+							if (!handled) return false;
+							event.preventDefault();
+							return true;
+						}
+						if (event.key === "Escape") {
+							const handled = maybeHandleEscapeAtBoundary(view);
 							if (!handled) return false;
 							event.preventDefault();
 							return true;
@@ -312,6 +362,35 @@ function maybeHandleDeleteAtDelimiter(view: EditorView): boolean {
 	return true;
 }
 
+function maybeHandleEscapeAtBoundary(view: EditorView): boolean {
+	const { state } = view;
+	const { selection } = state;
+	if (!selection.empty) return false;
+
+	const boundaryMatch = getBoundaryMatchAtPos(state, selection.from);
+	if (!boundaryMatch) return false;
+
+	const boundaryState = MarkdownRolloverKey.getState(state) ?? null;
+	const currentSide = getCurrentCursorSide(
+		state,
+		boundaryMatch.markType,
+		boundaryState,
+	);
+	const nextSide = getNextSideForEscape(currentSide);
+	if (!nextSide) return false;
+
+	const tr = state.tr;
+	setStoredMarkIntent(tr, state, boundaryMatch.markType, nextSide);
+	tr.setMeta(MarkdownRolloverKey, {
+		boundaryPos: selection.from,
+		markName: boundaryMatch.markType.name,
+		boundary: boundaryMatch.boundary,
+		side: nextSide,
+	} satisfies NonNullable<RolloverBoundaryState>);
+	view.dispatch(tr);
+	return true;
+}
+
 /**
  * Ensure text typed at a link boundary inherits the adjacent link mark only
  * when the cursor side is currently resolved as "inside".
@@ -393,6 +472,11 @@ function inferSideFromCursorMotion(
 		return "inside";
 	}
 
+	return null;
+}
+
+function getNextSideForEscape(currentSide: CursorSide): CursorSide | null {
+	if (currentSide === "inside") return "outside";
 	return null;
 }
 
@@ -580,6 +664,28 @@ function isMarkActiveForInsertion(state: EditorState, markType: MarkType) {
 	return !!markType.isInSet(marks);
 }
 
+function getActiveMarkNamesAtCursor(state: EditorState) {
+	if (!state.selection.empty) return [];
+
+	const names = new Set(
+		(state.storedMarks ?? state.selection.$from.marks()).map(
+			(mark) => mark.type.name,
+		),
+	);
+	const boundaryMatch = getBoundaryMatchAtPos(state, state.selection.from);
+	if (boundaryMatch) {
+		const side = getCurrentCursorSide(
+			state,
+			boundaryMatch.markType,
+			getMarkdownRolloverBoundaryState(state),
+		);
+		if (side === "inside") names.add(boundaryMatch.markType.name);
+	}
+
+	const preferred = MARK_PRIORITY.filter((name) => names.has(name));
+	return preferred;
+}
+
 function findByPriority(
 	state: EditorState,
 	marks: readonly Mark[],
@@ -639,6 +745,7 @@ function findMarkRangeAtPos(
 
 export const __testing = {
 	getNextSideForArrow,
+	getNextSideForEscape,
 	inferSideFromCursorMotion,
 	isCursorRightOfDelimiter,
 };

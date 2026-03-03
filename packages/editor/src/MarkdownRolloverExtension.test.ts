@@ -88,6 +88,14 @@ describe("markdown rollover side transitions", () => {
 		).toBe("outside");
 	});
 
+	it("Escape from inside toggles outside", () => {
+		expect(__testing.getNextSideForEscape("inside")).toBe("outside");
+	});
+
+	it("Escape from outside is a no-op", () => {
+		expect(__testing.getNextSideForEscape("outside")).toBeNull();
+	});
+
 	it("regression: ArrowLeft from inside into start boundary stays inside", () => {
 		const oldState = stateAt(BOLD_START + 1);
 		const newState = stateAt(BOLD_START);

@@ -16,8 +16,9 @@ import StarterKit from "@tiptap/starter-kit";
 import { keymatch } from "keymatch";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { createAppMenu } from "./appMenu";
-import { createImageExtension } from "./editor/ImageExtension";
+import { FormattingPalette } from "./editor/FormattingPalette";
 import { handleImagePaste } from "./editor/handleImagePaste";
+import { createImageExtension } from "./editor/ImageExtension";
 import { LinkPopover } from "./editor/LinkPopover";
 import { SmartLinkExtension } from "./editor/SmartLinkExtension";
 import { VirtualCursor } from "./editor/VirtualCursor";
@@ -213,6 +214,7 @@ function MarkdownEditor({
 			<EditorContent editor={editor} />
 			<LinkPopover editor={editor} containerRef={editorRootRef} />
 			<VirtualCursor editor={editor} containerRef={editorRootRef} />
+			<FormattingPalette editor={editor} />
 		</div>
 	);
 }

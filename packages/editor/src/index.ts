@@ -12,6 +12,8 @@ export {
 	listExtensions,
 } from "./List";
 export {
+	type CaretFormattingState,
+	getCaretFormattingState,
 	getMarkdownRolloverBoundaryState,
 	MarkdownRolloverExtension,
 	type RolloverBoundaryState,
