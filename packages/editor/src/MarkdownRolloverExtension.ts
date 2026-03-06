@@ -93,7 +93,18 @@ function maybeHandleEscapeAtBoundary(view: EditorView): boolean {
 	if (!canEscapeBoundaryAtCursor(state, escapedBoundary)) return false;
 
 	const boundaryMatch = getBoundaryMatchAtPos(state, state.selection.from);
-	if (!boundaryMatch) return false;
+
+	// Handle stored marks on an empty line with no adjacent marked text
+	if (!boundaryMatch) {
+		const marks = state.storedMarks;
+		if (!marks || marks.length === 0) return false;
+		const tr = state.tr;
+		for (const mark of marks) {
+			tr.removeStoredMark(mark.type);
+		}
+		view.dispatch(tr);
+		return true;
+	}
 
 	const tr = state.tr.removeStoredMark(boundaryMatch.markType);
 	tr.setMeta(MarkdownRolloverKey, {
@@ -111,7 +122,13 @@ function canEscapeBoundaryAtCursor(
 	if (!state.selection.empty) return false;
 
 	const boundaryMatch = getBoundaryMatchAtPos(state, state.selection.from);
-	if (!boundaryMatch) return false;
+
+	// Allow escape when stored marks exist with no adjacent marked text
+	if (!boundaryMatch) {
+		const marks = state.storedMarks;
+		return !!marks && marks.length > 0;
+	}
+
 	if (boundaryMatch.boundary !== "end") return false;
 	if (
 		isBoundaryEscaped(
