@@ -122,3 +122,50 @@ describe("markdown rollover esc-only behavior", () => {
 		expect(atEnd.canEscapeBoundary).toBe(true);
 	});
 });
+
+describe("escape stored marks on empty paragraph", () => {
+	function emptyParaState() {
+		const doc = schema.node("doc", null, [
+			schema.node("paragraph", null, []),
+		]);
+		return EditorState.create({
+			schema,
+			doc,
+			selection: TextSelection.create(doc, 1),
+		});
+	}
+
+	it("hasStoredMarksOnEmptyNode returns true with stored bold mark", () => {
+		const base = emptyParaState();
+		const state = base.apply(base.tr.addStoredMark(schema.marks.bold.create()));
+		expect(__testing.hasStoredMarksOnEmptyNode(state)).toBe(true);
+	});
+
+	it("hasStoredMarksOnEmptyNode returns false without stored marks", () => {
+		const state = emptyParaState();
+		expect(__testing.hasStoredMarksOnEmptyNode(state)).toBe(false);
+	});
+
+	it("canEscapeBoundary is true on empty paragraph with stored mark", () => {
+		const base = emptyParaState();
+		const state = base.apply(base.tr.addStoredMark(schema.marks.bold.create()));
+		const caretState = getCaretFormattingState(state);
+		expect(caretState.canEscapeBoundary).toBe(true);
+		expect(caretState.activeMarkNames).toContain("bold");
+	});
+
+	it("canEscapeBoundary is false on empty paragraph without stored marks", () => {
+		const state = emptyParaState();
+		const caretState = getCaretFormattingState(state);
+		expect(caretState.canEscapeBoundary).toBe(false);
+		expect(caretState.activeMarkNames).toEqual([]);
+	});
+
+	it("hasStoredMarksOnEmptyNode returns false on non-empty paragraph", () => {
+		const state = stateAt(BOLD_END);
+		const withStored = state.apply(
+			state.tr.addStoredMark(schema.marks.bold.create()),
+		);
+		expect(__testing.hasStoredMarksOnEmptyNode(withStored)).toBe(false);
+	});
+});

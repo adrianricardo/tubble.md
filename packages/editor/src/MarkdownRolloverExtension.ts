@@ -93,15 +93,17 @@ function maybeHandleEscapeAtBoundary(view: EditorView): boolean {
 	if (!canEscapeBoundaryAtCursor(state, escapedBoundary)) return false;
 
 	const boundaryMatch = getBoundaryMatchAtPos(state, state.selection.from);
-	if (!boundaryMatch) return false;
+	if (boundaryMatch) {
+		const tr = state.tr.removeStoredMark(boundaryMatch.markType);
+		tr.setMeta(MarkdownRolloverKey, {
+			pos: state.selection.from,
+			markName: boundaryMatch.markType.name,
+		} satisfies NonNullable<EscapedBoundaryState>);
+		view.dispatch(tr);
+		return true;
+	}
 
-	const tr = state.tr.removeStoredMark(boundaryMatch.markType);
-	tr.setMeta(MarkdownRolloverKey, {
-		pos: state.selection.from,
-		markName: boundaryMatch.markType.name,
-	} satisfies NonNullable<EscapedBoundaryState>);
-	view.dispatch(tr);
-	return true;
+	return maybeClearStoredMarksOnEmptyNode(view);
 }
 
 function canEscapeBoundaryAtCursor(
@@ -111,19 +113,21 @@ function canEscapeBoundaryAtCursor(
 	if (!state.selection.empty) return false;
 
 	const boundaryMatch = getBoundaryMatchAtPos(state, state.selection.from);
-	if (!boundaryMatch) return false;
-	if (boundaryMatch.boundary !== "end") return false;
-	if (
-		isBoundaryEscaped(
-			escapedBoundary,
-			state.selection.from,
-			boundaryMatch.markType.name,
-		)
-	) {
-		return false;
+	if (boundaryMatch) {
+		if (boundaryMatch.boundary !== "end") return false;
+		if (
+			isBoundaryEscaped(
+				escapedBoundary,
+				state.selection.from,
+				boundaryMatch.markType.name,
+			)
+		) {
+			return false;
+		}
+		return isMarkEffectivelyActiveAtCursor(state, boundaryMatch.markType);
 	}
 
-	return isMarkEffectivelyActiveAtCursor(state, boundaryMatch.markType);
+	return hasStoredMarksOnEmptyNode(state);
 }
 
 function getBoundaryMatchAtPos(
@@ -212,6 +216,33 @@ function getAdjacentInsertionMark(
 	return null;
 }
 
+function hasStoredMarksOnEmptyNode(state: EditorState): boolean {
+	const $pos = state.doc.resolve(state.selection.from);
+	if ($pos.parent.content.size !== 0) return false;
+	const storedMarks = state.storedMarks;
+	if (!storedMarks || storedMarks.length === 0) return false;
+	return MARK_PRIORITY.some((markName) => {
+		const markType = state.schema.marks[markName];
+		return markType && !!markType.isInSet(storedMarks);
+	});
+}
+
+function maybeClearStoredMarksOnEmptyNode(view: EditorView): boolean {
+	const { state } = view;
+	if (!hasStoredMarksOnEmptyNode(state)) return false;
+	const storedMarks = state.storedMarks!;
+	for (const markName of MARK_PRIORITY) {
+		const markType = state.schema.marks[markName];
+		if (!markType) continue;
+		if (markType.isInSet(storedMarks)) {
+			const tr = state.tr.removeStoredMark(markType);
+			view.dispatch(tr);
+			return true;
+		}
+	}
+	return false;
+}
+
 function findByPriority(
 	state: EditorState,
 	marks: readonly Mark[],
@@ -227,5 +258,6 @@ export const __testing = {
 	canEscapeBoundaryAtCursor,
 	findByPriority,
 	getBoundaryMatchAtPos,
+	hasStoredMarksOnEmptyNode,
 	isBoundaryEscaped,
 };
