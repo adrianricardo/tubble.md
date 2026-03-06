@@ -24,6 +24,8 @@ jobs:
       - name: Construct Oz prompt
         id: prompt
         uses: actions/github-script@v7
+        env:
+          RESULT_PATH: ${{ runner.temp }}/oz-issue-triage-result.json
         with:
           script: |
             const issue = context.payload.issue;
@@ -34,6 +36,7 @@ jobs:
               ? '.github/ISSUE_TEMPLATE/bug_report.md'
               : '.github/ISSUE_TEMPLATE/feature_request.md';
             const description = (issue.body || 'No description provided.').trim();
+            const resultPath = process.env.RESULT_PATH;
 
             const prompt = `You are the Oz Agent for this repository, running inside GitHub Actions.
             A new ${issueType} has been filed and the repository is already checked out in your workspace.
@@ -51,24 +54,25 @@ jobs:
             - Read the relevant issue template from \`${templatePath}\`.
             - Read the pull request template from \`.github/pull_request_template.md\`.
             - Use \`pnpm\` for package-manager commands in this repository.
+            - Write your structured result to \`${resultPath}\`.
 
             Your job:
             1. Decide whether this issue is actionable enough to investigate right now by comparing it against the relevant issue template.
             2. For bug reports, require enough detail to understand the bug, reproduce it, and compare expected vs. actual behavior. Ask for environment details only when they matter.
             3. For feature requests, require a clear problem statement and enough concrete detail to define a reasonably scoped change. Do not ask for optional sections unless they are needed to proceed.
             4. Your GitHub access from inside the agent is read-only. The action runner will handle GitHub writes after you finish.
-            5. If the issue is not actionable, stop without making code changes and return JSON with status \`needs_info\` and a concise \`comment_body\` listing only the missing details needed to investigate.
+            5. If the issue is not actionable, stop without making code changes and write JSON with status \`needs_info\` and a concise \`comment_body\` listing only the missing details needed to investigate to \`${resultPath}\`.
             6. If the issue is actionable, investigate the codebase, make a reasonable scoped attempt to address it, and run the most relevant validation commands you can find.
-            7. If you make code changes, leave the modified files in the working tree and return JSON with status \`draft_pr_ready\`, a proposed \`branch_name\`, a \`pr_title\`, and a \`pr_body\` that follows \`.github/pull_request_template.md\`.
+            7. If you make code changes, leave the modified files in the working tree and write JSON with status \`draft_pr_ready\`, a proposed \`branch_name\`, a \`pr_title\`, and a \`pr_body\` that follows \`.github/pull_request_template.md\` to \`${resultPath}\`.
             8. The PR body must include \`Closes #${issue.number}\` and mention the testing you performed.
-            9. If you determine after investigation that no safe or useful code change is possible yet, return JSON with status \`blocked\` and a concise \`comment_body\` explaining the blocker.
+            9. If you determine after investigation that no safe or useful code change is possible yet, write JSON with status \`blocked\` and a concise \`comment_body\` explaining the blocker to \`${resultPath}\`.
 
             Important constraints:
             - Keep issue comments concise and specific.
             - Do not ask for information that is already present in the issue.
             - Do not create a PR yourself.
-            - Do not output anything except a single valid JSON object.
-            - Do not wrap the JSON in markdown fences.
+            - Do not commit the result file.
+            - Before you finish, ensure \`${resultPath}\` contains exactly one valid JSON object matching the schema below.
             - Use this exact schema:
               {
                 "status": "needs_info" | "draft_pr_ready" | "blocked",
@@ -87,7 +91,6 @@ jobs:
         with:
           name: Issue #${{ github.event.issue.number }} triage
           cwd: ${{ github.workspace }}
-          output_format: json
           prompt: ${{ steps.prompt.outputs.prompt }}
           profile: ${{ vars.WARP_AGENT_PROFILE || '' }}
           warp_api_key: ${{ secrets.WARP_API_KEY }}
@@ -96,35 +99,24 @@ jobs:
         id: parse
         uses: actions/github-script@v7
         env:
-          AGENT_OUTPUT: ${{ steps.agent.outputs.agent_output }}
+          RESULT_PATH: ${{ runner.temp }}/oz-issue-triage-result.json
         with:
           script: |
-            const raw = process.env.AGENT_OUTPUT || '';
-            const lines = raw.trim().split('\n');
-            let agentText = null;
+            const fs = require('fs');
+            const resultPath = process.env.RESULT_PATH;
 
-            for (const line of lines) {
-              try {
-                const parsed = JSON.parse(line);
-                if (parsed.type === 'agent' && parsed.text) {
-                  agentText = parsed.text;
-                }
-              } catch {}
-            }
-
-            if (!agentText) {
-              core.setFailed(`Could not find final agent text in Oz output.\n\nRaw output:\n${raw}`);
+            if (!resultPath || !fs.existsSync(resultPath)) {
+              core.setFailed(`Oz result file was not created at ${resultPath}.`);
               return;
             }
 
             let result;
             try {
-              result = JSON.parse(agentText);
+              result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
             } catch (error) {
-              core.setFailed(`Final agent text was not valid JSON: ${error.message}\n\nAgent text:\n${agentText}`);
+              core.setFailed(`Oz result file did not contain valid JSON: ${error.message}`);
               return;
             }
-            const baseBranch = context.payload.repository.default_branch;
 
             if (result.status === 'needs_info' || result.status === 'blocked') {
               if (!result.comment_body) {
