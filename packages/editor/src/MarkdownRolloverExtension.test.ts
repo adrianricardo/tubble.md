@@ -122,3 +122,44 @@ describe("markdown rollover esc-only behavior", () => {
 		expect(atEnd.canEscapeBoundary).toBe(true);
 	});
 });
+
+describe("stored marks on empty line", () => {
+	function emptyLineState() {
+		const doc = schema.node("doc", null, [schema.node("paragraph", null, [])]);
+		return EditorState.create({
+			schema,
+			doc,
+			selection: TextSelection.create(doc, 1),
+		});
+	}
+
+	it("canEscapeBoundary is true when stored formatting marks exist on empty line", () => {
+		const base = emptyLineState();
+		const state = base.apply(base.tr.addStoredMark(schema.marks.bold.create()));
+		expect(__testing.canEscapeBoundaryAtCursor(state, null)).toBe(true);
+	});
+
+	it("canEscapeBoundary is false on empty line without stored marks", () => {
+		const state = emptyLineState();
+		expect(__testing.canEscapeBoundaryAtCursor(state, null)).toBe(false);
+	});
+
+	it("hasStoredFormattingMarks detects bold on empty line", () => {
+		const base = emptyLineState();
+		const state = base.apply(base.tr.addStoredMark(schema.marks.bold.create()));
+		expect(__testing.hasStoredFormattingMarks(state)).toBe(true);
+	});
+
+	it("hasStoredFormattingMarks is false without stored marks", () => {
+		const state = emptyLineState();
+		expect(__testing.hasStoredFormattingMarks(state)).toBe(false);
+	});
+
+	it("getCaretFormattingState reports active marks and canEscapeBoundary on empty line", () => {
+		const base = emptyLineState();
+		const state = base.apply(base.tr.addStoredMark(schema.marks.bold.create()));
+		const caret = getCaretFormattingState(state);
+		expect(caret.activeMarkNames).toContain("bold");
+		expect(caret.canEscapeBoundary).toBe(true);
+	});
+});

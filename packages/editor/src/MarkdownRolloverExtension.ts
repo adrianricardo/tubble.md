@@ -93,15 +93,29 @@ function maybeHandleEscapeAtBoundary(view: EditorView): boolean {
 	if (!canEscapeBoundaryAtCursor(state, escapedBoundary)) return false;
 
 	const boundaryMatch = getBoundaryMatchAtPos(state, state.selection.from);
-	if (!boundaryMatch) return false;
+	if (boundaryMatch) {
+		const tr = state.tr.removeStoredMark(boundaryMatch.markType);
+		tr.setMeta(MarkdownRolloverKey, {
+			pos: state.selection.from,
+			markName: boundaryMatch.markType.name,
+		} satisfies NonNullable<EscapedBoundaryState>);
+		view.dispatch(tr);
+		return true;
+	}
 
-	const tr = state.tr.removeStoredMark(boundaryMatch.markType);
-	tr.setMeta(MarkdownRolloverKey, {
-		pos: state.selection.from,
-		markName: boundaryMatch.markType.name,
-	} satisfies NonNullable<EscapedBoundaryState>);
-	view.dispatch(tr);
-	return true;
+	// Clear stored formatting marks when no boundary exists
+	// (e.g. formatting toggled via shortcut on an empty line)
+	if (hasStoredFormattingMarks(state)) {
+		const tr = state.tr;
+		for (const markName of MARK_PRIORITY) {
+			const markType = state.schema.marks[markName];
+			if (markType) tr.removeStoredMark(markType);
+		}
+		view.dispatch(tr);
+		return true;
+	}
+
+	return false;
 }
 
 function canEscapeBoundaryAtCursor(
@@ -111,19 +125,23 @@ function canEscapeBoundaryAtCursor(
 	if (!state.selection.empty) return false;
 
 	const boundaryMatch = getBoundaryMatchAtPos(state, state.selection.from);
-	if (!boundaryMatch) return false;
-	if (boundaryMatch.boundary !== "end") return false;
-	if (
-		isBoundaryEscaped(
-			escapedBoundary,
-			state.selection.from,
-			boundaryMatch.markType.name,
-		)
-	) {
-		return false;
+	if (boundaryMatch) {
+		if (boundaryMatch.boundary !== "end") return false;
+		if (
+			isBoundaryEscaped(
+				escapedBoundary,
+				state.selection.from,
+				boundaryMatch.markType.name,
+			)
+		) {
+			return false;
+		}
+		return isMarkEffectivelyActiveAtCursor(state, boundaryMatch.markType);
 	}
 
-	return isMarkEffectivelyActiveAtCursor(state, boundaryMatch.markType);
+	// Allow escape when stored formatting marks are active without a boundary
+	// (e.g. formatting toggled via shortcut on an empty line)
+	return hasStoredFormattingMarks(state);
 }
 
 function getBoundaryMatchAtPos(
@@ -187,6 +205,15 @@ function isMarkEffectivelyActiveAtCursor(
 	return !!getAdjacentInsertionMark(state, markType);
 }
 
+function hasStoredFormattingMarks(state: EditorState): boolean {
+	if (!state.storedMarks || state.storedMarks.length === 0) return false;
+	const $pos = state.doc.resolve(state.selection.from);
+	if ($pos.nodeBefore || $pos.nodeAfter) return false;
+	return state.storedMarks.some((mark) =>
+		MARK_PRIORITY.includes(mark.type.name as (typeof MARK_PRIORITY)[number]),
+	);
+}
+
 function isBoundaryEscaped(
 	escapedBoundary: EscapedBoundaryState,
 	pos: number,
@@ -227,5 +254,6 @@ export const __testing = {
 	canEscapeBoundaryAtCursor,
 	findByPriority,
 	getBoundaryMatchAtPos,
+	hasStoredFormattingMarks,
 	isBoundaryEscaped,
 };
