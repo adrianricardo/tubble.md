@@ -81,6 +81,22 @@ const linkRange = getMarkRange(stateAt(2), "link");
 const LINK_START = linkRange.from;
 const LINK_END = linkRange.to;
 
+function emptyLineStateWithStoredMarks(
+	marks: ReturnType<typeof schema.marks.bold.create>[],
+) {
+	const doc = schema.node("doc", null, [schema.node("paragraph", null, [])]);
+	const base = EditorState.create({
+		schema,
+		doc,
+		selection: TextSelection.create(doc, 1),
+	});
+	let tr = base.tr;
+	for (const mark of marks) {
+		tr = tr.addStoredMark(mark);
+	}
+	return base.apply(tr);
+}
+
 describe("markdown rollover esc-only behavior", () => {
 	it("can escape at bold boundary when bold mark is active for insertion", () => {
 		const base = stateAt(BOLD_END);
@@ -120,5 +136,27 @@ describe("markdown rollover esc-only behavior", () => {
 		expect(atEnd.activeMarkNames).toContain("link");
 		expect(atStart.canEscapeBoundary).toBe(false);
 		expect(atEnd.canEscapeBoundary).toBe(true);
+	});
+
+	it("can escape on empty line with stored bold mark", () => {
+		const state = emptyLineStateWithStoredMarks([schema.marks.bold.create()]);
+		expect(__testing.canEscapeBoundaryAtCursor(state, null)).toBe(true);
+	});
+
+	it("shows canEscapeBoundary true on empty line with stored marks", () => {
+		const state = emptyLineStateWithStoredMarks([schema.marks.italic.create()]);
+		const caret = getCaretFormattingState(state);
+		expect(caret.canEscapeBoundary).toBe(true);
+		expect(caret.activeMarkNames).toEqual(["italic"]);
+	});
+
+	it("cannot escape on empty line without stored marks", () => {
+		const doc = schema.node("doc", null, [schema.node("paragraph", null, [])]);
+		const state = EditorState.create({
+			schema,
+			doc,
+			selection: TextSelection.create(doc, 1),
+		});
+		expect(__testing.canEscapeBoundaryAtCursor(state, null)).toBe(false);
 	});
 });
