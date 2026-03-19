@@ -96,7 +96,7 @@ export type ApplyTrackedMarkdownEditResult =
 	| ApplyTrackedMarkdownEditFailure;
 
 type MutableTrackedBlock = {
-	stableRef: string | null;
+	ref: string | null;
 	node: JSONContent;
 };
 
@@ -253,7 +253,7 @@ function applyOperation(
 				return parsed;
 			}
 			blocks[index] = {
-				stableRef: blocks[index]?.stableRef ?? null,
+				ref: blocks[index]?.ref ?? null,
 				node: parsed.block,
 			};
 			return null;
@@ -349,7 +349,7 @@ function applyOperation(
 			}
 
 			blocks[index] = {
-				stableRef: block.stableRef,
+				ref: block.ref,
 				node: parsed.block,
 			};
 			return null;
@@ -359,7 +359,7 @@ function applyOperation(
 
 function toMutableTrackedBlocks(markdown: string): MutableTrackedBlock[] {
 	return getTopLevelBlocks(markdown).map((node, index) => ({
-		stableRef: `b${index + 1}`,
+		ref: `b${index + 1}`,
 		node,
 	}));
 }
@@ -429,7 +429,7 @@ function parseInsertedBlocks(blocks: MarkdownBlockInput[]):
 			return parsed;
 		}
 		nextBlocks.push({
-			stableRef: null,
+			ref: null,
 			node: parsed.block,
 		});
 	}
@@ -444,7 +444,7 @@ function findTrackedBlockIndex(
 	blocks: MutableTrackedBlock[],
 	ref: string,
 ): number {
-	return blocks.findIndex((block) => block.stableRef === ref);
+	return blocks.findIndex((block) => block.ref === ref);
 }
 
 function invalidRef(ref: string): {

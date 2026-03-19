@@ -135,15 +135,13 @@ function resolveTrackedMarkdownDocument(
 export async function savePathContent(
 	path: string,
 	content: string,
-	options?: {
-		trackedDocument?: TrackedMarkdownDocument;
-	},
+	/** Pre-computed revision from an agent edit; omit for local edits. */
+	revisedDocument?: TrackedMarkdownDocument,
 ) {
 	viewerStore.set((current) => {
 		if (current.currentPath !== path) return current;
 		const trackedDocument =
-			options?.trackedDocument ??
-			resolveTrackedMarkdownDocument(current, path, content);
+			revisedDocument ?? resolveTrackedMarkdownDocument(current, path, content);
 		return applyTrackedMarkdownDocument(current, trackedDocument);
 	});
 
@@ -229,9 +227,11 @@ export async function applyCurrentTrackedMarkdownEdit(
 		return result;
 	}
 
-	await savePathContent(current.path, result.nextState.markdown, {
-		trackedDocument: result.nextState,
-	});
+	await savePathContent(
+		current.path,
+		result.nextState.markdown,
+		result.nextState,
+	);
 	return result;
 }
 
