@@ -84,6 +84,20 @@ function App() {
 			} else if (keymatch(event, "CmdOrCtrl+O")) {
 				event.preventDefault();
 				await openFilePicker();
+			} else if (keymatch(event, "CmdOrCtrl+Shift+E")) {
+				event.preventDefault();
+				const wasOpen = workspaceStore.get().sidebarOpen;
+				workspaceStore.set((s) => ({ ...s, sidebarOpen: !s.sidebarOpen }));
+				if (!wasOpen) {
+					// Focus the sidebar nav after it renders
+					requestAnimationFrame(() => {
+						document.querySelector<HTMLElement>("[data-sidebar-nav]")?.focus();
+					});
+				}
+			} else if (keymatch(event, "CmdOrCtrl+0")) {
+				event.preventDefault();
+				const nav = document.querySelector<HTMLElement>("[data-sidebar-nav]");
+				nav?.focus();
 			}
 		};
 		window.addEventListener("keydown", onKeyDown);
