@@ -21,6 +21,8 @@ import { createImageExtension } from "./editor/ImageExtension";
 import { LinkPopover } from "./editor/LinkPopover";
 import { SmartLinkExtension } from "./editor/SmartLinkExtension";
 import { VirtualCursor } from "./editor/VirtualCursor";
+import { Sidebar } from "./components/Sidebar";
+import { Toolbar } from "./components/Toolbar";
 import { loadPath, savePathContent, viewerStore } from "./store";
 import { openWorkspace, workspaceStore } from "./workspaceStore";
 import "./App.css";
@@ -35,6 +37,8 @@ const HMR_REV = (() => {
 
 function App() {
 	const state = useStoreValue(viewerStore);
+	const workspace = useStoreValue(workspaceStore);
+	const hasWorkspace = workspace.workspacePath !== null;
 
 	const openFilePicker = useCallback(async () => {
 		const defaultPath = workspaceStore.get().workspacePath ?? undefined;
@@ -138,22 +142,32 @@ function App() {
 
 	return (
 		<main className="app">
-			<section className="content" aria-live="polite">
-				{state.status === "loading" && <p>Loading…</p>}
-				{state.status === "error" && (
-					<p>{state.error ?? "Failed to open file."}</p>
-				)}
-				{state.status !== "loading" &&
-					state.status !== "error" &&
-					!state.currentPath && <p>Open a markdown file to edit. Press ⌘O.</p>}
-				{state.status === "ready" && state.currentPath && (
-					<MarkdownEditor
-						key={`${state.currentPath}:${HMR_REV}`}
-						path={state.currentPath}
-						initialMarkdown={state.content}
+			<Toolbar hasWorkspace={hasWorkspace} sidebarOpen={workspace.sidebarOpen} />
+			<div className="appBody">
+				{hasWorkspace && workspace.sidebarOpen && workspace.workspacePath && (
+					<Sidebar
+						workspacePath={workspace.workspacePath}
+						sortMode={workspace.sortMode}
+						currentFilePath={state.currentPath}
 					/>
 				)}
-			</section>
+				<section className="content" aria-live="polite">
+					{state.status === "loading" && <p>Loading…</p>}
+					{state.status === "error" && (
+						<p>{state.error ?? "Failed to open file."}</p>
+					)}
+					{state.status !== "loading" &&
+						state.status !== "error" &&
+						!state.currentPath && <p>Open a markdown file to edit. Press ⌘O.</p>}
+					{state.status === "ready" && state.currentPath && (
+						<MarkdownEditor
+							key={`${state.currentPath}:${HMR_REV}`}
+							path={state.currentPath}
+							initialMarkdown={state.content}
+						/>
+					)}
+				</section>
+			</div>
 		</main>
 	);
 }

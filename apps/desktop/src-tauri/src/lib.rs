@@ -48,6 +48,51 @@ where
     })
 }
 
+#[derive(serde::Serialize)]
+struct FileEntry {
+    path: String,
+    modified_at: u64,
+}
+
+#[tauri::command]
+fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
+    let root = PathBuf::from(&path);
+    if !root.is_dir() {
+        return Err(format!("Not a directory: {}", path));
+    }
+    let mut entries = Vec::new();
+    collect_md_files(&root, &mut entries)?;
+    Ok(entries)
+}
+
+fn collect_md_files(dir: &Path, out: &mut Vec<FileEntry>) -> Result<(), String> {
+    let read_dir = fs::read_dir(dir).map_err(|e| format!("Failed to read {}: {}", dir.display(), e))?;
+    for entry in read_dir {
+        let entry = entry.map_err(|e| format!("Read error in {}: {}", dir.display(), e))?;
+        let path = entry.path();
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with('.') {
+            continue;
+        }
+        if path.is_dir() {
+            collect_md_files(&path, out)?;
+        } else if matches!(path.extension().and_then(|e| e.to_str()), Some("md" | "markdown" | "mdown")) {
+            let modified_at = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            out.push(FileEntry {
+                path: path_to_os_string(&path),
+                modified_at,
+            });
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn read_file_text(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|err| format!("Failed to read file at {}: {}", path, err))
@@ -217,6 +262,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            list_directory,
             read_file_text,
             write_file_text,
             persist_pasted_image,
