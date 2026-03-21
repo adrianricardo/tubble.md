@@ -22,6 +22,7 @@ import { LinkPopover } from "./editor/LinkPopover";
 import { SmartLinkExtension } from "./editor/SmartLinkExtension";
 import { VirtualCursor } from "./editor/VirtualCursor";
 import { loadPath, savePathContent, viewerStore } from "./store";
+import { openWorkspace, workspaceStore } from "./workspaceStore";
 import "./App.css";
 
 // Forces editor refresh when underlying TipTap extensions change
@@ -36,10 +37,12 @@ function App() {
 	const state = useStoreValue(viewerStore);
 
 	const openFilePicker = useCallback(async () => {
+		const defaultPath = workspaceStore.get().workspacePath ?? undefined;
 		const selected = await open({
 			multiple: false,
 			directory: false,
 			title: "Open Markdown file",
+			defaultPath,
 			filters: [
 				{ name: "Markdown", extensions: ["md", "markdown", "mdown"] },
 				{ name: "Text", extensions: ["txt", "text"] },
@@ -50,21 +53,38 @@ function App() {
 		}
 	}, []);
 
+	const openFolderPicker = useCallback(async () => {
+		const selected = await open({
+			multiple: false,
+			directory: true,
+			title: "Open Folder as Workspace",
+		});
+		if (typeof selected === "string") {
+			openWorkspace(selected);
+		}
+	}, []);
+
 	useEffect(() => {
 		const setupMenu = async () => {
-			const menu = await createAppMenu({ open: () => void openFilePicker() });
+			const menu = await createAppMenu({
+				open: () => void openFilePicker(),
+				openFolder: () => void openFolderPicker(),
+			});
 			await menu.setAsAppMenu();
 		};
 		void setupMenu();
 		const onKeyDown = async (event: KeyboardEvent) => {
-			if (keymatch(event, "CmdOrCtrl+O")) {
+			if (keymatch(event, "CmdOrCtrl+Shift+O")) {
+				event.preventDefault();
+				await openFolderPicker();
+			} else if (keymatch(event, "CmdOrCtrl+O")) {
 				event.preventDefault();
 				await openFilePicker();
 			}
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [openFilePicker]);
+	}, [openFilePicker, openFolderPicker]);
 
 	useEffect(() => {
 		let disposed = false;

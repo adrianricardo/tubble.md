@@ -29,6 +29,7 @@ async function createAboutSubmenu(): Promise<Submenu> {
 
 async function createFileSubmenu(actions: {
 	open: () => void;
+	openFolder: () => void;
 }): Promise<Submenu> {
 	return Submenu.new({
 		text: "File",
@@ -38,6 +39,12 @@ async function createFileSubmenu(actions: {
 				text: "Open…",
 				accelerator: "CmdOrCtrl+O",
 				action: () => actions.open(),
+			}),
+			await MenuItem.new({
+				id: "open-folder",
+				text: "Open Folder…",
+				accelerator: "CmdOrCtrl+Shift+O",
+				action: () => actions.openFolder(),
 			}),
 			await PredefinedMenuItem.new({
 				text: "separator-text",
@@ -68,6 +75,7 @@ async function createEditSubmenu(): Promise<Submenu> {
 
 export async function createAppMenu(actions: {
 	open: () => void;
+	openFolder: () => void;
 }): Promise<Menu> {
 	const items: Submenu[] = [
 		await createFileSubmenu(actions),

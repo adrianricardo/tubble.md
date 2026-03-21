@@ -1,6 +1,7 @@
-import { type StoreMiddleware, store } from "@simplestack/store";
+import { store } from "@simplestack/store";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
+import { localStoragePersist } from "./lib/localStoragePersist";
 
 type ViewerStatus = "idle" | "loading" | "ready" | "error";
 
@@ -13,25 +14,6 @@ type ViewerState = {
 };
 
 const STORAGE_KEY = "hubble-desktop-viewer";
-type PersistedViewerState = Pick<ViewerState, "lastOpenedPath">;
-
-const persistentStateMiddleware: StoreMiddleware<ViewerState> = () => ({
-	set: (next) => (setter) => {
-		next((currentState) => {
-			const nextState =
-				typeof setter === "function" ? setter(currentState) : setter;
-			const lastOpenedPath = nextState.currentPath ?? nextState.lastOpenedPath;
-			const persistedState: PersistedViewerState = {
-				lastOpenedPath,
-			};
-			localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
-			return {
-				...nextState,
-				lastOpenedPath,
-			};
-		});
-	},
-});
 
 function getInitialState(): ViewerState {
 	const emptyState: ViewerState = {
@@ -46,7 +28,7 @@ function getInitialState(): ViewerState {
 	if (!raw) return emptyState;
 
 	try {
-		const parsed = JSON.parse(raw) as Partial<PersistedViewerState>;
+		const parsed = JSON.parse(raw) as Partial<Pick<ViewerState, "lastOpenedPath">>;
 		return {
 			...emptyState,
 			lastOpenedPath: parsed.lastOpenedPath ?? null,
@@ -84,7 +66,11 @@ export async function savePathContent(path: string, content: string) {
 }
 
 export const viewerStore = store<ViewerState>(getInitialState(), {
-	middleware: [persistentStateMiddleware],
+	middleware: [
+		localStoragePersist(STORAGE_KEY, (s) => ({
+			lastOpenedPath: s.lastOpenedPath,
+		})),
+	],
 });
 
 export async function loadPath(path: string) {
@@ -99,6 +85,7 @@ export async function loadPath(path: string) {
 		viewerStore.set((current) => ({
 			...current,
 			currentPath: path,
+			lastOpenedPath: path,
 			content,
 			status: "ready",
 			error: null,
