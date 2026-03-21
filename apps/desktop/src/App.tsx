@@ -13,22 +13,16 @@ import { TaskItem } from "@tiptap/extension-list";
 import { EditorContent, type JSONContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { keymatch } from "keymatch";
-import {
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createAppMenu } from "./appMenu";
+import { Sidebar } from "./components/Sidebar";
+import { Toolbar } from "./components/Toolbar";
 import { FormattingStatusBar } from "./editor/FormattingStatusBar";
 import { handleImagePaste } from "./editor/handleImagePaste";
 import { createImageExtension } from "./editor/ImageExtension";
 import { LinkPopover } from "./editor/LinkPopover";
 import { SmartLinkExtension } from "./editor/SmartLinkExtension";
 import { VirtualCursor } from "./editor/VirtualCursor";
-import { Sidebar } from "./components/Sidebar";
-import { Toolbar } from "./components/Toolbar";
 import { loadPath, savePathContent, viewerStore } from "./store";
 import { openWorkspace, workspaceStore } from "./workspaceStore";
 import "./App.css";
@@ -150,15 +144,16 @@ function App() {
 
 	return (
 		<main className="app">
-		<Toolbar
-			hasWorkspace={hasWorkspace}
-			sidebarOpen={workspace.sidebarOpen}
-			scrollContainer={scrollContainerEl}
-		/>
+			<Toolbar
+				hasWorkspace={hasWorkspace}
+				sidebarOpen={workspace.sidebarOpen}
+				scrollContainer={scrollContainerEl}
+			/>
 			<div className="appBody">
 				{hasWorkspace && workspace.sidebarOpen && workspace.workspacePath && (
 					<Sidebar
 						workspacePath={workspace.workspacePath}
+						files={workspace.files}
 						sortMode={workspace.sortMode}
 						currentFilePath={state.currentPath}
 					/>
@@ -170,7 +165,9 @@ function App() {
 					)}
 					{state.status !== "loading" &&
 						state.status !== "error" &&
-						!state.currentPath && <p>Open a markdown file to edit. Press ⌘O.</p>}
+						!state.currentPath && (
+							<p>Open a markdown file to edit. Press ⌘O.</p>
+						)}
 					{state.status === "ready" && state.currentPath && (
 						<MarkdownEditor
 							key={`${state.currentPath}:${HMR_REV}`}

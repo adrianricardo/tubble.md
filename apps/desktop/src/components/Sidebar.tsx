@@ -1,43 +1,26 @@
-import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import MingcuteAzSortAscendingLettersLine from "~icons/mingcute/az-sort-ascending-letters-line";
 import MingcuteSortDescendingLine from "~icons/mingcute/sort-descending-line";
-import { cn } from "@/lib/utils";
 import { loadPath } from "../store";
-import { type SortMode, workspaceStore } from "../workspaceStore";
+import {
+	type FileEntry,
+	type SortMode,
+	workspaceStore,
+} from "../workspaceStore";
 import { Button } from "./ui/button";
-
-type FileEntry = {
-	path: string;
-	modified_at: number;
-};
 
 export function Sidebar({
 	workspacePath,
+	files,
 	sortMode,
 	currentFilePath,
 }: {
 	workspacePath: string;
+	files: FileEntry[];
 	sortMode: SortMode;
 	currentFilePath: string | null;
 }) {
-	const [files, setFiles] = useState<FileEntry[]>([]);
 	const workspaceName = workspacePath.split("/").pop() ?? workspacePath;
-
-	const refresh = useCallback(async () => {
-		try {
-			const entries = await invoke<FileEntry[]>("list_directory", {
-				path: workspacePath,
-			});
-			setFiles(entries);
-		} catch {
-			setFiles([]);
-		}
-	}, [workspacePath]);
-
-	useEffect(() => {
-		void refresh();
-	}, [refresh]);
 
 	const toggleSort = () => {
 		workspaceStore.set((s) => ({
@@ -55,9 +38,7 @@ export function Sidebar({
 		const prefix = workspacePath.endsWith("/")
 			? workspacePath
 			: `${workspacePath}/`;
-		return absPath.startsWith(prefix)
-			? absPath.slice(prefix.length)
-			: absPath;
+		return absPath.startsWith(prefix) ? absPath.slice(prefix.length) : absPath;
 	};
 
 	return (
@@ -93,7 +74,8 @@ export function Sidebar({
 							type="button"
 							className={cn(
 								"block w-full truncate border-none bg-transparent px-2.5 py-1 text-start text-[13px] text-sidebar-foreground hover:bg-sidebar-accent",
-								isActive && "bg-sidebar-accent text-sidebar-accent-foreground font-medium",
+								isActive &&
+									"bg-sidebar-accent text-sidebar-accent-foreground font-medium",
 							)}
 							onClick={() => void loadPath(f.path)}
 							title={rel}

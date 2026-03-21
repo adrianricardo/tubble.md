@@ -51,7 +51,7 @@ export function Toolbar({
 
 	return (
 		<div
-		className={`flex items-center gap-1 px-2 py-1 ${sidebarOpen ? "border-b border-border" : showBorder ? "[border-block-end:1px_dashed_var(--border)]" : "border-transparent"}`}
+			className={`flex items-center gap-1 px-2 py-1 ${sidebarOpen ? "border-b border-border" : showBorder ? "[border-block-end:1px_dashed_var(--border)]" : "border-transparent"}`}
 			data-tauri-drag-region
 		>
 			<Button

@@ -1,4 +1,8 @@
-import type { StateObject, StatePrimitive, StoreMiddleware } from "@simplestack/store";
+import type {
+	StateObject,
+	StatePrimitive,
+	StoreMiddleware,
+} from "@simplestack/store";
 
 export function localStoragePersist<T extends StateObject | StatePrimitive>(
 	key: string,
