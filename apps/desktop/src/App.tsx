@@ -14,6 +14,7 @@ import { EditorContent, type JSONContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { keymatch } from "keymatch";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startAgentBridgeListener } from "./agentBridgeServer";
 import { createAppMenu } from "./appMenu";
 import { FormattingPalette } from "./editor/FormattingPalette";
 import { handleImagePaste } from "./editor/handleImagePaste";
@@ -95,6 +96,11 @@ function App() {
 	}, []);
 
 	useEffect(() => {
+		const cleanup = startAgentBridgeListener();
+		return () => void cleanup.then((fn) => fn());
+	}, []);
+
+	useEffect(() => {
 		let active = true;
 		const init = async () => {
 			const launchPath = await invoke<string | null>("get_launch_file_path");
@@ -147,6 +153,7 @@ function MarkdownEditor({
 	initialMarkdown: string;
 }) {
 	const latestMarkdownRef = useRef(initialMarkdown);
+	const syncingFromStoreRef = useRef(false);
 	const saveTimerRef = useRef<number | null>(null);
 	const editorRootRef = useRef<HTMLDivElement | null>(null);
 	const editorViewportRef = useRef<HTMLDivElement | null>(null);
@@ -182,6 +189,8 @@ function MarkdownEditor({
 			);
 			latestMarkdownRef.current = markdown;
 
+			if (syncingFromStoreRef.current) return;
+
 			if (saveTimerRef.current !== null) {
 				window.clearTimeout(saveTimerRef.current);
 			}
@@ -204,6 +213,18 @@ function MarkdownEditor({
 			},
 		},
 	});
+
+	useEffect(() => {
+		const unsubscribe = viewerStore.subscribe((state) => {
+			if (!editor || state.content === latestMarkdownRef.current) return;
+			syncingFromStoreRef.current = true;
+			const doc = markdownToTiptapDoc(state.content);
+			editor.commands.setContent(doc);
+			latestMarkdownRef.current = state.content;
+			syncingFromStoreRef.current = false;
+		});
+		return unsubscribe;
+	}, [editor]);
 
 	useEffect(() => {
 		return () => {

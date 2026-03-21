@@ -2,10 +2,12 @@ use std::{
     ffi::OsStr,
     env, fs,
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 use sha2::{Digest, Sha256};
 use tauri::Emitter;
+
+mod agent_bridge_server;
 
 #[derive(Clone, serde::Serialize)]
 struct OpenFilePayload {
@@ -205,8 +207,19 @@ fn get_launch_file_path() -> Option<String> {
     arg_path.or_else(take_pending_open_path)
 }
 
+#[tauri::command]
+fn agent_bridge_response(
+    state: tauri::State<'_, Arc<agent_bridge_server::AgentBridgeState>>,
+    id: u64,
+    result: serde_json::Value,
+) {
+    state.resolve(id, result);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let bridge_state = Arc::new(agent_bridge_server::AgentBridgeState::new());
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if let Some(path) = first_existing_file_arg_from_iter(args.iter().skip(1)) {
@@ -216,14 +229,18 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .manage(bridge_state.clone())
         .invoke_handler(tauri::generate_handler![
             read_file_text,
             write_file_text,
             persist_pasted_image,
-            get_launch_file_path
+            get_launch_file_path,
+            agent_bridge_response
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
+
+    agent_bridge_server::start(app.handle().clone(), bridge_state);
 
     app.run(|app_handle, event| {
         #[cfg(any(target_os = "macos", target_os = "ios"))]
