@@ -26,6 +26,7 @@ import { SmartLinkExtension } from "./editor/SmartLinkExtension";
 import { VirtualCursor } from "./editor/VirtualCursor";
 import { loadPath, savePathContent, viewerStore } from "./store";
 import { openWorkspace, refreshFiles, workspaceStore } from "./workspaceStore";
+import { EDITOR_INPUT_ATTR, SIDEBAR_NAV_SELECTOR } from "./selectors";
 import "./App.css";
 
 // Forces editor refresh when underlying TipTap extensions change
@@ -35,6 +36,10 @@ const HMR_REV = (() => {
 	hotData.__editorRev = (hotData.__editorRev ?? 0) + 1;
 	return hotData.__editorRev;
 })();
+
+function focusSidebarNav() {
+	document.querySelector<HTMLElement>(SIDEBAR_NAV_SELECTOR)?.focus();
+}
 
 function App() {
 	const state = useStoreValue(viewerStore);
@@ -147,6 +152,16 @@ function App() {
 			} else if (keymatch(event, "CmdOrCtrl+O")) {
 				event.preventDefault();
 				await openFilePicker();
+			} else if (keymatch(event, "CmdOrCtrl+Shift+E")) {
+				event.preventDefault();
+				const opening = !workspaceStore.get().sidebarOpen;
+				workspaceStore.set((s) => ({ ...s, sidebarOpen: opening }));
+				if (opening) {
+					requestAnimationFrame(() => focusSidebarNav());
+				}
+			} else if (keymatch(event, "CmdOrCtrl+0")) {
+				event.preventDefault();
+				focusSidebarNav();
 			}
 		};
 		window.addEventListener("keydown", onKeyDown);
@@ -303,6 +318,7 @@ function MarkdownEditor({
 		editorProps: {
 			attributes: {
 				class: "editorInput",
+				[EDITOR_INPUT_ATTR]: "",
 			},
 			handlePaste: (_view, event): boolean => {
 				const currentEditor = editor;

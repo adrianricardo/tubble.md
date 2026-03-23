@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { useCallback, useRef } from "react";
 import MingcuteAzSortAscendingLettersLine from "~icons/mingcute/az-sort-ascending-letters-line";
 import MingcuteSortDescendingLine from "~icons/mingcute/sort-descending-line";
 import { loadPath } from "../store";
@@ -8,6 +9,8 @@ import {
 	workspaceStore,
 } from "../workspaceStore";
 import { Button } from "./ui/button";
+import { SIDEBAR_NAV_ATTR } from "../selectors";
+import { useSidebarKeyboardNav } from "./useSidebarKeyboardNav";
 
 export function Sidebar({
 	workspacePath,
@@ -21,6 +24,7 @@ export function Sidebar({
 	currentFilePath: string | null;
 }) {
 	const workspaceName = workspacePath.split("/").pop() ?? workspacePath;
+	const navRef = useRef<HTMLElement>(null);
 
 	const toggleSort = () => {
 		workspaceStore.set((s) => ({
@@ -33,6 +37,15 @@ export function Sidebar({
 		if (sortMode === "recent") return b.modified_at - a.modified_at;
 		return a.path.localeCompare(b.path);
 	});
+
+	const selectFile = useCallback((f: FileEntry) => void loadPath(f.path), []);
+
+	const { focusedIndex, setFocusedIndex, onKeyDown } =
+		useSidebarKeyboardNav({
+			items: sorted,
+			onSelect: selectFile,
+			navRef,
+		});
 
 	const relativePath = (absPath: string) => {
 		const prefix = workspacePath.endsWith("/")
@@ -64,20 +77,35 @@ export function Sidebar({
 					)}
 				</Button>
 			</div>
-			<nav className="flex-1 overflow-y-auto py-1">
-				{sorted.map((f) => {
+			<nav
+				ref={navRef}
+				className="flex-1 overflow-y-auto py-1 outline-none"
+				tabIndex={0}
+				onKeyDown={onKeyDown}
+				{...{ [SIDEBAR_NAV_ATTR]: true }}
+			>
+				{sorted.map((f, index) => {
 					const rel = relativePath(f.path);
 					const isActive = f.path === currentFilePath;
+					const isFocused = focusedIndex === index;
 					return (
 						<button
 							key={f.path}
 							type="button"
+							data-sidebar-index={index}
+							aria-selected={isFocused}
 							className={cn(
 								"block w-full truncate border-none bg-transparent px-2.5 py-1 text-start text-[13px] text-sidebar-foreground hover:bg-sidebar-accent",
-								isActive &&
-									"bg-sidebar-accent text-sidebar-accent-foreground font-medium",
+								isActive && "bg-sidebar-accent text-sidebar-accent-foreground font-medium",
+								isFocused && "bg-sidebar-accent",
 							)}
-							onClick={() => void loadPath(f.path)}
+						onClick={() => {
+							void loadPath(f.path);
+							// Keep focus on nav so arrow keys continue working
+							requestAnimationFrame(() => navRef.current?.focus());
+						}}
+							onPointerEnter={() => setFocusedIndex(index)}
+							onPointerLeave={() => setFocusedIndex(null)}
 							title={rel}
 						>
 							{rel}
