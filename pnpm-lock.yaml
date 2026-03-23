@@ -151,6 +151,28 @@ importers:
         specifier: ^4.1.18
         version: 4.1.18
 
+  packages/cli:
+    dependencies:
+      '@hubble.md/sync':
+        specifier: workspace:*
+        version: link:../sync
+      '@hubble.md/sync-backend':
+        specifier: workspace:*
+        version: link:../sync-backend
+      chokidar:
+        specifier: ^4.0.3
+        version: 4.0.3
+      convex:
+        specifier: ^1.34.0
+        version: 1.34.0(react@19.2.4)
+    devDependencies:
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.5.0
+      typescript:
+        specifier: ~5.8.3
+        version: 5.8.3
+
   packages/editor:
     dependencies:
       '@tiptap/core':
@@ -218,28 +240,6 @@ importers:
       convex:
         specifier: ^1.21.0
         version: 1.34.0(react@19.2.4)
-
-  packages/sync-service:
-    dependencies:
-      '@hubble.md/sync':
-        specifier: workspace:*
-        version: link:../sync
-      '@hubble.md/sync-backend':
-        specifier: workspace:*
-        version: link:../sync-backend
-      chokidar:
-        specifier: ^4.0.3
-        version: 4.0.3
-      convex:
-        specifier: ^1.34.0
-        version: 1.34.0(react@19.2.4)
-    devDependencies:
-      '@types/node':
-        specifier: ^25.5.0
-        version: 25.5.0
-      typescript:
-        specifier: ~5.8.3
-        version: 5.8.3
 
 packages:
 
