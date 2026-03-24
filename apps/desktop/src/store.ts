@@ -1,26 +1,37 @@
 import { store } from "@simplestack/store";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
+import { classifyFileChange, type FileAction } from "./externalFileChange";
 import { localStoragePersist } from "./lib/localStoragePersist";
 import { touchFile } from "./workspaceStore";
 
 type ViewerStatus = "idle" | "loading" | "ready" | "error";
+type ExternalChangeState =
+	| { kind: "none" }
+	| { kind: "conflict"; diskContent: string };
 
 type ViewerState = {
 	currentPath: string | null;
 	lastOpenedPath: string | null;
 	content: string;
+	diskContent: string;
+	isDirty: boolean;
+	externalChange: ExternalChangeState;
 	status: ViewerStatus;
 	error: string | null;
 };
 
 const STORAGE_KEY = "hubble-desktop-viewer";
+const NO_CONFLICT: ExternalChangeState = { kind: "none" };
 
 function getInitialState(): ViewerState {
 	const emptyState: ViewerState = {
 		currentPath: null,
 		lastOpenedPath: null,
 		content: "",
+		diskContent: "",
+		isDirty: false,
+		externalChange: NO_CONFLICT,
 		status: "idle",
 		error: null,
 	};
@@ -41,18 +52,118 @@ function getInitialState(): ViewerState {
 	}
 }
 
-export async function savePathContent(path: string, content: string) {
+function getBaseline(state: ViewerState) {
+	return state.externalChange.kind === "conflict"
+		? state.externalChange.diskContent
+		: state.diskContent;
+}
+
+function getCleanFileState(content: string) {
+	return {
+		content,
+		diskContent: content,
+		isDirty: false,
+		externalChange: NO_CONFLICT,
+		status: "ready" as const,
+		error: null,
+	};
+}
+
+function applyFileAction(
+	state: ViewerState,
+	diskContent: string,
+	action: FileAction,
+): ViewerState {
+	switch (action) {
+		case "none":
+			return state;
+		case "match":
+		case "reload":
+			return {
+				...state,
+				...getCleanFileState(diskContent),
+			};
+		case "conflict":
+			return {
+				...state,
+				isDirty: true,
+				status: "ready",
+				error: null,
+				externalChange: {
+					kind: "conflict",
+					diskContent,
+				},
+			};
+	}
+}
+
+export function updateEditorContent(path: string, content: string) {
 	const current = viewerStore.get();
 	if (current.currentPath === path && current.content === content) return;
 
 	viewerStore.set((s) => {
 		if (s.currentPath !== path) return s;
-		return { ...s, content, status: "ready", error: null };
+		if (
+			s.externalChange.kind === "conflict" &&
+			content === s.externalChange.diskContent
+		) {
+			return {
+				...s,
+				...getCleanFileState(content),
+			};
+		}
+		return {
+			...s,
+			content,
+		isDirty: content !== getBaseline(s),
+			status: "ready",
+			error: null,
+		};
 	});
+}
+
+export async function savePathContent(
+	path: string,
+	content: string,
+	options?: { force?: boolean },
+) {
+	const current = viewerStore.get();
+	if (current.currentPath !== path) return;
+	if (!options?.force && current.externalChange.kind === "conflict") return;
+	if (current.content === content && !current.isDirty && !options?.force) return;
+
+	if (!options?.force) {
+		try {
+			const currentDiskContent = await invoke<string>("read_file_text", { path });
+			const latest = viewerStore.get();
+			if (latest.currentPath !== path) return;
+			const action = classifyFileChange({
+				editorContent: content,
+				baseline: getBaseline(latest),
+				diskContent: currentDiskContent,
+			});
+			if (action !== "none") {
+				viewerStore.set((state) => {
+					if (state.currentPath !== path) return state;
+					return applyFileAction(state, currentDiskContent, action);
+				});
+				return;
+			}
+		} catch {
+			// Fall through to the write path if the file cannot be read during preflight.
+		}
+	}
 
 	try {
 		await invoke("write_file_text", { path, content });
 		touchFile(path);
+		viewerStore.set((s) => {
+			if (s.currentPath !== path) return s;
+			return {
+				...s,
+				...getCleanFileState(content),
+			};
+		});
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		toast.error("Failed to save file", { description: message });
@@ -75,6 +186,34 @@ export const viewerStore = store<ViewerState>(getInitialState(), {
 	],
 });
 
+export function handleExternalFileChange(path: string, nextDiskContent: string) {
+	viewerStore.set((current) => {
+		if (current.currentPath !== path) return current;
+		const action = classifyFileChange({
+			editorContent: current.content,
+			baseline: getBaseline(current),
+			diskContent: nextDiskContent,
+		});
+		return applyFileAction(current, nextDiskContent, action);
+	});
+}
+
+export function reloadFromDiskConflict() {
+	viewerStore.set((current) => {
+		if (current.externalChange.kind !== "conflict") return current;
+		return {
+			...current,
+			...getCleanFileState(current.externalChange.diskContent),
+		};
+	});
+}
+
+export async function keepLocalEdits() {
+	const current = viewerStore.get();
+	if (current.currentPath === null) return;
+	await savePathContent(current.currentPath, current.content, { force: true });
+}
+
 export async function loadPath(path: string) {
 	viewerStore.set((current) => ({
 		...current,
@@ -88,9 +227,7 @@ export async function loadPath(path: string) {
 			...current,
 			currentPath: path,
 			lastOpenedPath: path,
-			content,
-			status: "ready",
-			error: null,
+			...getCleanFileState(content),
 		}));
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
@@ -98,7 +235,7 @@ export async function loadPath(path: string) {
 		viewerStore.set((current) => ({
 			...current,
 			currentPath: null,
-			content: "",
+			...getCleanFileState(""),
 			status: "error",
 			error: message,
 		}));

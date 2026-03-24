@@ -18,6 +18,14 @@
 	overflow: hidden;
 	padding: 0;
 }
+
+.editorShell {
+	display: flex;
+	flex-direction: column;
+	block-size: 100%;
+	min-block-size: 0;
+}
+
 .editorRoot {
 	height: 100%;
 	position: relative;

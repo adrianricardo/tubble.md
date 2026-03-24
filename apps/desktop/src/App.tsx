@@ -18,13 +18,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createAppMenu } from "./appMenu";
 import { Sidebar } from "./components/Sidebar";
 import { Toolbar } from "./components/Toolbar";
+import { Button } from "./components/ui/button";
 import { FormattingStatusBar } from "./editor/FormattingStatusBar";
 import { handleImagePaste } from "./editor/handleImagePaste";
 import { createImageExtension } from "./editor/ImageExtension";
 import { LinkPopover } from "./editor/LinkPopover";
 import { SmartLinkExtension } from "./editor/SmartLinkExtension";
 import { VirtualCursor } from "./editor/VirtualCursor";
-import { loadPath, savePathContent, viewerStore } from "./store";
+import {
+	handleExternalFileChange,
+	keepLocalEdits,
+	loadPath,
+	reloadFromDiskConflict,
+	savePathContent,
+	updateEditorContent,
+	viewerStore,
+} from "./store";
 import { openWorkspace, refreshFiles, workspaceStore } from "./workspaceStore";
 import { EDITOR_INPUT_ATTR, SIDEBAR_NAV_SELECTOR } from "./selectors";
 import "./App.css";
@@ -73,13 +82,7 @@ function App() {
 				const nextContent = await invoke<string>("read_file_text", {
 					path: currentPath,
 				});
-				const current = viewerStore.get();
-				if (
-					current.currentPath === currentPath &&
-					current.content !== nextContent
-				) {
-					await loadPath(currentPath);
-				}
+				handleExternalFileChange(currentPath, nextContent);
 			} catch {
 				await loadPath(currentPath);
 			}
@@ -245,18 +248,53 @@ function App() {
 							<p>Open a markdown file to edit. Press ⌘O.</p>
 						)}
 					{state.status === "ready" && state.currentPath && (
-						<MarkdownEditor
-							key={`${state.currentPath}:${HMR_REV}`}
-							path={state.currentPath}
-							initialMarkdown={state.content}
-							onScrollContainerChange={setScrollContainerEl}
-						/>
+						<div className="editorShell">
+							{state.externalChange.kind === "conflict" && (
+								<ExternalChangeBanner
+									onKeepMyEdits={() => void keepLocalEdits()}
+									onReloadFromDisk={reloadFromDiskConflict}
+								/>
+							)}
+							<MarkdownEditor
+								key={`${state.currentPath}:${HMR_REV}`}
+								path={state.currentPath}
+								initialMarkdown={state.content}
+								onScrollContainerChange={setScrollContainerEl}
+							/>
+						</div>
 					)}
 				</section>
 			</div>
 		</main>
 	);
 }
+
+function ExternalChangeBanner({
+	onReloadFromDisk,
+	onKeepMyEdits,
+}: {
+	onReloadFromDisk: () => void;
+	onKeepMyEdits: () => void;
+}) {
+	return (
+		<div className="border-b border-border bg-muted/40">
+			<div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
+				<p className="m-0 text-sm text-muted-foreground">
+					File changed on disk. Reload it or keep your editor edits.
+				</p>
+				<div className="flex shrink-0 items-center gap-2">
+					<Button size="sm" variant="outline" onClick={onReloadFromDisk}>
+						Reload from disk
+					</Button>
+					<Button size="sm" onClick={onKeepMyEdits}>
+						Keep my edits
+					</Button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
 const SAVE_DEBOUNCE_MS = 120;
 
 function MarkdownEditor({
@@ -307,6 +345,7 @@ function MarkdownEditor({
 				currentEditor.getJSON() as JSONContent,
 			);
 			latestMarkdownRef.current = markdown;
+			updateEditorContent(path, markdown);
 
 			if (saveTimerRef.current !== null) {
 				window.clearTimeout(saveTimerRef.current);
@@ -334,6 +373,7 @@ function MarkdownEditor({
 
 	useEffect(() => {
 		if (!editor) return;
+		latestMarkdownRef.current = initialMarkdown;
 		const current = tiptapDocToMarkdown(editor.getJSON() as JSONContent);
 		if (current === initialMarkdown) return;
 		editor.commands.setContent(markdownToTiptapDoc(initialMarkdown), {
