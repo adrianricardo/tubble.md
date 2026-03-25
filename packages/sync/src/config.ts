@@ -1,9 +1,9 @@
 import type { FileSystem } from "./fs.js";
 import {
-	SyncStateSchema,
 	type SyncState,
-	WorkspaceConfigSchema,
+	SyncStateSchema,
 	type WorkspaceConfig,
+	WorkspaceConfigSchema,
 } from "./types.js";
 
 const HUBBLE_DIR = ".hubble";
@@ -37,7 +37,10 @@ export async function writeConfig(
 	config: WorkspaceConfig,
 ): Promise<void> {
 	await fs.ensureDir(`${workspacePath}/${HUBBLE_DIR}`);
-	await fs.writeFile(configPath(workspacePath), JSON.stringify(config, null, "\t"));
+	await fs.writeFile(
+		configPath(workspacePath),
+		JSON.stringify(config, null, "\t"),
+	);
 }
 
 const EMPTY_STATE: SyncState = { lastSyncedAt: 0, files: {} };
@@ -56,5 +59,8 @@ export async function writeSyncState(
 	workspacePath: string,
 	state: SyncState,
 ): Promise<void> {
-	await fs.writeFile(statePath(workspacePath), JSON.stringify(state, null, "\t"));
+	await fs.writeFile(
+		statePath(workspacePath),
+		JSON.stringify(state, null, "\t"),
+	);
 }

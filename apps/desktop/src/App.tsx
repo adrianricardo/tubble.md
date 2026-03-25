@@ -25,6 +25,7 @@ import { createImageExtension } from "./editor/ImageExtension";
 import { LinkPopover } from "./editor/LinkPopover";
 import { SmartLinkExtension } from "./editor/SmartLinkExtension";
 import { VirtualCursor } from "./editor/VirtualCursor";
+import { EDITOR_INPUT_ATTR, SIDEBAR_NAV_SELECTOR } from "./selectors";
 import {
 	handleExternalFileChange,
 	keepLocalEdits,
@@ -35,7 +36,6 @@ import {
 	viewerStore,
 } from "./store";
 import { openWorkspace, refreshFiles, workspaceStore } from "./workspaceStore";
-import { EDITOR_INPUT_ATTR, SIDEBAR_NAV_SELECTOR } from "./selectors";
 import "./App.css";
 
 // Forces editor refresh when underlying TipTap extensions change

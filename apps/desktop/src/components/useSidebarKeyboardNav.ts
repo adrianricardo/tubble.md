@@ -1,9 +1,16 @@
-import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import {
+	type RefObject,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { EDITOR_INPUT_SELECTOR } from "../selectors";
 
 function isEditableElement(el: Element | null): boolean {
 	if (!el) return false;
-	if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return true;
+	if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)
+		return true;
 	return (el as HTMLElement).isContentEditable;
 }
 

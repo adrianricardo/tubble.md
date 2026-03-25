@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { type MutationCtx, mutation, query } from "./_generated/server";
 
 async function contentHash(content: string): Promise<string> {
 	const data = new TextEncoder().encode(content);
@@ -77,12 +77,10 @@ export const getFilesByWorkspace = query({
 		since: v.optional(v.number()),
 	},
 	handler: async (ctx, { workspaceId, since }) => {
-		const q = ctx.db
-			.query("files")
-			.withIndex("by_workspace", (q) => {
-				const base = q.eq("workspaceId", workspaceId);
-				return since !== undefined ? base.gt("updatedAt", since) : base;
-			});
+		const q = ctx.db.query("files").withIndex("by_workspace", (q) => {
+			const base = q.eq("workspaceId", workspaceId);
+			return since !== undefined ? base.gt("updatedAt", since) : base;
+		});
 		return q.collect();
 	},
 });
@@ -95,12 +93,37 @@ export const pushFile = mutation({
 		content: v.string(),
 		deviceId: v.string(),
 	},
-	handler: async (ctx, { workspaceId, path, contentHash, content, deviceId }) => {
+	handler: async (
+		ctx,
+		{ workspaceId, path, contentHash, content, deviceId },
+	) => {
 		return upsertFile(ctx, {
 			workspaceId,
 			path,
 			contentHash,
 			content,
+			deviceId,
+		});
+	},
+});
+
+export const softDeleteFile = mutation({
+	args: {
+		workspaceId: v.id("workspaces"),
+		path: v.string(),
+		deviceId: v.string(),
+	},
+	handler: async (ctx, { workspaceId, path, deviceId }) => {
+		const existing = await ctx.db
+			.query("files")
+			.withIndex("by_workspace_path", (q) =>
+				q.eq("workspaceId", workspaceId).eq("path", path),
+			)
+			.unique();
+		if (!existing) return;
+		await ctx.db.patch(existing._id, {
+			deleted: true,
+			updatedAt: Date.now(),
 			deviceId,
 		});
 	},

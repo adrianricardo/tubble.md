@@ -1,11 +1,11 @@
-export { init, sync, status } from "./sync.js";
 export { isInitialized, readConfig } from "./config.js";
-export { contentHash } from "./fs.js";
 export type { FileSystem, LocalFile } from "./fs.js";
+export { contentHash } from "./fs.js";
+export { init, status, sync } from "./sync.js";
 export type {
-	WorkspaceConfig,
-	SyncState,
-	SyncResult,
 	FileState,
 	RemoteFile,
+	SyncResult,
+	SyncState,
+	WorkspaceConfig,
 } from "./types.js";

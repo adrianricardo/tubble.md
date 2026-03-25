@@ -1,5 +1,5 @@
-import { z } from "zod/v4";
 import type { Id } from "@hubble.md/sync-backend/types";
+import { z } from "zod/v4";
 
 export const WorkspaceConfigSchema = z.object({
 	workspaceId: z.string(),
@@ -24,6 +24,7 @@ export type SyncState = z.infer<typeof SyncStateSchema>;
 export type SyncResult = {
 	pushed: string[];
 	pulled: string[];
+	deleted: string[];
 	conflicts: string[];
 	unchanged: number;
 };

@@ -3,6 +3,7 @@ import {
 	mkdirSync,
 	readdirSync,
 	readFileSync,
+	unlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { join, relative } from "node:path";
@@ -17,6 +18,9 @@ export function createNodeFileSystem(): FileSystem {
 		},
 		async writeFile(path, content) {
 			writeFileSync(path, content);
+		},
+		async deleteFile(path) {
+			unlinkSync(path);
 		},
 		async readFileOrNull(path) {
 			return existsSync(path) ? readFileSync(path, "utf-8") : null;

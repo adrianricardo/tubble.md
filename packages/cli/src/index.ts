@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import chokidar from "chokidar";
-import { ConvexClient } from "convex/browser";
-import { api } from "@hubble.md/sync-backend";
 import { isInitialized, readConfig, sync as runSync } from "@hubble.md/sync";
 import { createNodeFileSystem } from "@hubble.md/sync/node";
+import { api } from "@hubble.md/sync-backend";
+import chokidar from "chokidar";
+import { ConvexClient } from "convex/browser";
 
 const fs = createNodeFileSystem();
 
@@ -86,7 +86,9 @@ async function syncContinuously(workspacePath: string) {
 		fsTimer = setTimeout(() => {
 			const count = fsEventCount;
 			fsEventCount = 0;
-			void scheduler.enqueue(`filesystem (${count} event${count === 1 ? "" : "s"})`);
+			void scheduler.enqueue(
+				`filesystem (${count} event${count === 1 ? "" : "s"})`,
+			);
 		}, 250);
 	};
 
@@ -153,13 +155,16 @@ function logResult(
 	result: Awaited<ReturnType<typeof runSync>>,
 ) {
 	console.log(
-		`sync ${reason}: pushed=${result.pushed.length} pulled=${result.pulled.length} conflicts=${result.conflicts.length} unchanged=${result.unchanged}`,
+		`sync ${reason}: pushed=${result.pushed.length} pulled=${result.pulled.length} deleted=${result.deleted.length} conflicts=${result.conflicts.length} unchanged=${result.unchanged}`,
 	);
 	if (result.pushed.length > 0) {
 		console.log(`  pushed: ${result.pushed.join(", ")}`);
 	}
 	if (result.pulled.length > 0) {
 		console.log(`  pulled: ${result.pulled.join(", ")}`);
+	}
+	if (result.deleted.length > 0) {
+		console.log(`  deleted: ${result.deleted.join(", ")}`);
 	}
 	if (result.conflicts.length > 0) {
 		console.log(`  conflicts: ${result.conflicts.join(", ")}`);

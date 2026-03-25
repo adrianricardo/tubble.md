@@ -8,6 +8,7 @@ export type LocalFile = {
 export interface FileSystem {
 	readFile(path: string): Promise<string>;
 	writeFile(path: string, content: string): Promise<void>;
+	deleteFile(path: string): Promise<void>;
 	readFileOrNull(path: string): Promise<string | null>;
 	ensureDir(path: string): Promise<void>;
 	listMarkdownFiles(dir: string): Promise<LocalFile[]>;
