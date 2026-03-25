@@ -24,7 +24,7 @@ export function Sidebar({
 	currentFilePath: string | null;
 }) {
 	const workspaceName = workspacePath.split("/").pop() ?? workspacePath;
-	const navRef = useRef<HTMLElement>(null);
+	const navRef = useRef<HTMLDivElement>(null);
 
 	const toggleSort = () => {
 		workspaceStore.set((s) => ({
@@ -76,8 +76,9 @@ export function Sidebar({
 					)}
 				</Button>
 			</div>
-			<nav
+			<div
 				ref={navRef}
+				role="listbox"
 				className="flex-1 overflow-y-auto py-1 outline-none"
 				tabIndex={0}
 				onKeyDown={onKeyDown}
@@ -91,6 +92,7 @@ export function Sidebar({
 						<button
 							key={f.path}
 							type="button"
+							role="option"
 							data-sidebar-index={index}
 							aria-selected={isFocused}
 							className={cn(
@@ -112,7 +114,7 @@ export function Sidebar({
 						</button>
 					);
 				})}
-			</nav>
+			</div>
 		</aside>
 	);
 }
