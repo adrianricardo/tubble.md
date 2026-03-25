@@ -18,10 +18,12 @@ export function useSidebarKeyboardNav<T>({
 	items,
 	onSelect,
 	navRef,
+	activeIndex = -1,
 }: {
 	items: T[];
 	onSelect: (item: T) => void;
 	navRef: RefObject<HTMLElement | null>;
+	activeIndex?: number;
 }) {
 	const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
 	const focusedIndexRef = useRef(focusedIndex);
@@ -59,15 +61,17 @@ export function useSidebarKeyboardNav<T>({
 					event.preventDefault();
 					const delta = event.key === "ArrowDown" ? 1 : -1;
 					setFocusedIndex((prev) => {
-						if (prev === null) return 0;
+						if (prev === null)
+							return Math.max(0, activeIndex >= 0 ? activeIndex : 0);
 						return Math.max(0, Math.min(prev + delta, items.length - 1));
 					});
 					break;
 				}
 				case "Enter": {
-					if (focusedIndex !== null && items[focusedIndex]) {
+					const idx = focusedIndexRef.current;
+					if (idx !== null && items[idx]) {
 						event.preventDefault();
-						onSelect(items[focusedIndex]);
+						onSelect(items[idx]);
 					}
 					break;
 				}
@@ -79,7 +83,7 @@ export function useSidebarKeyboardNav<T>({
 				}
 			}
 		},
-		[items, focusedIndex, onSelect],
+		[items, onSelect, activeIndex],
 	);
 
 	return { focusedIndex, setFocusedIndex, onKeyDown };

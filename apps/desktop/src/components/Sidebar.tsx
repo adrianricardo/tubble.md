@@ -40,10 +40,12 @@ export function Sidebar({
 
 	const selectFile = useCallback((f: FileEntry) => void loadPath(f.path), []);
 
+	const activeIndex = sorted.findIndex((f) => f.path === currentFilePath);
 	const { focusedIndex, setFocusedIndex, onKeyDown } = useSidebarKeyboardNav({
 		items: sorted,
 		onSelect: selectFile,
 		navRef,
+		activeIndex,
 	});
 
 	const relativePath = (absPath: string) => {

@@ -115,7 +115,7 @@ export function updateEditorContent(path: string, content: string) {
 		return {
 			...s,
 			content,
-		isDirty: content !== getBaseline(s),
+			isDirty: content !== getBaseline(s),
 			status: "ready",
 			error: null,
 		};
@@ -130,11 +130,14 @@ export async function savePathContent(
 	const current = viewerStore.get();
 	if (current.currentPath !== path) return;
 	if (!options?.force && current.externalChange.kind === "conflict") return;
-	if (current.content === content && !current.isDirty && !options?.force) return;
+	if (current.content === content && !current.isDirty && !options?.force)
+		return;
 
 	if (!options?.force) {
 		try {
-			const currentDiskContent = await invoke<string>("read_file_text", { path });
+			const currentDiskContent = await invoke<string>("read_file_text", {
+				path,
+			});
 			const latest = viewerStore.get();
 			if (latest.currentPath !== path) return;
 			const action = classifyFileChange({
@@ -186,7 +189,10 @@ export const viewerStore = store<ViewerState>(getInitialState(), {
 	],
 });
 
-export function handleExternalFileChange(path: string, nextDiskContent: string) {
+export function handleExternalFileChange(
+	path: string,
+	nextDiskContent: string,
+) {
 	viewerStore.set((current) => {
 		if (current.currentPath !== path) return current;
 		const action = classifyFileChange({
