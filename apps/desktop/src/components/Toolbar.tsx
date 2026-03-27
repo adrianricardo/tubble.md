@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import MingcuteAddLine from "~icons/mingcute/add-line";
 import MingcuteLayoutLeftLine from "~icons/mingcute/layout-left-line";
 import { loadPath } from "../store";
-import { workspaceStore } from "../workspaceStore";
+import { refreshFiles, workspaceStore } from "../workspaceStore";
 import { Button } from "./ui/button";
 
 export function Toolbar({
@@ -46,6 +46,7 @@ export function Toolbar({
 		if (typeof filePath !== "string") return;
 		const finalPath = filePath.endsWith(".md") ? filePath : `${filePath}.md`;
 		await invoke("write_file_text", { path: finalPath, content: "" });
+		await refreshFiles();
 		await loadPath(finalPath);
 	};
 
