@@ -1,6 +1,8 @@
+import { Select } from "@base-ui/react/select";
 import { useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import MingcuteAzSortAscendingLettersLine from "~icons/mingcute/az-sort-ascending-letters-line";
+import MingcuteCheckLine from "~icons/mingcute/check-line";
 import MingcuteSortDescendingLine from "~icons/mingcute/sort-descending-line";
 import { SIDEBAR_NAV_ATTR } from "../selectors";
 import { loadPath } from "../store";
@@ -26,11 +28,8 @@ export function Sidebar({
 	const workspaceName = workspacePath.split("/").pop() ?? workspacePath;
 	const navRef = useRef<HTMLDivElement>(null);
 
-	const toggleSort = () => {
-		workspaceStore.set((s) => ({
-			...s,
-			sortMode: s.sortMode === "alpha" ? "recent" : "alpha",
-		}));
+	const setSortMode = (mode: SortMode) => {
+		workspaceStore.set((s) => ({ ...s, sortMode: mode }));
 	};
 
 	const sorted = [...files].sort((a, b) => {
@@ -64,24 +63,43 @@ export function Sidebar({
 				>
 					{workspaceName}
 				</span>
-				<Button
-					variant="ghost"
-					size="icon-xs"
-					onClick={toggleSort}
-					aria-label={`Sort by ${sortMode === "alpha" ? "recent" : "name"}`}
-					title={sortMode === "alpha" ? "Sort by recent" : "Sort by name"}
+				<Select.Root
+					value={sortMode}
+					onValueChange={(val) => setSortMode(val as SortMode)}
 				>
-					{sortMode === "alpha" ? (
-						<MingcuteAzSortAscendingLettersLine className="size-3.5" />
-					) : (
-						<MingcuteSortDescendingLine className="size-3.5" />
-					)}
-				</Button>
+					<Select.Trigger
+						render={
+							<Button
+								variant="ghost"
+								size="icon-xs"
+								aria-label="Sort by…"
+								title="Sort by…"
+							/>
+						}
+					>
+						{sortMode === "alpha" ? (
+							<MingcuteAzSortAscendingLettersLine className="size-3.5" />
+						) : (
+							<MingcuteSortDescendingLine className="size-3.5" />
+						)}
+					</Select.Trigger>
+					<Select.Portal>
+						<Select.Positioner align="end" side="bottom" sideOffset={4}>
+							<Select.Popup className="z-50 w-36 origin-(--transform-origin) rounded-sm border border-border bg-popover p-1 text-[11px] text-popover-foreground shadow-panel inset-shadow-chrome outline-hidden transition-[transform,opacity] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+								<p className="px-2 py-1 text-[10px] font-medium text-muted-foreground">
+									Sort by
+								</p>
+								<SortOption value="alpha" label="Name" />
+								<SortOption value="recent" label="Recent" />
+							</Select.Popup>
+						</Select.Positioner>
+					</Select.Portal>
+				</Select.Root>
 			</div>
 			<div
 				ref={navRef}
 				role="listbox"
-className="flex-1 overflow-y-auto overscroll-contain py-1 outline-none"
+				className="flex-1 overflow-y-auto overscroll-contain py-1 outline-none"
 				tabIndex={0}
 				onKeyDown={onKeyDown}
 				{...{ [SIDEBAR_NAV_ATTR]: true }}
@@ -118,5 +136,19 @@ className="flex-1 overflow-y-auto overscroll-contain py-1 outline-none"
 				})}
 			</div>
 		</aside>
+	);
+}
+
+function SortOption({ value, label }: { value: string; label: string }) {
+	return (
+		<Select.Item
+			value={value}
+			className="flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1 text-start text-[11px] text-foreground outline-hidden select-none data-highlighted:bg-accent"
+		>
+			<Select.ItemIndicator className="inline-flex" keepMounted>
+				<MingcuteCheckLine className="size-3 [[data-selected]_&]:opacity-100 opacity-0" />
+			</Select.ItemIndicator>
+			<Select.ItemText>{label}</Select.ItemText>
+		</Select.Item>
 	);
 }
