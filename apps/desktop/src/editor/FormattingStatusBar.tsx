@@ -4,9 +4,13 @@ import { useEffect, useState } from "react";
 import MingcuteBoldLine from "~icons/mingcute/bold-line";
 import MingcuteItalicLine from "~icons/mingcute/italic-line";
 import MingcuteLinkLine from "~icons/mingcute/link-line";
+import { Button } from "../components/ui/button";
+
+type CountMode = "words" | "chars";
 
 type PaletteState = {
 	wordCount: number;
+	charCount: number;
 	activeMarkNames: string[];
 	canEscapeBoundary: boolean;
 	showDashedDivider: boolean;
@@ -19,8 +23,10 @@ export function FormattingStatusBar({
 	editor: Editor | null;
 	scrollContainer: HTMLDivElement | null;
 }) {
+	const [countMode, setCountMode] = useState<CountMode>("words");
 	const [paletteState, setPaletteState] = useState<PaletteState>({
 		wordCount: 0,
+		charCount: 0,
 		activeMarkNames: [],
 		canEscapeBoundary: false,
 		showDashedDivider: false,
@@ -34,7 +40,9 @@ export function FormattingStatusBar({
 			null;
 
 		const update = () => {
-			const wordCount = countWords(editor.getText());
+			const text = editor.getText();
+			const wordCount = countWords(text);
+			const charCount = text.length;
 			const { state } = editor;
 			const scrollContainer = resolvedScrollContainer;
 			const scrollHeight = scrollContainer?.scrollHeight ?? 0;
@@ -47,6 +55,7 @@ export function FormattingStatusBar({
 			if (!editor.isFocused || !state.selection.empty) {
 				setPaletteState({
 					wordCount,
+					charCount,
 					activeMarkNames: [],
 					canEscapeBoundary: false,
 					showDashedDivider,
@@ -57,6 +66,7 @@ export function FormattingStatusBar({
 			const caretState = getCaretFormattingState(state);
 			setPaletteState({
 				wordCount,
+				charCount,
 				activeMarkNames: caretState.activeMarkNames,
 				canEscapeBoundary: caretState.canEscapeBoundary,
 				showDashedDivider,
@@ -92,11 +102,21 @@ export function FormattingStatusBar({
 
 	return (
 		<div
-			className={`z-[3] flex h-8 items-center justify-between bg-background/95 px-4 text-[12px] backdrop-blur-[2px] ${dividerClass}`}
+			className={`z-[3] flex h-8 items-center justify-between bg-background/95 px-2 text-[12px] backdrop-blur-[2px] ${dividerClass}`}
 		>
-			<p className="leading-none text-muted-foreground">
-				{paletteState.wordCount} words
-			</p>
+			<Button
+				variant="ghost"
+				size="xs"
+				className="text-muted-foreground"
+				title={
+					countMode === "words" ? "Show character count" : "Show word count"
+				}
+				onClick={() => setCountMode((m) => (m === "words" ? "chars" : "words"))}
+			>
+				{countMode === "words"
+					? `${paletteState.wordCount} words`
+					: `${paletteState.charCount} characters`}
+			</Button>
 			<div className="flex items-center gap-2 text-muted-foreground">
 				{paletteState.canEscapeBoundary && (
 					<span className="inline-flex h-4 items-center rounded-sm border border-border bg-secondary px-1 text-[11px] leading-none text-foreground shadow-panel inset-shadow-chrome">
