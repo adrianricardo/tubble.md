@@ -2,6 +2,7 @@ import { store } from "@simplestack/store";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { classifyFileChange, type FileAction } from "./externalFileChange";
+import { latest } from "./lib/latest";
 import { localStoragePersist } from "./lib/localStoragePersist";
 import { touchFile } from "./workspaceStore";
 
@@ -138,11 +139,11 @@ export async function savePathContent(
 			const currentDiskContent = await invoke<string>("read_file_text", {
 				path,
 			});
-			const latest = viewerStore.get();
-			if (latest.currentPath !== path) return;
+			const current = viewerStore.get();
+			if (current.currentPath !== path) return;
 			const action = classifyFileChange({
 				editorContent: content,
-				baseline: getBaseline(latest),
+				baseline: getBaseline(current),
 				diskContent: currentDiskContent,
 			});
 			if (action !== "none") {
@@ -220,15 +221,17 @@ export async function keepLocalEdits() {
 	await savePathContent(current.currentPath, current.content, { force: true });
 }
 
-export async function loadPath(path: string) {
-	viewerStore.set((current) => ({
-		...current,
-		status: "loading",
-		error: null,
-	}));
+const LOADING_DELAY_MS = 150;
+
+export const loadPath = latest(async ({ isStale }, path: string) => {
+	const timer = window.setTimeout(() => {
+		if (isStale()) return;
+		viewerStore.set((s) => ({ ...s, status: "loading", error: null }));
+	}, LOADING_DELAY_MS);
 
 	try {
 		const content = await invoke<string>("read_file_text", { path });
+		if (isStale()) return;
 		viewerStore.set((current) => ({
 			...current,
 			currentPath: path,
@@ -236,6 +239,7 @@ export async function loadPath(path: string) {
 			...getCleanFileState(content),
 		}));
 	} catch (err) {
+		if (isStale()) return;
 		const message = err instanceof Error ? err.message : String(err);
 		toast.error("Failed to open file", { description: message });
 		viewerStore.set((current) => ({
@@ -245,5 +249,7 @@ export async function loadPath(path: string) {
 			status: "error",
 			error: message,
 		}));
+	} finally {
+		window.clearTimeout(timer);
 	}
-}
+});
