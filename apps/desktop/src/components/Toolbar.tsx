@@ -1,10 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import MingcuteAddLine from "~icons/mingcute/add-line";
 import MingcuteLayoutLeftLine from "~icons/mingcute/layout-left-line";
-import { loadPath } from "../store";
-import { refreshFiles, workspaceStore } from "../workspaceStore";
+import { createNote } from "../noteActions";
+import { workspaceStore } from "../workspaceStore";
 import { Button } from "./ui/button";
 
 export function Toolbar({
@@ -35,21 +33,6 @@ export function Toolbar({
 		workspaceStore.set((s) => ({ ...s, sidebarOpen: !s.sidebarOpen }));
 	};
 
-	const addFile = async () => {
-		const ws = workspaceStore.get().workspacePath;
-		if (!ws) return;
-		const filePath = await save({
-			defaultPath: ws,
-			title: "New Markdown file",
-			filters: [{ name: "Markdown", extensions: ["md"] }],
-		});
-		if (typeof filePath !== "string") return;
-		const finalPath = filePath.endsWith(".md") ? filePath : `${filePath}.md`;
-		await invoke("write_file_text", { path: finalPath, content: "" });
-		await refreshFiles();
-		await loadPath(finalPath);
-	};
-
 	return (
 		<div
 			className={`flex items-center gap-1 px-2 py-1 ${sidebarOpen ? "border-b border-border" : showBorder ? "[border-block-end:1px_dashed_var(--border)]" : "border-transparent"}`}
@@ -68,8 +51,9 @@ export function Toolbar({
 			<Button
 				variant="ghost"
 				size="icon-sm"
-				onClick={() => void addFile()}
-				aria-label="New file"
+				onClick={() => void createNote()}
+				aria-label="New Note"
+				title="New Note (⌘N)"
 			>
 				<MingcuteAddLine className="size-4" />
 			</Button>

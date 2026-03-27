@@ -25,6 +25,7 @@ import { createImageExtension } from "./editor/ImageExtension";
 import { LinkPopover } from "./editor/LinkPopover";
 import { SmartLinkExtension } from "./editor/SmartLinkExtension";
 import { VirtualCursor } from "./editor/VirtualCursor";
+import { createNote } from "./noteActions";
 import { EDITOR_INPUT_ATTR, SIDEBAR_NAV_SELECTOR } from "./selectors";
 import {
 	handleExternalFileChange,
@@ -111,7 +112,7 @@ function App() {
 		};
 	}, [workspace.workspacePath]);
 
-	const openFilePicker
+	const openFilePicker = useCallback(async () => {
 		const defaultPath = workspaceStore.get().workspacePath ?? undefined;
 		const selected = await open({
 			multiple: false,
@@ -142,6 +143,7 @@ function App() {
 	useEffect(() => {
 		const setupMenu = async () => {
 			const menu = await createAppMenu({
+				newNote: () => void createNote(),
 				open: () => void openFilePicker(),
 				openFolder: () => void openFolderPicker(),
 			});
@@ -149,7 +151,10 @@ function App() {
 		};
 		void setupMenu();
 		const onKeyDown = async (event: KeyboardEvent) => {
-			if (keymatch(event, "CmdOrCtrl+Shift+O")) {
+			if (keymatch(event, "CmdOrCtrl+N")) {
+				event.preventDefault();
+				await createNote();
+			} else if (keymatch(event, "CmdOrCtrl+Shift+O")) {
 				event.preventDefault();
 				await openFolderPicker();
 			} else if (keymatch(event, "CmdOrCtrl+O")) {
