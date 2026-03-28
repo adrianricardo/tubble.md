@@ -16,7 +16,6 @@ type ViewerState = {
 	lastOpenedPath: string | null;
 	content: string;
 	diskContent: string;
-	isDirty: boolean;
 	externalChange: ExternalChangeState;
 	status: ViewerStatus;
 	error: string | null;
@@ -31,7 +30,6 @@ function getInitialState(): ViewerState {
 		lastOpenedPath: null,
 		content: "",
 		diskContent: "",
-		isDirty: false,
 		externalChange: NO_CONFLICT,
 		status: "idle",
 		error: null,
@@ -63,7 +61,6 @@ function getCleanFileState(content: string) {
 	return {
 		content,
 		diskContent: content,
-		isDirty: false,
 		externalChange: NO_CONFLICT,
 		status: "ready" as const,
 		error: null,
@@ -87,7 +84,6 @@ function applyFileAction(
 		case "conflict":
 			return {
 				...state,
-				isDirty: true,
 				status: "ready",
 				error: null,
 				externalChange: {
@@ -116,7 +112,6 @@ export function updateEditorContent(path: string, content: string) {
 		return {
 			...s,
 			content,
-			isDirty: content !== getBaseline(s),
 			status: "ready",
 			error: null,
 		};
@@ -131,7 +126,11 @@ export async function savePathContent(
 	const current = viewerStore.get();
 	if (current.currentPath !== path) return;
 	if (!options?.force && current.externalChange.kind === "conflict") return;
-	if (current.content === content && !current.isDirty && !options?.force)
+	if (
+		!options?.force &&
+		current.content === content &&
+		content === getBaseline(current)
+	)
 		return;
 
 	if (!options?.force) {
