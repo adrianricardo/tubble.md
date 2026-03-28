@@ -1,7 +1,7 @@
 import { Menu } from "@base-ui/react/menu";
 import MingcuteAddLine from "~icons/mingcute/add-line";
 import MingcuteCheckLine from "~icons/mingcute/check-line";
-import MingcuteUnfoldVerticalLine from "~icons/mingcute/unfold-vertical-line";
+import MingcuteSelectorVerticalLine from "~icons/mingcute/selector-vertical-line";
 import { openWorkspace, pickAndOpenWorkspace } from "../workspaceStore";
 
 function folderName(path: string): string {
@@ -36,7 +36,7 @@ export function WorkspaceSwitcher({
 				<span className="truncate text-xs font-semibold text-sidebar-foreground">
 					{workspaceName}
 				</span>
-				<MingcuteUnfoldVerticalLine className="size-3 shrink-0 text-muted-foreground" />
+				<MingcuteSelectorVerticalLine className="size-5 shrink-0 text-muted-foreground" />
 			</Menu.Trigger>
 			<Menu.Portal>
 				<Menu.Positioner align="start" side="bottom" sideOffset={4}>
