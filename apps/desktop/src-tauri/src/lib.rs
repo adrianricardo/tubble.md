@@ -275,6 +275,21 @@ fn ensure_directory(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn delete_file(path: String) -> Result<(), String> {
+    fs::remove_file(&path).map_err(|e| format!("Failed to delete file {}: {}", path, e))
+}
+
+#[tauri::command]
+fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
+    fs::read(&path).map_err(|e| format!("Failed to read binary file {}: {}", path, e))
+}
+
+#[tauri::command]
+fn write_binary_file(path: String, bytes: Vec<u8>) -> Result<(), String> {
+    fs::write(&path, bytes).map_err(|e| format!("Failed to write binary file {}: {}", path, e))
+}
+
+#[tauri::command]
 fn get_launch_file_path() -> Option<String> {
     let arg_path = first_existing_file_arg_from_iter(env::args_os().skip(1));
     arg_path.or_else(take_pending_open_path)
@@ -299,6 +314,9 @@ pub fn run() {
             persist_pasted_image,
             read_hubble_config,
             ensure_directory,
+            delete_file,
+            read_binary_file,
+            write_binary_file,
             get_launch_file_path
         ])
         .build(tauri::generate_context!())

@@ -13,19 +13,21 @@ import {
 } from "../workspaceStore";
 import { Button } from "./ui/button";
 import { useSidebarKeyboardNav } from "./useSidebarKeyboardNav";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 export function Sidebar({
 	workspacePath,
 	files,
 	sortMode,
 	currentFilePath,
+	recentWorkspaces,
 }: {
 	workspacePath: string;
 	files: FileEntry[];
 	sortMode: SortMode;
 	currentFilePath: string | null;
+	recentWorkspaces: string[];
 }) {
-	const workspaceName = workspacePath.split("/").pop() ?? workspacePath;
 	const navRef = useRef<HTMLDivElement>(null);
 
 	const setSortMode = (mode: SortMode) => {
@@ -57,12 +59,10 @@ export function Sidebar({
 	return (
 		<aside className="flex w-[220px] shrink-0 flex-col overflow-hidden border-e border-sidebar-border bg-sidebar">
 			<div className="flex items-center justify-between border-b border-sidebar-border px-2.5 py-1.5">
-				<span
-					className="truncate text-xs font-semibold text-sidebar-foreground"
-					title={workspacePath}
-				>
-					{workspaceName}
-				</span>
+				<WorkspaceSwitcher
+					workspacePath={workspacePath}
+					recentWorkspaces={recentWorkspaces}
+				/>
 				<Select.Root
 					value={sortMode}
 					onValueChange={(val) => setSortMode(val as SortMode)}

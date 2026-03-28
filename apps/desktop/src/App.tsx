@@ -36,7 +36,11 @@ import {
 	updateEditorContent,
 	viewerStore,
 } from "./store";
-import { openWorkspace, refreshFiles, workspaceStore } from "./workspaceStore";
+import {
+	pickAndOpenWorkspace,
+	refreshFiles,
+	workspaceStore,
+} from "./workspaceStore";
 import "./editor/prosemirror.css";
 
 // Forces editor refresh when underlying TipTap extensions change
@@ -129,16 +133,7 @@ function App() {
 		}
 	}, []);
 
-	const openFolderPicker = useCallback(async () => {
-		const selected = await open({
-			multiple: false,
-			directory: true,
-			title: "Open Folder as Workspace",
-		});
-		if (typeof selected === "string") {
-			openWorkspace(selected);
-		}
-	}, []);
+	const openFolderPicker = useCallback(() => pickAndOpenWorkspace(), []);
 
 	useEffect(() => {
 		const setupMenu = async () => {
@@ -240,6 +235,7 @@ function App() {
 						files={workspace.files}
 						sortMode={workspace.sortMode}
 						currentFilePath={state.currentPath}
+						recentWorkspaces={workspace.recentWorkspaces}
 					/>
 				)}
 				<section className="flex-1 overflow-hidden" aria-live="polite">
