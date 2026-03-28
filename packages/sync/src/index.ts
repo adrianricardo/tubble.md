@@ -1,5 +1,10 @@
 export { isInitialized, readConfig } from "./config.js";
-export type { FileSystem, LocalAsset, LocalFile } from "./fs.js";
+export type {
+	FileSystem,
+	InitFileSystem,
+	LocalAsset,
+	LocalFile,
+} from "./fs.js";
 export { contentHash } from "./fs.js";
 export { init, status, sync } from "./sync.js";
 export type {

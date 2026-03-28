@@ -8,7 +8,7 @@ import {
 	writeConfig,
 	writeSyncState,
 } from "./config.js";
-import type { FileSystem } from "./fs.js";
+import type { FileSystem, InitFileSystem } from "./fs.js";
 import type {
 	FileState,
 	RemoteAsset,
@@ -19,7 +19,7 @@ import type {
 
 /** Initialize a workspace for syncing. Creates .hubble/ config. */
 export async function init(
-	fs: FileSystem,
+	fs: InitFileSystem,
 	opts: {
 		workspacePath: string;
 		workspaceName: string;

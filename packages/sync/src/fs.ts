@@ -22,6 +22,12 @@ export interface FileSystem {
 	listAssetFiles(dir: string): Promise<LocalAsset[]>;
 }
 
+/** Minimal filesystem subset needed for init/config operations */
+export type InitFileSystem = Pick<
+	FileSystem,
+	"readFile" | "readFileOrNull" | "writeFile" | "ensureDir"
+>;
+
 /** Isomorphic SHA-256 using Web Crypto API (works in browser + Node 20+) */
 export async function contentHash(
 	content: string | Uint8Array,

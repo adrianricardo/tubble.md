@@ -1,4 +1,4 @@
-import type { FileSystem } from "./fs.js";
+import type { InitFileSystem } from "./fs.js";
 import {
 	type SyncState,
 	SyncStateSchema,
@@ -17,14 +17,14 @@ function statePath(ws: string): string {
 }
 
 export async function isInitialized(
-	fs: FileSystem,
+	fs: Pick<InitFileSystem, "readFileOrNull">,
 	workspacePath: string,
 ): Promise<boolean> {
 	return (await fs.readFileOrNull(configPath(workspacePath))) !== null;
 }
 
 export async function readConfig(
-	fs: FileSystem,
+	fs: InitFileSystem,
 	workspacePath: string,
 ): Promise<WorkspaceConfig> {
 	const raw = await fs.readFile(configPath(workspacePath));
@@ -32,7 +32,7 @@ export async function readConfig(
 }
 
 export async function writeConfig(
-	fs: FileSystem,
+	fs: InitFileSystem,
 	workspacePath: string,
 	config: WorkspaceConfig,
 ): Promise<void> {
@@ -46,7 +46,7 @@ export async function writeConfig(
 const EMPTY_STATE: SyncState = { lastSyncedAt: 0, files: {} };
 
 export async function readSyncState(
-	fs: FileSystem,
+	fs: InitFileSystem,
 	workspacePath: string,
 ): Promise<SyncState> {
 	const raw = await fs.readFileOrNull(statePath(workspacePath));
@@ -55,7 +55,7 @@ export async function readSyncState(
 }
 
 export async function writeSyncState(
-	fs: FileSystem,
+	fs: InitFileSystem,
 	workspacePath: string,
 	state: SyncState,
 ): Promise<void> {
