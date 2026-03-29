@@ -53,25 +53,26 @@ export function Toolbar({
 			className={`flex items-center py-1 ${borderClass}`}
 			data-tauri-drag-region
 		>
-			<div
-				className="flex items-center gap-1 px-2"
-				style={{
-					paddingInlineStart: IS_MACOS ? TRAFFIC_LIGHT_CLEARANCE : 8,
-					flex: "0 100 114px",
-				}}
-			>
-				{hasWorkspace && (
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						onClick={toggleSidebar}
-						aria-label="Toggle sidebar"
-						className={sidebarOpen ? "text-brand" : ""}
-					>
-						<MingcuteLayoutLeftLine className="size-4" />
-					</Button>
-				)}
-			</div>
+			<ToolbarActions>
+				<div
+					className="flex items-center gap-1"
+					style={{
+						paddingInlineStart: IS_MACOS ? TRAFFIC_LIGHT_CLEARANCE : 8,
+					}}
+				>
+					{hasWorkspace && (
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							onClick={toggleSidebar}
+							aria-label="Toggle sidebar"
+							className={sidebarOpen ? "text-brand" : ""}
+						>
+							<MingcuteLayoutLeftLine className="size-4" />
+						</Button>
+					)}
+				</div>
+			</ToolbarActions>
 			<span
 				className="truncate text-center text-xs text-muted-foreground"
 				style={{ flex: "1 1 auto" }}
@@ -79,23 +80,36 @@ export function Toolbar({
 			>
 				{currentPath ? basename(currentPath) : "\u00A0"}
 			</span>
-			<div
-				className="flex items-center justify-end px-2"
-                // Hack: shrink 100 allows the side toggles to shrink before the title bar starts to truncate
-				style={{ flex: "0 100 114px" }}
-			>
-				{hasWorkspace && (
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						onClick={() => void createNote()}
-						aria-label="New Note"
-						title="New Note (⌘N)"
-					>
-						<MingcuteAddLine className="size-4" />
-					</Button>
-				)}
-			</div>
+			<ToolbarActions>
+				<div className="flex items-center justify-end">
+					{hasWorkspace && (
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							onClick={() => void createNote()}
+							aria-label="New Note"
+							title="New Note (⌘N)"
+						>
+							<MingcuteAddLine className="size-4" />
+						</Button>
+					)}
+				</div>
+			</ToolbarActions>
+		</div>
+	);
+}
+
+// Equal basis on both sides ensures the title remains horizontally centered
+const ACTIONS_BASIS = "114px";
+
+function ToolbarActions({ children }: { children?: React.ReactNode }) {
+	return (
+		<div
+			className="px-2"
+			// Hack: shrink 100 allows the side toggles to shrink before the title bar starts to truncate
+			style={{ flex: `0 100 ${ACTIONS_BASIS}` }}
+		>
+			{children}
 		</div>
 	);
 }
