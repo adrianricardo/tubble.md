@@ -7,8 +7,6 @@ import { Button } from "./ui/button";
 
 const IS_MACOS = navigator.userAgent.includes("Mac");
 const TRAFFIC_LIGHT_CLEARANCE = 78;
-const LEFT_MIN = 114;
-const RIGHT_MIN = 44;
 
 function basename(path: string) {
 	return path.split(/[\\/]/).pop() ?? path;
@@ -56,54 +54,47 @@ export function Toolbar({
 			data-tauri-drag-region
 		>
 			<div
-				className="grow basis-1/2"
+				className="flex items-center gap-1 px-2"
 				style={{
-					flexShrink: 1000,
-					minInlineSize: IS_MACOS ? LEFT_MIN : RIGHT_MIN,
+					paddingInlineStart: IS_MACOS ? TRAFFIC_LIGHT_CLEARANCE : 8,
+					flex: "0 100 114px",
 				}}
 			>
-				<div
-					className="flex items-center gap-1 px-2"
-					style={{
-						paddingInlineStart: IS_MACOS ? TRAFFIC_LIGHT_CLEARANCE : 8,
-					}}
-				>
-					{hasWorkspace && (
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							onClick={toggleSidebar}
-							aria-label="Toggle sidebar"
-							className={sidebarOpen ? "text-brand" : ""}
-						>
-							<MingcuteLayoutLeftLine className="size-4" />
-						</Button>
-					)}
-				</div>
+				{hasWorkspace && (
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						onClick={toggleSidebar}
+						aria-label="Toggle sidebar"
+						className={sidebarOpen ? "text-brand" : ""}
+					>
+						<MingcuteLayoutLeftLine className="size-4" />
+					</Button>
+				)}
 			</div>
 			<span
-				className="min-w-0 shrink truncate text-center text-xs text-muted-foreground"
+				className="truncate text-center text-xs text-muted-foreground"
+				style={{ flex: "1 1 auto" }}
 				data-tauri-drag-region
 			>
 				{currentPath ? basename(currentPath) : "\u00A0"}
 			</span>
 			<div
-				className="grow basis-1/2"
-				style={{ flexShrink: 1000, minInlineSize: RIGHT_MIN }}
+				className="flex items-center justify-end px-2"
+                // Hack: shrink 100 allows the side toggles to shrink before the title bar starts to truncate
+				style={{ flex: "0 100 114px" }}
 			>
-				<div className="flex items-center justify-end px-2">
-					{hasWorkspace && (
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							onClick={() => void createNote()}
-							aria-label="New Note"
-							title="New Note (⌘N)"
-						>
-							<MingcuteAddLine className="size-4" />
-						</Button>
-					)}
-				</div>
+				{hasWorkspace && (
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						onClick={() => void createNote()}
+						aria-label="New Note"
+						title="New Note (⌘N)"
+					>
+						<MingcuteAddLine className="size-4" />
+					</Button>
+				)}
 			</div>
 		</div>
 	);
