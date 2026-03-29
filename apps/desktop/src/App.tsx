@@ -8,6 +8,7 @@ import {
 import { useStoreValue } from "@simplestack/store/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { watch } from "@tauri-apps/plugin-fs";
 import { TaskItem } from "@tiptap/extension-list";
@@ -226,12 +227,18 @@ function App() {
 		};
 	}, []);
 
+	useEffect(() => {
+		const name = state.currentPath?.split(/[\\/]/).pop() ?? "Hubble";
+		void getCurrentWindow().setTitle(name);
+	}, [state.currentPath]);
+
 	return (
 		<main className="flex h-dvh flex-col bg-background text-foreground">
 			<Toolbar
 				hasWorkspace={hasWorkspace}
 				sidebarOpen={workspace.sidebarOpen}
 				scrollContainer={scrollContainerEl}
+				currentPath={state.currentPath}
 			/>
 			<div className="flex min-h-0 flex-1 overflow-hidden">
 				{hasWorkspace && workspace.sidebarOpen && workspace.workspacePath && (

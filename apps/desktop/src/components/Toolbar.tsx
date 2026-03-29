@@ -5,14 +5,25 @@ import { createNote } from "../noteActions";
 import { workspaceStore } from "../workspaceStore";
 import { Button } from "./ui/button";
 
+const IS_MACOS = navigator.userAgent.includes("Mac");
+const TRAFFIC_LIGHT_CLEARANCE = 78;
+const LEFT_MIN = 114;
+const RIGHT_MIN = 44;
+
+function basename(path: string) {
+	return path.split(/[\\/]/).pop() ?? path;
+}
+
 export function Toolbar({
 	hasWorkspace,
 	sidebarOpen,
 	scrollContainer,
+	currentPath,
 }: {
 	hasWorkspace: boolean;
 	sidebarOpen: boolean;
 	scrollContainer: HTMLDivElement | null;
+	currentPath: string | null;
 }) {
 	const [showBorder, setShowBorder] = useState(false);
 
@@ -27,36 +38,73 @@ export function Toolbar({
 		return () => scrollContainer.removeEventListener("scroll", update);
 	}, [scrollContainer]);
 
-	if (!hasWorkspace) return null;
-
 	const toggleSidebar = () => {
 		workspaceStore.set((s) => ({ ...s, sidebarOpen: !s.sidebarOpen }));
 	};
 
+	const borderClass = hasWorkspace
+		? sidebarOpen
+			? "border-b border-border"
+			: showBorder
+				? "[border-block-end:1px_dashed_var(--border)]"
+				: "border-transparent"
+		: "border-transparent";
+
 	return (
 		<div
-			className={`flex items-center gap-1 px-2 py-1 ${sidebarOpen ? "border-b border-border" : showBorder ? "[border-block-end:1px_dashed_var(--border)]" : "border-transparent"}`}
+			className={`flex items-center py-1 ${borderClass}`}
 			data-tauri-drag-region
 		>
-			<Button
-				variant="ghost"
-				size="icon-sm"
-				onClick={toggleSidebar}
-				aria-label="Toggle sidebar"
-				className={sidebarOpen ? "text-brand" : ""}
+			<div
+				className="grow basis-1/2"
+				style={{
+					flexShrink: 1000,
+					minInlineSize: IS_MACOS ? LEFT_MIN : RIGHT_MIN,
+				}}
 			>
-				<MingcuteLayoutLeftLine className="size-4" />
-			</Button>
-			<div className="flex-1" data-tauri-drag-region />
-			<Button
-				variant="ghost"
-				size="icon-sm"
-				onClick={() => void createNote()}
-				aria-label="New Note"
-				title="New Note (⌘N)"
+				<div
+					className="flex items-center gap-1 px-2"
+					style={{
+						paddingInlineStart: IS_MACOS ? TRAFFIC_LIGHT_CLEARANCE : 8,
+					}}
+				>
+					{hasWorkspace && (
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							onClick={toggleSidebar}
+							aria-label="Toggle sidebar"
+							className={sidebarOpen ? "text-brand" : ""}
+						>
+							<MingcuteLayoutLeftLine className="size-4" />
+						</Button>
+					)}
+				</div>
+			</div>
+			<span
+				className="min-w-0 shrink truncate text-center text-xs text-muted-foreground"
+				data-tauri-drag-region
 			>
-				<MingcuteAddLine className="size-4" />
-			</Button>
+				{currentPath ? basename(currentPath) : "\u00A0"}
+			</span>
+			<div
+				className="grow basis-1/2"
+				style={{ flexShrink: 1000, minInlineSize: RIGHT_MIN }}
+			>
+				<div className="flex items-center justify-end px-2">
+					{hasWorkspace && (
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							onClick={() => void createNote()}
+							aria-label="New Note"
+							title="New Note (⌘N)"
+						>
+							<MingcuteAddLine className="size-4" />
+						</Button>
+					)}
+				</div>
+			</div>
 		</div>
 	);
 }
