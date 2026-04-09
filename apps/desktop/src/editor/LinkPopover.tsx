@@ -276,6 +276,8 @@ const PREVIEW_HORIZONTAL_OVERFLOW =
 	(PREVIEW_SHELL_INLINE_SIZE - PREVIEW_INLINE_SIZE_END) / 2;
 const PREVIEW_REVEAL_DURATION_MS = 180;
 
+type FocusTarget = "none" | "editor" | "popover";
+
 // Returns true when a selection change should detach the anchor,
 // suppressing position transitions on the next update.
 // Detaches when:
@@ -473,6 +475,7 @@ export function LinkPopover({
 		to: number;
 		href: string;
 	} | null>(null);
+	const [focusTarget, setFocusTarget] = useState<FocusTarget>("none");
 	const [machineState, dispatch] = useReducer(
 		machineReducer,
 		INITIAL_MACHINE_STATE,
@@ -528,6 +531,15 @@ export function LinkPopover({
 	useEffect(() => {
 		if (!editor) return;
 		const update = (reason: PositionUpdateReason = "layout") => {
+			if (reason === "layout") {
+				setFocusTarget(
+					editor.isFocused
+						? "editor"
+						: popoverRef.current?.contains(document.activeElement)
+							? "popover"
+							: "none",
+				);
+			}
 			const { link, activeKey } = getLinkSession(editor);
 			setActiveLink(link);
 			if (link) setHrefValue(link.href);
@@ -592,8 +604,23 @@ export function LinkPopover({
 
 		const handleSelectionUpdate = () => update("selection");
 		const handleTransaction = () => update("transaction");
-		const handleFocus = () => update("focus");
-		const handleBlur = () => update("blur");
+		const handleFocus = () => {
+			setFocusTarget("editor");
+			if (machineStateRef.current.mode === "actions") {
+				dispatchMachineEvent({ type: "ESCAPE_REQUESTED" });
+			}
+			update("focus");
+		};
+		const handleBlur = () => {
+			queueMicrotask(() => {
+				setFocusTarget(
+					popoverRef.current?.contains(document.activeElement)
+						? "popover"
+						: "none",
+				);
+				update("blur");
+			});
+		};
 		const handleResize = () => update("resize");
 		const handleScroll = () => update("scroll");
 
@@ -857,6 +884,8 @@ export function LinkPopover({
 	if (!editor) return null;
 	if (machineState.mode === "creating") {
 		// Render creating UI below (no activeLink needed)
+	} else if (focusTarget === "none") {
+		return null;
 	} else if (machineState.mode === "hidden") {
 		return null;
 	} else if (!activeLink && !machineState.pendingCreation) {
@@ -899,6 +928,19 @@ export function LinkPopover({
 	return (
 		<div
 			ref={popoverRef}
+			onFocusCapture={() => setFocusTarget("popover")}
+			onBlurCapture={(event) => {
+				const nextFocused = event.relatedTarget;
+				if (
+					nextFocused instanceof Node &&
+					event.currentTarget.contains(nextFocused)
+				) {
+					return;
+				}
+				queueMicrotask(() => {
+					setFocusTarget(editor.isFocused ? "editor" : "none");
+				});
+			}}
 			className={cn(
 				"absolute z-[4] w-[250px]",
 				animatePosition &&
