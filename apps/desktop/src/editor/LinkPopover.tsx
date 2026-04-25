@@ -520,9 +520,12 @@ export function LinkPopover({
 	const openCreationTitleInput = useCallback(() => {
 		if (!editor || creationCursorPos === null) return;
 		clearGhostText(editor);
-		if (creationHref) {
-			applyLinkMarkAtPos(editor, creationCursorPos, creationHref);
+		if (!creationHref) {
+			dispatchMachineEvent({ type: "ESCAPE_REQUESTED" });
+			editor.commands.focus(undefined, { scrollIntoView: false });
+			return;
 		}
+		applyLinkMarkAtPos(editor, creationCursorPos, creationHref);
 		dispatchMachineEvent({ type: "TITLE_INPUT_REQUESTED" });
 		editor.commands.focus(undefined, { scrollIntoView: false });
 	}, [editor, creationCursorPos, creationHref, dispatchMachineEvent]);
