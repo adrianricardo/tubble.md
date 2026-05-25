@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { createAppMenu } from "./appMenu";
 import { Sidebar } from "./components/Sidebar";
 import { Toolbar } from "./components/Toolbar";
-import { handleImagePaste } from "./editor/handleImagePaste";
+import { handleImageDrop, handleImagePaste } from "./editor/handleImagePaste";
 import { createImageExtension } from "./editor/ImageExtension";
 import { createNote } from "./noteActions";
 import { SIDEBAR_NAV_SELECTOR } from "./selectors";
@@ -371,9 +371,8 @@ function MarkdownEditor({
 			initialMarkdown={initialMarkdown}
 			wikiTargets={wikiTargets}
 			extensions={[createImageExtension(path)]}
-			onPaste={(editor, event) =>
-				handleImagePaste({ editor, filePath: path, event })
-			}
+			onPaste={(editor, event) => handleImagePaste({ editor, event })}
+			onDrop={(editor, event) => handleImageDrop({ editor, event })}
 			onLocalChange={updateEditorContent}
 			onSave={savePathContent}
 			onScrollContainerChange={onScrollContainerChange}
