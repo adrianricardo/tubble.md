@@ -19,3 +19,7 @@ A folder open in the desktop app that is *not* bound to a Workspace — no `.hub
 ### Asset
 
 A binary file referenced by a note, such as an image. Asset paths in markdown use the desktop-canonical `<note-stem>.assets/<hash>.<ext>` convention relative to the note's folder.
+
+### Workspace Snapshot
+
+The client's currently loaded view of a [[Workspace]] — an atomically assembled bundle of (workspace name, files list, last-opened file content). The app shell renders only when a Workspace Snapshot exists; the UI never shows a partially-loaded one. Switching workspaces means preparing a new snapshot in the background and replacing the previous Workspace Snapshot in a single update once it's ready.

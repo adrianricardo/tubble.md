@@ -6,7 +6,7 @@ import { categorizeError, describeError } from "../connection/convex-error";
 
 type Props = {
 	client: ConvexHttpClient;
-	onCreated: (id: string, name: string) => void;
+	onCreated: (id: string) => void;
 };
 
 export function CreateWorkspaceForm({ client, onCreated }: Props) {
@@ -24,7 +24,7 @@ export function CreateWorkspaceForm({ client, onCreated }: Props) {
 			const id = await client.mutation(api.sync.createWorkspace, {
 				name: trimmed,
 			});
-			onCreated(id, trimmed);
+			onCreated(id);
 		} catch (err) {
 			setError(describeError(categorizeError(err)));
 			setBusy(false);

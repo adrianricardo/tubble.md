@@ -2,11 +2,12 @@ import { createConvexSubscriber } from "@hubble.md/convex-client";
 import { AppShellFrame } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
 import { useEffect, useRef, useState } from "react";
+import { saveWorkspace } from "../connection/connection";
 import {
 	applyRemoteChange,
 	getActionCtx,
-	initActions,
 	loadPath,
+	loadWorkspaceSnapshot,
 	markRemoteDeleted,
 	refreshAssets,
 	refreshFiles,
@@ -22,18 +23,11 @@ import { Toolbar } from "./Toolbar";
 type Props = {
 	url: string;
 	workspaceId: string;
-	workspaceName: string;
-	onSwitch: (id: string, name: string) => void;
+	onSwitch: (id: string) => void;
 	onDisconnect: () => void;
 };
 
-export function AppShell({
-	url,
-	workspaceId,
-	workspaceName,
-	onSwitch,
-	onDisconnect,
-}: Props) {
+export function AppShell({ url, workspaceId, onSwitch, onDisconnect }: Props) {
 	const viewer = useStoreValue(viewerStore);
 	const workspace = useStoreValue(workspaceStore);
 	const [newNoteName, setNewNoteName] = useState<string | null>(null);
@@ -41,28 +35,23 @@ export function AppShell({
 	const newNoteInputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
-		initActions(url, workspaceId);
-		void (async () => {
-			const files = await refreshFiles();
-			await refreshAssets();
-			const lastOpenedPath = workspaceStore.get().lastOpenedPaths[workspaceId];
-			if (
-				lastOpenedPath &&
-				files.some((file) => file.path === lastOpenedPath)
-			) {
-				await loadPath(lastOpenedPath);
-			}
-		})();
+		void loadWorkspaceSnapshot(url, workspaceId).then((loaded) => {
+			if (loaded) saveWorkspace(workspaceId);
+		});
+	}, [url, workspaceId]);
+
+	useEffect(() => {
 		return () => {
 			teardownActions();
 		};
-	}, [url, workspaceId]);
+	}, []);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: subscription owns its lifecycle by url+workspaceId
 	useEffect(() => {
+		if (!workspace.snapshot) return;
 		const subscriber = createConvexSubscriber(url);
 		const unsubscribe = subscriber.onFilesChanged(
-			workspaceId,
+			workspace.snapshot.id,
 			() => {
 				void onRemoteFilesChanged();
 			},
@@ -71,7 +60,7 @@ export function AppShell({
 			},
 		);
 		const unsubscribeAssets = subscriber.onAssetsChanged(
-			workspaceId,
+			workspace.snapshot.id,
 			() => {
 				void refreshAssets();
 			},
@@ -84,7 +73,7 @@ export function AppShell({
 			unsubscribeAssets();
 			void subscriber.close();
 		};
-	}, [url, workspaceId]);
+	}, [url, workspace.snapshot]);
 
 	useEffect(() => {
 		if (newNoteName !== null) {
@@ -120,7 +109,11 @@ export function AppShell({
 	const onRemoteFilesChanged = async () => {
 		const ctx = getActionCtx();
 		if (!ctx) return;
-		const remote = await ctx.backend.getFiles(ctx.workspaceId);
+		const remote = await ctx.backend.getFiles(ctx.workspaceId, {
+			includeDeleted: true,
+		});
+		// One tombstone-inclusive fetch updates the sidebar and detects whether
+		// the current file was deleted.
 		const visible = remote
 			.filter((f) => !f.deleted)
 			.map((f) => ({
@@ -141,19 +134,39 @@ export function AppShell({
 		applyRemoteChange(v.currentPath, current.content, current.contentHash);
 	};
 
+	if (!workspace.snapshot) {
+		return (
+			<main className="flex h-dvh items-center justify-center bg-background text-foreground">
+				<p className="text-sm text-muted-foreground">
+					{workspace.status === "error"
+						? (workspace.error ?? "Workspace failed to load")
+						: "Loading workspace…"}
+				</p>
+			</main>
+		);
+	}
+
 	return (
 		<AppShellFrame
 			sidebar={
 				<Sidebar
 					url={url}
-					workspaceId={workspaceId}
-					workspaceName={workspaceName}
+					workspaceId={workspace.snapshot.id}
+					workspaceName={workspace.snapshot.name}
 					onSwitch={onSwitch}
 					onDisconnect={onDisconnect}
 				/>
 			}
 			toolbar={<Toolbar onNewNote={handleNewNote} />}
 		>
+			{workspace.status === "error" && workspace.error && (
+				<ExternalChangeBanner
+					message={workspace.error}
+					onReload={() => {
+						void loadWorkspaceSnapshot(url, workspaceId);
+					}}
+				/>
+			)}
 			{newNoteName !== null && (
 				<form
 					onSubmit={submitNewNote}
@@ -227,7 +240,8 @@ export function AppShell({
 			)}
 			{!viewer.currentPath &&
 				viewer.status !== "loading" &&
-				viewer.status !== "error" && (
+				viewer.status !== "error" &&
+				workspace.filesLoaded && (
 					<div className="flex h-full items-center justify-center p-6">
 						<p className="text-sm text-muted-foreground">
 							Select a file, or create a new one with +.

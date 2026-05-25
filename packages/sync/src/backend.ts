@@ -5,7 +5,10 @@ export interface SyncBackend {
 	getWorkspace(name: string): Promise<string | null>;
 	createWorkspace(name: string): Promise<string>;
 
-	getFiles(workspaceId: string, since?: number): Promise<RemoteFile[]>;
+	getFiles(
+		workspaceId: string,
+		opts?: { since?: number; includeDeleted?: boolean },
+	): Promise<RemoteFile[]>;
 	pushFile(args: {
 		workspaceId: string;
 		path: string;

@@ -38,9 +38,13 @@ export type ViewerState = {
 };
 
 export type WorkspaceState = {
+	snapshot: { id: string; name: string } | null;
 	files: FileEntry[];
 	assets: AssetEntry[];
+	filesLoaded: boolean;
 	lastOpenedPaths: Record<string, string>;
+	status: "idle" | "loading" | "ready" | "error";
+	error: string | null;
 };
 
 export type AppState = {
@@ -52,7 +56,15 @@ function getInitialState(
 	lastOpenedPaths: Record<string, string> = readLastOpenedPaths(),
 ): AppState {
 	return {
-		workspace: { files: [], assets: [], lastOpenedPaths },
+		workspace: {
+			snapshot: null,
+			files: [],
+			assets: [],
+			filesLoaded: false,
+			lastOpenedPaths,
+			status: "idle",
+			error: null,
+		},
 		viewer: {
 			currentPath: null,
 			pendingPath: null,
@@ -76,6 +88,7 @@ export const workspaceStore = appStore.select("workspace");
 export const viewerStore = appStore.select("viewer");
 export const filesStore = workspaceStore.select("files");
 export const assetsStore = workspaceStore.select("assets");
+export const filesLoadedStore = workspaceStore.select("filesLoaded");
 export const currentPathStore = viewerStore.select("currentPath");
 export const pendingPathStore = viewerStore.select("pendingPath");
 

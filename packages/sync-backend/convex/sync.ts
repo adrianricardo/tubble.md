@@ -82,13 +82,15 @@ export const getFilesByWorkspace = query({
 	args: {
 		workspaceId: v.id("workspaces"),
 		since: v.optional(v.number()),
+		includeDeleted: v.optional(v.boolean()),
 	},
-	handler: async (ctx, { workspaceId, since }) => {
+	handler: async (ctx, { workspaceId, since, includeDeleted }) => {
 		const q = ctx.db.query("files").withIndex("by_workspace", (q) => {
 			const base = q.eq("workspaceId", workspaceId);
 			return since !== undefined ? base.gt("updatedAt", since) : base;
 		});
-		return q.collect();
+		const files = await q.collect();
+		return includeDeleted ? files : files.filter((file) => !file.deleted);
 	},
 });
 

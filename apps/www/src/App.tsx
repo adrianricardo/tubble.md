@@ -1,9 +1,5 @@
 import { useState } from "react";
-import {
-	disconnect,
-	readConnection,
-	saveWorkspace,
-} from "./connection/connection";
+import { disconnect, readConnection } from "./connection/connection";
 import { ConnectScreen } from "./screens/ConnectScreen";
 import { OpenWorkspaceScreen } from "./screens/OpenWorkspaceScreen";
 import { AppShell } from "./shell/AppShell";
@@ -11,24 +7,18 @@ import { AppShell } from "./shell/AppShell";
 type Route =
 	| { kind: "connect" }
 	| { kind: "open-workspace"; url: string }
-	| {
-			kind: "shell";
-			url: string;
-			workspaceId: string;
-			workspaceName: string;
-	  };
+	| { kind: "shell"; url: string; workspaceId: string };
 
 function initialRoute(): Route {
 	const stored = readConnection();
 	if (!stored) return { kind: "connect" };
-	if (!stored.workspaceId || !stored.workspaceName) {
+	if (!stored.workspaceId) {
 		return { kind: "open-workspace", url: stored.url };
 	}
 	return {
 		kind: "shell",
 		url: stored.url,
 		workspaceId: stored.workspaceId,
-		workspaceName: stored.workspaceName,
 	};
 }
 
@@ -52,13 +42,8 @@ export default function App() {
 		return (
 			<OpenWorkspaceScreen
 				url={route.url}
-				onSelected={(workspaceId, workspaceName) =>
-					setRoute({
-						kind: "shell",
-						url: route.url,
-						workspaceId,
-						workspaceName,
-					})
+				onSelected={(workspaceId) =>
+					setRoute({ kind: "shell", url: route.url, workspaceId })
 				}
 				onDisconnect={handleDisconnect}
 			/>
@@ -67,18 +52,10 @@ export default function App() {
 
 	return (
 		<AppShell
-			key={`${route.url}:${route.workspaceId}`}
 			url={route.url}
 			workspaceId={route.workspaceId}
-			workspaceName={route.workspaceName}
-			onSwitch={(id, name) => {
-				saveWorkspace(id, name);
-				setRoute({
-					kind: "shell",
-					url: route.url,
-					workspaceId: id,
-					workspaceName: name,
-				});
+			onSwitch={(id) => {
+				setRoute({ kind: "shell", url: route.url, workspaceId: id });
 			}}
 			onDisconnect={handleDisconnect}
 		/>

@@ -1,10 +1,14 @@
 import { createConvexBackend } from "@hubble.md/convex-client";
-import type { SyncBackend } from "@hubble.md/sync";
+import type { RemoteFile, SyncBackend } from "@hubble.md/sync";
+import { api } from "@hubble.md/sync-backend";
+import type { Doc } from "@hubble.md/sync-backend/types";
+import { ConvexHttpClient } from "convex/browser";
 import { categorizeError, describeError } from "../connection/convex-error";
-import { getDeviceId } from "../connection/deviceId";
+import { ensureDeviceId } from "../connection/deviceId";
 import { latest } from "../lib/latest";
 import {
 	type AssetEntry,
+	appStore,
 	type FileEntry,
 	resetState,
 	type ViewerState,
@@ -20,16 +24,16 @@ type Ctx = {
 
 let ctx: Ctx | null = null;
 
-export function initActions(url: string, workspaceId: string): void {
-	const deviceId = getDeviceId();
-	if (!deviceId) {
-		throw new Error("deviceId missing — cannot initialize actions");
-	}
-	ctx = {
+function createCtx(url: string, workspaceId: string): Ctx {
+	return {
 		backend: createConvexBackend(url),
 		workspaceId,
-		deviceId,
+		deviceId: ensureDeviceId(),
 	};
+}
+
+export function initActions(url: string, workspaceId: string): void {
+	ctx = createCtx(url, workspaceId);
 }
 
 export function teardownActions(): void {
@@ -45,6 +49,113 @@ function requireCtx(): Ctx {
 export function getActionCtx(): Ctx | null {
 	return ctx;
 }
+
+type WorkspaceSnapshot = {
+	workspace: { id: string; name: string };
+	files: FileEntry[];
+	assets: AssetEntry[];
+	currentFile: RemoteFile | null;
+};
+
+async function fetchWorkspaceSnapshot(
+	url: string,
+	workspaceId: string,
+): Promise<WorkspaceSnapshot> {
+	const client = new ConvexHttpClient(url);
+	const workspacesPromise = client.query(api.sync.listWorkspaces, {});
+	const backend = createConvexBackend(url);
+	const filesPromise = backend.getFiles(workspaceId);
+	const assetsPromise = backend.getAssets(workspaceId);
+	const [files, assets] = await Promise.all([filesPromise, assetsPromise]);
+	const workspaces = (await workspacesPromise) as Doc<"workspaces">[];
+	const workspace =
+		workspaces.find((candidate) => candidate._id === workspaceId) ?? null;
+	if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+
+	const visible: FileEntry[] = files.map((f) => ({
+		path: f.path,
+		contentHash: f.contentHash,
+		updatedAt: f.updatedAt,
+		deleted: f.deleted,
+	}));
+	const assetEntries: AssetEntry[] = assets.map((asset) => ({
+		path: asset.path,
+		storageId: asset.storageId,
+		contentHash: asset.contentHash,
+		updatedAt: asset.updatedAt,
+		deleted: asset.deleted,
+	}));
+	const lastOpenedPath = workspaceStore.get().lastOpenedPaths[workspaceId];
+	const currentFile =
+		(lastOpenedPath && files.find((file) => file.path === lastOpenedPath)) ||
+		null;
+
+	return {
+		workspace: { id: workspace._id, name: workspace.name },
+		files: visible,
+		assets: assetEntries,
+		currentFile,
+	};
+}
+
+export const loadWorkspaceSnapshot = latest(
+	async ({ isStale }, url: string, workspaceId: string): Promise<boolean> => {
+		const previousSnapshot = workspaceStore.get().snapshot;
+		if (!previousSnapshot) {
+			workspaceStore.set((state) => ({
+				...state,
+				status: "loading",
+				error: null,
+			}));
+		}
+		try {
+			const snapshot = await fetchWorkspaceSnapshot(url, workspaceId);
+			if (isStale()) return false;
+			ctx = createCtx(url, workspaceId);
+			appStore.set((state) => ({
+				workspace: {
+					...state.workspace,
+					snapshot: snapshot.workspace,
+					files: snapshot.files,
+					assets: snapshot.assets,
+					filesLoaded: true,
+					status: "ready",
+					error: null,
+				},
+				viewer: snapshot.currentFile
+					? {
+							currentPath: snapshot.currentFile.path,
+							pendingPath: null,
+							content: snapshot.currentFile.content,
+							savedContent: snapshot.currentFile.content,
+							basedOnHash: snapshot.currentFile.contentHash,
+							externalChange: { kind: "none" },
+							status: "ready",
+							error: null,
+						}
+					: {
+							currentPath: null,
+							pendingPath: null,
+							content: "",
+							savedContent: "",
+							basedOnHash: null,
+							externalChange: { kind: "none" },
+							status: "idle",
+							error: null,
+						},
+			}));
+			return true;
+		} catch (err) {
+			if (isStale()) return false;
+			workspaceStore.set((state) => ({
+				...state,
+				status: "error",
+				error: describeError(categorizeError(err)),
+			}));
+			return false;
+		}
+	},
+);
 
 async function computeContentHash(content: string): Promise<string> {
 	const data = new TextEncoder().encode(content);
@@ -109,16 +220,19 @@ function cleanState(
 export async function refreshFiles(): Promise<FileEntry[]> {
 	const { backend, workspaceId } = requireCtx();
 	try {
-		const remote = await backend.getFiles(workspaceId);
-		const visible: FileEntry[] = remote
-			.filter((f) => !f.deleted)
-			.map((f) => ({
+		const visible: FileEntry[] = (await backend.getFiles(workspaceId)).map(
+			(f) => ({
 				path: f.path,
 				contentHash: f.contentHash,
 				updatedAt: f.updatedAt,
 				deleted: f.deleted,
-			}));
-		workspaceStore.set((state) => ({ ...state, files: visible }));
+			}),
+		);
+		workspaceStore.set((state) => ({
+			...state,
+			files: visible,
+			filesLoaded: true,
+		}));
 		return visible;
 	} catch (err) {
 		console.error("refreshFiles failed:", describeError(categorizeError(err)));
@@ -271,7 +385,7 @@ export const loadPath = latest(
 			const remote = await backend.getFiles(workspaceId);
 			if (isStale()) return;
 			const file = remote.find((f) => f.path === path);
-			if (!file || file.deleted) {
+			if (!file) {
 				viewerStore.set((s) => ({
 					...s,
 					currentPath: path,
@@ -346,7 +460,9 @@ export async function savePathContent(
 	if (state.currentPath === path && content === state.savedContent) return;
 	try {
 		if (state.currentPath === path && state.basedOnHash !== null) {
-			const remote = await backend.getFiles(workspaceId);
+			const remote = await backend.getFiles(workspaceId, {
+				includeDeleted: true,
+			});
 			const latestState = viewerStore.get();
 			if (
 				latestState.currentPath === path &&

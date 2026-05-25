@@ -12,13 +12,13 @@
  * load("b"); // …makes the first call stale
  * ```
  */
-export function latest<Args extends unknown[]>(
-	fn: (signal: { isStale: () => boolean }, ...args: Args) => Promise<void>,
-): (...args: Args) => Promise<void> {
+export function latest<Args extends unknown[], Result>(
+	fn: (signal: { isStale: () => boolean }, ...args: Args) => Promise<Result>,
+): (...args: Args) => Promise<Result> {
 	let token = 0;
 
 	return async (...args: Args) => {
 		const myToken = ++token;
-		await fn({ isStale: () => myToken !== token }, ...args);
+		return fn({ isStale: () => myToken !== token }, ...args);
 	};
 }

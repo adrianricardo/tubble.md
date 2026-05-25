@@ -10,7 +10,7 @@ type Props = {
 	url: string;
 	currentWorkspaceId: string;
 	currentWorkspaceName: string;
-	onSelect: (id: string, name: string) => void;
+	onSelect: (id: string) => void;
 	onDisconnect: () => void;
 };
 
@@ -32,7 +32,8 @@ export function WorkspaceSwitcher({
 		(async () => {
 			try {
 				const result = await client.query(api.sync.listWorkspaces, {});
-				if (!cancelled) setWorkspaces(result);
+				if (cancelled) return;
+				setWorkspaces(result);
 			} catch (err) {
 				if (!cancelled) setError(describeError(categorizeError(err)));
 			}
@@ -60,7 +61,7 @@ export function WorkspaceSwitcher({
 						onClick={() => {
 							setOpen(false);
 							if (workspace._id !== currentWorkspaceId) {
-								onSelect(workspace._id, workspace.name);
+								onSelect(workspace._id);
 							}
 						}}
 					>
@@ -92,9 +93,9 @@ export function WorkspaceSwitcher({
 			>
 				<CreateWorkspaceForm
 					client={client}
-					onCreated={(id, name) => {
+					onCreated={(id) => {
 						setCreateOpen(false);
-						onSelect(id, name);
+						onSelect(id);
 					}}
 				/>
 			</Modal>

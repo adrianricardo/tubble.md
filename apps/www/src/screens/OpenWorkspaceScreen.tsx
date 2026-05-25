@@ -9,7 +9,7 @@ type Workspace = Doc<"workspaces">;
 
 type Props = {
 	url: string;
-	onSelected: (id: string, name: string) => void;
+	onSelected: (id: string) => void;
 	onDisconnect: () => void;
 };
 
@@ -29,8 +29,7 @@ export function OpenWorkspaceScreen({ url, onSelected, onDisconnect }: Props) {
 				if (cancelled) return;
 				setWorkspaces(result);
 				if (result.length === 1) {
-					const only = result[0];
-					select(only._id, only.name);
+					select(result[0]._id);
 				}
 			} catch (err) {
 				if (cancelled) return;
@@ -42,9 +41,9 @@ export function OpenWorkspaceScreen({ url, onSelected, onDisconnect }: Props) {
 		};
 	}, [client]);
 
-	const select = (id: string, displayName: string) => {
-		saveWorkspace(id, displayName);
-		onSelected(id, displayName);
+	const select = (id: string) => {
+		saveWorkspace(id);
+		onSelected(id);
 	};
 
 	const handleCreate = async (event: React.FormEvent) => {
@@ -57,7 +56,7 @@ export function OpenWorkspaceScreen({ url, onSelected, onDisconnect }: Props) {
 			const id = await client.mutation(api.sync.createWorkspace, {
 				name: trimmed,
 			});
-			select(id, trimmed);
+			select(id);
 		} catch (err) {
 			setError(describeError(categorizeError(err)));
 			setBusy(false);
@@ -103,7 +102,7 @@ export function OpenWorkspaceScreen({ url, onSelected, onDisconnect }: Props) {
 							<li key={w._id} className="list-none">
 								<button
 									type="button"
-									onClick={() => select(w._id, w.name)}
+									onClick={() => select(w._id)}
 									className="block w-full rounded-sm border border-border bg-background px-3 py-2 text-left text-sm hover:bg-sidebar-accent"
 								>
 									{w.name}

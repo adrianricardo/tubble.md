@@ -54,7 +54,9 @@ export async function sync(
 	const localFiles = await fs.listMarkdownFiles(workspacePath);
 	const localByPath = new Map(localFiles.map((f) => [f.relativePath, f]));
 
-	const remoteFiles = await backend.getFiles(workspaceId);
+	const remoteFiles = await backend.getFiles(workspaceId, {
+		includeDeleted: true,
+	});
 	const remoteByPath = new Map(remoteFiles.map((f) => [f.path, f]));
 
 	const result: SyncResult = {

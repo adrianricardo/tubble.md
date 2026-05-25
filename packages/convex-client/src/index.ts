@@ -27,11 +27,15 @@ export function createConvexBackend(url: string): SyncBackend {
 		async createWorkspace(name) {
 			return client.mutation(api.sync.createWorkspace, { name });
 		},
-		async getFiles(workspaceId, since) {
-			return client.query(api.sync.getFilesByWorkspace, {
+		async getFiles(workspaceId, opts) {
+			const files = await client.query(api.sync.getFilesByWorkspace, {
 				workspaceId: workspaceId as Id<"workspaces">,
-				since,
+				since: opts?.since,
+				includeDeleted: opts?.includeDeleted,
 			});
+			return opts?.includeDeleted
+				? files
+				: files.filter((file) => !file.deleted);
 		},
 		async pushFile(args) {
 			await client.mutation(api.sync.pushFile, {
