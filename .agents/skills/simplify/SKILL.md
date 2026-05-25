@@ -1,6 +1,6 @@
 ---
 name: simplify
-description: Simplify and refine recently modified code for clarity and consistency. Use after writing code to improve readability without changing functionality.
+description: Use this skill automatically when you feel your code ready for human review. This means the code works and achieves a stated goal, verified by your own tests and/or, if you deem it necessary, human testing.
 ---
 
 Review changes in the current branch, or in the state the user specifies. Apply these criteria without changing behavior:
