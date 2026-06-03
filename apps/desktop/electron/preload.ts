@@ -46,7 +46,8 @@ const desktopApi = {
 	openExternalUrl: (url) =>
 		ipcRenderer.invoke("desktop:open-external-url", { url }),
 	resolvePath: (path) => ipcRenderer.invoke("desktop:resolve-path", { path }),
-	toAssetUrl: (path) => `hubble-asset://local/${encodeURIComponent(path)}`,
+	toAssetUrl: (path) =>
+		`hubble-asset://local/?path=${encodeURIComponent(path)}`,
 	getLaunchFilePath: () => ipcRenderer.invoke("desktop:get-launch-file-path"),
 	setMenuState: (state) => ipcRenderer.invoke("desktop:set-menu-state", state),
 	onOpenFile: (callback) =>

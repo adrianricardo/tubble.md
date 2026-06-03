@@ -159,12 +159,20 @@ function normalizePosixPath(path: string): string {
 }
 
 function joinPath(baseDir: string, relativePath: string): string {
-	const rel = relativePath.split("\\").join("/");
+	const rel = safeDecodeUriComponent(relativePath).split("\\").join("/");
 	if (rel === "~" || rel.startsWith("~/")) return rel;
 	if (rel.startsWith("/")) return normalizePosixPath(rel);
 	return normalizePosixPath(`${baseDir}/${rel}`);
 }
 
 function isResolvableLocalPath(src: string): boolean {
-	return !/^(data:|https?:|file:|asset:)/i.test(src);
+	return !/^(data:|https?:|file:|asset:|hubble-asset:)/i.test(src);
+}
+
+function safeDecodeUriComponent(value: string): string {
+	try {
+		return decodeURIComponent(value);
+	} catch {
+		return value;
+	}
 }

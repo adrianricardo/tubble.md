@@ -156,6 +156,7 @@ function listItemToPM(li: ListItem, allowChecked: boolean): JSONContent[] {
 }
 
 function imageToPM(imageNode: Image): JSONContent[] {
+	if (!imageNode.url) return [];
 	return [
 		{
 			type: "image",

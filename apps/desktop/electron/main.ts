@@ -161,6 +161,15 @@ function sendToRenderer(channel: string, ...args: unknown[]) {
 	mainWindow?.webContents.send(channel, ...args);
 }
 
+function assetPathFromUrl(url: URL): string {
+	const queryPath = url.searchParams.get("path");
+	if (queryPath) return queryPath;
+	const encodedPath = url.pathname.startsWith("/")
+		? url.pathname.slice(1)
+		: url.pathname;
+	return decodeURIComponent(encodedPath);
+}
+
 function buildMenu() {
 	const template: Electron.MenuItemConstructorOptions[] = [
 		{
@@ -572,10 +581,7 @@ if (!singleInstanceLock) {
 		await saveGrants();
 		protocol.handle("hubble-asset", (request) => {
 			const url = new URL(request.url);
-			const encodedPath = url.pathname.startsWith("/")
-				? url.pathname.slice(1)
-				: url.pathname;
-			const filePath = assertGranted(decodeURIComponent(encodedPath));
+			const filePath = assertGranted(assetPathFromUrl(url));
 			return new Response(fsSync.readFileSync(filePath));
 		});
 		registerIpc();

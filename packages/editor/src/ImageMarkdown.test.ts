@@ -29,4 +29,9 @@ describe("image markdown conversion", () => {
 		});
 		expect(markdown).toBe("![diagram](example.assets/abc123.png)");
 	});
+
+	it("ignores markdown images with empty URLs", () => {
+		const doc = markdownToTiptapDoc("before\n\n![]()\n\nafter");
+		expect(doc.content?.some((node) => node.type === "image")).toBe(false);
+	});
 });
