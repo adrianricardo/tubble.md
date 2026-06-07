@@ -421,6 +421,117 @@ export const runOrphanAssetCleanupForAllWorkspaces = internalMutation({
 	},
 });
 
+/**
+ * Normalize a folder prefix to ensure it ends with a slash.
+ * An empty string stays empty (represents the workspace root).
+ */
+function normalizeFolderPrefix(prefix: string): string {
+	if (!prefix) return "";
+	return prefix.endsWith("/") ? prefix : `${prefix}/`;
+}
+
+/**
+ * Batch-rename all files and assets under `oldPrefix` to `newPrefix`.
+ *
+ * Runs as a single Convex transaction, so the rename is atomic: either all
+ * paths update or none do. Throws on target-path collisions so callers
+ * get a deterministic failure instead of silent data loss.
+ */
+export const renameFolderPrefix = mutation({
+	args: {
+		workspaceId: v.id("workspaces"),
+		oldPrefix: v.string(),
+		newPrefix: v.string(),
+		deviceId: v.string(),
+	},
+	handler: async (ctx, { workspaceId, oldPrefix, newPrefix, deviceId }) => {
+		const normalizedOld = normalizeFolderPrefix(oldPrefix);
+		const normalizedNew = normalizeFolderPrefix(newPrefix);
+
+		if (normalizedOld === normalizedNew) {
+			return { renamedFiles: 0, renamedAssets: 0 };
+		}
+		if (!normalizedOld) {
+			throw new Error("oldPrefix must be a non-empty folder path");
+		}
+		if (!normalizedNew) {
+			throw new Error("newPrefix must be a non-empty folder path");
+		}
+
+		const [allFiles, allAssets] = await Promise.all([
+			ctx.db
+				.query("files")
+				.withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+				.collect(),
+			ctx.db
+				.query("assets")
+				.withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+				.collect(),
+		]);
+
+		const liveFiles = allFiles.filter((f) => !f.deleted);
+		const liveAssets = allAssets.filter((a) => !a.deleted);
+
+		const filesToRename = liveFiles.filter((f) =>
+			f.path.startsWith(normalizedOld),
+		);
+		const assetsToRename = liveAssets.filter((a) =>
+			a.path.startsWith(normalizedOld),
+		);
+
+		if (filesToRename.length === 0 && assetsToRename.length === 0) {
+			return { renamedFiles: 0, renamedAssets: 0 };
+		}
+
+		// Compute new paths
+		const fileRenames = filesToRename.map((f) => ({
+			id: f._id,
+			newPath: normalizedNew + f.path.slice(normalizedOld.length),
+		}));
+		const assetRenames = assetsToRename.map((a) => ({
+			id: a._id,
+			newPath: normalizedNew + a.path.slice(normalizedOld.length),
+		}));
+
+		// Preflight: reject if any target path already exists outside the rename set
+		const renamingFileIds = new Set(filesToRename.map((f) => f._id));
+		const renamingAssetIds = new Set(assetsToRename.map((a) => a._id));
+		const existingFilePaths = new Set(
+			liveFiles.filter((f) => !renamingFileIds.has(f._id)).map((f) => f.path),
+		);
+		const existingAssetPaths = new Set(
+			liveAssets.filter((a) => !renamingAssetIds.has(a._id)).map((a) => a.path),
+		);
+
+		const collisions: string[] = [];
+		for (const r of fileRenames) {
+			if (existingFilePaths.has(r.newPath)) collisions.push(r.newPath);
+		}
+		for (const r of assetRenames) {
+			if (existingAssetPaths.has(r.newPath)) collisions.push(r.newPath);
+		}
+		if (collisions.length > 0) {
+			throw new Error(
+				`Folder rename blocked by path collisions: ${collisions.join(", ")}`,
+			);
+		}
+
+		// Atomic rename — single transaction covers all patches
+		const now = Date.now();
+		for (const { id, newPath } of fileRenames) {
+			await ctx.db.patch(id, { path: newPath, updatedAt: now, deviceId });
+		}
+		for (const { id, newPath } of assetRenames) {
+			await ctx.db.patch(id, { path: newPath, updatedAt: now, deviceId });
+		}
+
+		return {
+			renamedFiles: fileRenames.length,
+			renamedAssets: assetRenames.length,
+		};
+	},
+});
+
 export const debugRemoteEdit = mutation({
 	args: {
 		workspaceId: v.id("workspaces"),
