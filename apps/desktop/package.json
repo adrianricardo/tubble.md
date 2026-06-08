@@ -1,7 +1,7 @@
 {
 	"name": "@hubble.md/desktop",
 	"private": true,
-	"version": "0.1.3",
+	"version": "0.1.4",
 	"description": "Desktop app for Hubble.md",
 	"author": "Ben Holmes",
 	"type": "module",
