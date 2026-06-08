@@ -1,5 +1,6 @@
 import type { InitFileSystem } from "./fs.js";
 import {
+	type CloudSyncConfig,
 	type SyncState,
 	SyncStateSchema,
 	type WorkspaceConfig,
@@ -23,6 +24,15 @@ export async function isInitialized(
 	return (await fs.readFileOrNull(configPath(workspacePath))) !== null;
 }
 
+export async function readConfigOrDefault(
+	fs: InitFileSystem,
+	workspacePath: string,
+): Promise<WorkspaceConfig> {
+	const raw = await fs.readFileOrNull(configPath(workspacePath));
+	if (!raw) return {};
+	return WorkspaceConfigSchema.parse(JSON.parse(raw));
+}
+
 export async function readConfig(
 	fs: InitFileSystem,
 	workspacePath: string,
@@ -43,6 +53,31 @@ export async function writeConfig(
 	);
 }
 
+export async function writeCloudSyncConfig(
+	fs: InitFileSystem,
+	workspacePath: string,
+	cloudSync: CloudSyncConfig,
+): Promise<WorkspaceConfig> {
+	const config = await readConfigOrDefault(fs, workspacePath);
+	const next = { ...config, cloudSync };
+	await writeConfig(fs, workspacePath, next);
+	return next;
+}
+
+export async function removeCloudSyncConfig(
+	fs: InitFileSystem,
+	workspacePath: string,
+): Promise<WorkspaceConfig> {
+	const raw = await fs.readFileOrNull(configPath(workspacePath));
+	if (!raw) return {};
+	const config = WorkspaceConfigSchema.parse(JSON.parse(raw));
+	if (!config.cloudSync) return config;
+	const next = { ...config };
+	delete next.cloudSync;
+	await writeConfig(fs, workspacePath, next);
+	return next;
+}
+
 const EMPTY_STATE: SyncState = { lastSyncedAt: 0, files: {} };
 
 export async function readSyncState(
@@ -59,6 +94,7 @@ export async function writeSyncState(
 	workspacePath: string,
 	state: SyncState,
 ): Promise<void> {
+	await fs.ensureDir(`${workspacePath}/${HUBBLE_DIR}`);
 	await fs.writeFile(
 		statePath(workspacePath),
 		JSON.stringify(state, null, "\t"),

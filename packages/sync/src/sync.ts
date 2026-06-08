@@ -2,12 +2,14 @@ import type { SyncBackend } from "./backend.js";
 import {
 	isInitialized,
 	readConfig,
+	readConfigOrDefault,
 	readSyncState,
-	writeConfig,
+	writeCloudSyncConfig,
 	writeSyncState,
 } from "./config.js";
 import type { FileSystem, InitFileSystem } from "./fs.js";
 import type {
+	CloudSyncConfig,
 	FileState,
 	RemoteAsset,
 	SyncResult,
@@ -21,24 +23,26 @@ export async function init(
 	opts: {
 		workspacePath: string;
 		workspaceName: string;
+		deploymentUrl: string;
+		backgroundSync?: boolean;
 	},
 ): Promise<WorkspaceConfig> {
-	if (await isInitialized(fs, opts.workspacePath)) {
-		return readConfig(fs, opts.workspacePath);
-	}
+	const existing = await readConfigOrDefault(fs, opts.workspacePath);
+	if (existing.cloudSync) return existing;
 
 	const workspaceId =
 		(await backend.getWorkspace(opts.workspaceName)) ??
 		(await backend.createWorkspace(opts.workspaceName));
 
-	const config: WorkspaceConfig = {
+	const cloudSync: CloudSyncConfig = {
+		provider: "convex",
+		deploymentUrl: opts.deploymentUrl,
 		workspaceId,
-		workspaceName: opts.workspaceName,
 		deviceId: crypto.randomUUID(),
+		backgroundSync: opts.backgroundSync ?? false,
 	};
-	await writeConfig(fs, opts.workspacePath, config);
 	await writeSyncState(fs, opts.workspacePath, { lastSyncedAt: 0, files: {} });
-	return config;
+	return writeCloudSyncConfig(fs, opts.workspacePath, cloudSync);
 }
 
 /** Run a full sync: push local changes, pull remote changes, detect conflicts. */
@@ -48,8 +52,13 @@ export async function sync(
 	workspacePath: string,
 ): Promise<SyncResult> {
 	const config = await readConfig(fs, workspacePath);
+	if (!config.cloudSync) {
+		throw new Error(
+			`No Cloud Sync config in ${workspacePath}. Run \`hubble cloud connect\` first.`,
+		);
+	}
 	const state = await readSyncState(fs, workspacePath);
-	const { workspaceId, deviceId } = config;
+	const { workspaceId, deviceId } = config.cloudSync;
 
 	const localFiles = await fs.listMarkdownFiles(workspacePath);
 	const localByPath = new Map(localFiles.map((f) => [f.relativePath, f]));
@@ -312,8 +321,7 @@ export async function status(fs: FileSystem, workspacePath: string) {
 
 	return {
 		initialized: true as const,
-		workspaceName: config.workspaceName,
-		deviceId: config.deviceId,
+		cloudSync: config.cloudSync,
 		lastSyncedAt: state.lastSyncedAt,
 		localFiles: localFiles.length,
 		trackedFiles: Object.keys(state.files).length,

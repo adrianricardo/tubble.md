@@ -1,11 +1,18 @@
 import { z } from "zod/v4";
 
 export const WorkspaceConfigSchema = z.object({
-	workspaceId: z.string(),
-	workspaceName: z.string(),
-	deviceId: z.string(),
+	cloudSync: z
+		.object({
+			provider: z.literal("convex"),
+			deploymentUrl: z.string(),
+			workspaceId: z.string(),
+			deviceId: z.string(),
+			backgroundSync: z.boolean(),
+		})
+		.optional(),
 });
 export type WorkspaceConfig = z.infer<typeof WorkspaceConfigSchema>;
+export type CloudSyncConfig = NonNullable<WorkspaceConfig["cloudSync"]>;
 
 export const FileStateSchema = z.object({
 	hash: z.string(),

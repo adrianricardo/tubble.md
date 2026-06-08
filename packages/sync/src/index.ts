@@ -1,5 +1,14 @@
 export type { SyncBackend } from "./backend.js";
-export { isInitialized, readConfig } from "./config.js";
+export {
+	isInitialized,
+	readConfig,
+	readConfigOrDefault,
+	readSyncState,
+	removeCloudSyncConfig,
+	writeCloudSyncConfig,
+	writeConfig,
+	writeSyncState,
+} from "./config.js";
 export type {
 	FileSystem,
 	InitFileSystem,
@@ -9,6 +18,7 @@ export type {
 export { contentHash } from "./fs.js";
 export { init, status, sync } from "./sync.js";
 export type {
+	CloudSyncConfig,
 	FileState,
 	RemoteAsset,
 	RemoteFile,
