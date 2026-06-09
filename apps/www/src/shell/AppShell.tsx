@@ -252,6 +252,7 @@ export function AppShell({
 						/>
 					)}
 					<EditorView
+						workspaceId={workspace.snapshot.id}
 						path={viewer.currentPath}
 						initialMarkdown={viewer.content}
 					/>

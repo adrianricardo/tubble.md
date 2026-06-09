@@ -7,14 +7,16 @@ import {
 } from "../store/actions";
 import { filesStore } from "../store/state";
 import { handleImageDrop, handleImagePaste } from "./handleImageUpload";
+import { createWebEmbedExtension } from "./WebEmbedExtension";
 import { createWebImageExtension } from "./WebImageExtension";
 
 type Props = {
+	workspaceId: string;
 	path: string;
 	initialMarkdown: string;
 };
 
-export function EditorView({ path, initialMarkdown }: Props) {
+export function EditorView({ workspaceId, path, initialMarkdown }: Props) {
 	const files = useStoreValue(filesStore);
 	const wikiTargets: WikiTarget[] = files.map((file) => ({
 		path: file.path,
@@ -27,7 +29,10 @@ export function EditorView({ path, initialMarkdown }: Props) {
 			path={path}
 			initialMarkdown={initialMarkdown}
 			wikiTargets={wikiTargets}
-			extensions={[createWebImageExtension()]}
+			extensions={[
+				createWebImageExtension(),
+				createWebEmbedExtension(workspaceId),
+			]}
 			onPaste={(editor, event) => handleImagePaste({ editor, event })}
 			onDrop={(editor, event) => handleImageDrop({ editor, event })}
 			onLocalChange={updateEditorContent}
