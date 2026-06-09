@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
 	internalMutation,
 	type MutationCtx,
@@ -17,6 +17,69 @@ async function contentHash(content: string): Promise<string> {
 	const hash = await crypto.subtle.digest("SHA-256", data);
 	const bytes = new Uint8Array(hash);
 	return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function normalizeFolderPrefix(prefix: string): string {
+	const normalized = prefix.replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
+	if (
+		normalized.length === 0 ||
+		normalized.split("/").some((part) => part.length === 0 || part === ".")
+	) {
+		throw new Error("Folder prefix must be a non-empty workspace path");
+	}
+	if (normalized.split("/").some((part) => part === "..")) {
+		throw new Error("Folder prefix cannot contain parent segments");
+	}
+	return `${normalized}/`;
+}
+
+function pathWithRenamedPrefix(
+	path: string,
+	fromPrefix: string,
+	toPrefix: string,
+): string | null {
+	return path.startsWith(fromPrefix)
+		? `${toPrefix}${path.slice(fromPrefix.length)}`
+		: null;
+}
+
+const markdownUrlPattern =
+	/(!?\[[^\]\n]*\]\()([^)\s]+)(\)|\s+["'][^"']*["']\))/g;
+
+function renameMarkdownRootUrls(
+	content: string,
+	fromPrefix: string,
+	toPrefix: string,
+): string {
+	const fromRootPrefix = `/${fromPrefix}`;
+	const toRootPrefix = `/${toPrefix}`;
+	return content.replace(
+		markdownUrlPattern,
+		(match, opener: string, url: string, closer: string) => {
+			if (url.startsWith(fromPrefix)) {
+				return `${opener}${toPrefix}${url.slice(fromPrefix.length)}${closer}`;
+			}
+			if (url.startsWith(fromRootPrefix)) {
+				return `${opener}${toRootPrefix}${url.slice(fromRootPrefix.length)}${closer}`;
+			}
+			return match;
+		},
+	);
+}
+
+type RenameCollision = {
+	path: string;
+	kind: "file" | "asset";
+};
+
+function collisionMessage(collisions: RenameCollision[]): string {
+	const preview = collisions
+		.slice(0, 5)
+		.map((collision) => `${collision.kind}:${collision.path}`)
+		.join(", ");
+	const suffix =
+		collisions.length > 5 ? ` and ${collisions.length - 5} more` : "";
+	return `Folder rename target collides with existing paths: ${preview}${suffix}`;
 }
 
 async function upsertFile(
@@ -145,6 +208,152 @@ export const softDeleteFile = mutation({
 			updatedAt: Date.now(),
 			deviceId,
 		});
+	},
+});
+
+export const renameFolderPrefix = mutation({
+	args: {
+		workspaceId: v.id("workspaces"),
+		fromPrefix: v.string(),
+		toPrefix: v.string(),
+		deviceId: v.string(),
+	},
+	handler: async (ctx, { workspaceId, fromPrefix, toPrefix, deviceId }) => {
+		const from = normalizeFolderPrefix(fromPrefix);
+		const to = normalizeFolderPrefix(toPrefix);
+		if (from === to) return { filesRenamed: 0, assetsRenamed: 0 };
+		if (to.startsWith(from)) {
+			throw new Error("Folder cannot be renamed into itself");
+		}
+
+		const files = await ctx.db
+			.query("files")
+			.withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+			.collect();
+		const assets = await ctx.db
+			.query("assets")
+			.withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+			.collect();
+
+		const movedFileTargets = new Map<Id<"files">, string>();
+		const movedAssetTargets = new Map<Id<"assets">, string>();
+		for (const file of files) {
+			const nextPath = pathWithRenamedPrefix(file.path, from, to);
+			if (nextPath) movedFileTargets.set(file._id, nextPath);
+		}
+		for (const asset of assets) {
+			const nextPath = pathWithRenamedPrefix(asset.path, from, to);
+			if (nextPath) movedAssetTargets.set(asset._id, nextPath);
+		}
+
+		const movedFileTargetPaths = new Set(movedFileTargets.values());
+		const movedAssetTargetPaths = new Set(movedAssetTargets.values());
+		const collisions: RenameCollision[] = [];
+		for (const file of files) {
+			if (
+				!movedFileTargets.has(file._id) &&
+				!file.deleted &&
+				movedFileTargetPaths.has(file.path)
+			) {
+				collisions.push({ kind: "file", path: file.path });
+			}
+		}
+		for (const asset of assets) {
+			if (
+				!movedAssetTargets.has(asset._id) &&
+				!asset.deleted &&
+				movedAssetTargetPaths.has(asset.path)
+			) {
+				collisions.push({ kind: "asset", path: asset.path });
+			}
+		}
+		if (collisions.length > 0) throw new Error(collisionMessage(collisions));
+
+		const now = Date.now();
+		const fileByPath = new Map(files.map((file) => [file.path, file]));
+		for (const file of files) {
+			const nextPath = movedFileTargets.get(file._id);
+			const nextContent = renameMarkdownRootUrls(file.content, from, to);
+			if (nextPath) {
+				const target = fileByPath.get(nextPath);
+				const targetContentHash =
+					nextContent === file.content
+						? file.contentHash
+						: await contentHash(nextContent);
+				const targetPatch: Partial<Doc<"files">> = {
+					contentHash: targetContentHash,
+					content: nextContent,
+					updatedAt: now,
+					deviceId,
+					deleted: file.deleted,
+				};
+				if (target) {
+					await ctx.db.patch(target._id, targetPatch);
+				} else {
+					await ctx.db.insert("files", {
+						workspaceId,
+						path: nextPath,
+						contentHash: targetContentHash,
+						content: nextContent,
+						updatedAt: now,
+						deviceId,
+						deleted: file.deleted,
+					});
+				}
+			}
+
+			const sourcePatch: Partial<Doc<"files">> = {
+				updatedAt: now,
+				deviceId,
+			};
+			if (nextPath) {
+				sourcePatch.deleted = true;
+			} else if (nextContent !== file.content) {
+				sourcePatch.content = nextContent;
+				sourcePatch.contentHash = await contentHash(nextContent);
+			}
+			if (nextPath || nextContent !== file.content) {
+				await ctx.db.patch(file._id, sourcePatch);
+			}
+		}
+		const assetByPath = new Map(assets.map((asset) => [asset.path, asset]));
+		for (const asset of assets) {
+			const nextPath = movedAssetTargets.get(asset._id);
+			if (!nextPath) continue;
+			const target = assetByPath.get(nextPath);
+			const targetPatch: Partial<Doc<"assets">> = {
+				storageId: asset.storageId,
+				contentHash: asset.contentHash,
+				updatedAt: now,
+				orphanedAt: asset.orphanedAt,
+				deviceId,
+				deleted: asset.deleted,
+			};
+			if (target) {
+				await ctx.db.patch(target._id, targetPatch);
+			} else {
+				await ctx.db.insert("assets", {
+					workspaceId,
+					path: nextPath,
+					storageId: asset.storageId,
+					contentHash: asset.contentHash,
+					updatedAt: now,
+					orphanedAt: asset.orphanedAt,
+					deviceId,
+					deleted: asset.deleted,
+				});
+			}
+			await ctx.db.patch(asset._id, {
+				updatedAt: now,
+				deviceId,
+				deleted: true,
+			});
+		}
+
+		return {
+			filesRenamed: movedFileTargets.size,
+			assetsRenamed: movedAssetTargets.size,
+		};
 	},
 });
 
