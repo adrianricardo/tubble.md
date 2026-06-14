@@ -256,12 +256,8 @@ export function EditorView({
 					onMessage={onMessage}
 					onCursorModeChange={setCursorModeOverride}
 				/>
-				<SlashCommandMenu
-					editor={editor}
-					containerRef={editorRootRef}
-					viewportRef={editorViewportRef}
-				/>
-				<FormatCommandMenu editor={editor} containerRef={editorRootRef} />
+				<SlashCommandMenu editor={editor} viewportRef={editorViewportRef} />
+				<FormatCommandMenu editor={editor} viewportRef={editorViewportRef} />
 			</div>
 			<FormattingStatusBar editor={editor} scrollContainer={editorViewportEl} />
 		</div>

@@ -12,6 +12,7 @@ import {
 import MingcuteBoldLine from "~icons/mingcute/bold-line";
 import MingcuteBorderHorizontalLine from "~icons/mingcute/border-horizontal-line";
 import MingcuteCheck2Line from "~icons/mingcute/check-2-line";
+import MingcuteCheckLine from "~icons/mingcute/check-line";
 import MingcuteHeading1Line from "~icons/mingcute/heading-1-line";
 import MingcuteHeading2Line from "~icons/mingcute/heading-2-line";
 import MingcuteHeading3Line from "~icons/mingcute/heading-3-line";
@@ -162,10 +163,10 @@ const FORMAT_COMMANDS: FormatCommand[] = [
 
 export function FormatCommandMenu({
 	editor,
-	containerRef,
+	viewportRef,
 }: {
 	editor: Editor | null;
-	containerRef: RefObject<HTMLDivElement | null>;
+	viewportRef: RefObject<HTMLDivElement | null>;
 }) {
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState("");
@@ -198,7 +199,7 @@ export function FormatCommandMenu({
 				closeMenu();
 				return;
 			}
-			const nextPosition = positionForSelection(editor, containerRef);
+			const nextPosition = positionForSelection(editor, viewportRef);
 			if (!nextPosition) return;
 			setQuery("");
 			setSelectedKind("paragraph");
@@ -209,7 +210,7 @@ export function FormatCommandMenu({
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [closeMenu, containerRef, editor, open]);
+	}, [closeMenu, editor, open, viewportRef]);
 
 	if (!editor || !open || !position) return null;
 
@@ -254,8 +255,20 @@ export function FormatCommandMenu({
 						</div>
 					) : (
 						<>
-							{renderGroup("Block", visibleCommands, activeKind, runCommand)}
-							{renderGroup("Inline", visibleCommands, activeKind, runCommand)}
+							{renderGroup(
+								"Block",
+								visibleCommands,
+								activeKind,
+								runCommand,
+								editor,
+							)}
+							{renderGroup(
+								"Inline",
+								visibleCommands,
+								activeKind,
+								runCommand,
+								editor,
+							)}
 						</>
 					)}
 				</Command.List>
@@ -269,6 +282,7 @@ function renderGroup(
 	commands: FormatCommand[],
 	activeKind: FormatCommandKind | undefined,
 	runCommand: (kind: FormatCommandKind) => void,
+	editor: Editor,
 ) {
 	const groupCommands = commands.filter((command) => command.group === group);
 	if (groupCommands.length === 0) return null;
@@ -282,6 +296,7 @@ function renderGroup(
 			{groupCommands.map((command) => {
 				const Icon = command.icon;
 				const isSelected = activeKind === command.kind;
+				const isApplied = isFormatActive(editor, command.kind);
 				return (
 					<Command.Item
 						key={command.kind}
@@ -295,17 +310,15 @@ function renderGroup(
 							isSelected && "bg-muted text-foreground",
 						)}
 					>
-						<span className="flex size-6 shrink-0 items-center justify-center rounded-sm border border-border bg-card text-muted-foreground">
+						<span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
 							<Icon className="size-3.5" />
 						</span>
-						<span className="min-w-0 flex-1">
-							<span className="block truncate text-foreground">
-								{command.title}
-							</span>
-							<span className="block truncate text-[10px] leading-[13px] text-muted-foreground">
-								{command.description}
-							</span>
+						<span className="block min-w-0 flex-1 truncate text-foreground">
+							{command.title}
 						</span>
+						{isApplied && (
+							<MingcuteCheckLine className="size-3.5 shrink-0 text-muted-foreground" />
+						)}
 					</Command.Item>
 				);
 			})}
@@ -315,15 +328,15 @@ function renderGroup(
 
 function positionForSelection(
 	editor: Editor,
-	containerRef: RefObject<HTMLDivElement | null>,
+	viewportRef: RefObject<HTMLDivElement | null>,
 ): MenuPosition | null {
-	const container = containerRef.current;
-	if (!container) return null;
+	const viewport = viewportRef.current;
+	if (!viewport) return null;
 	const coords = editor.view.coordsAtPos(editor.state.selection.from);
-	const containerRect = container.getBoundingClientRect();
+	const viewportRect = viewport.getBoundingClientRect();
 	return {
-		x: Math.max(8, coords.left - containerRect.left),
-		y: coords.bottom - containerRect.top + 6,
+		x: Math.max(8, coords.left - viewportRect.left + viewport.scrollLeft),
+		y: coords.bottom - viewportRect.top + viewport.scrollTop + 6,
 	};
 }
 
@@ -365,6 +378,41 @@ function isSubsequence(needle: string, haystack: string) {
 		if (index === needle.length) return true;
 	}
 	return false;
+}
+
+function isFormatActive(editor: Editor, kind: FormatCommandKind) {
+	const taskListActive =
+		editor.isActive("listItem", { checked: false }) ||
+		editor.isActive("listItem", { checked: true });
+
+	switch (kind) {
+		case "paragraph":
+			return editor.isActive("paragraph");
+		case "heading1":
+			return editor.isActive("heading", { level: 1 });
+		case "heading2":
+			return editor.isActive("heading", { level: 2 });
+		case "heading3":
+			return editor.isActive("heading", { level: 3 });
+		case "bulletList":
+			return editor.isActive("bulletList") && !taskListActive;
+		case "orderedList":
+			return editor.isActive("orderedList");
+		case "taskList":
+			return taskListActive;
+		case "blockquote":
+			return editor.isActive("blockquote");
+		case "bold":
+			return editor.isActive("bold");
+		case "italic":
+			return editor.isActive("italic");
+		case "strike":
+			return editor.isActive("strike");
+		case "link":
+			return editor.isActive("link");
+		case "divider":
+			return false;
+	}
 }
 
 function applyFormatCommand(editor: Editor, kind: FormatCommandKind) {

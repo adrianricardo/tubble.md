@@ -11,7 +11,6 @@ import {
 } from "react";
 import MingcuteBorderHorizontalLine from "~icons/mingcute/border-horizontal-line";
 import MingcuteCheck2Line from "~icons/mingcute/check-2-line";
-import MingcuteCheckLine from "~icons/mingcute/check-line";
 import MingcuteHeading1Line from "~icons/mingcute/heading-1-line";
 import MingcuteHeading2Line from "~icons/mingcute/heading-2-line";
 import MingcuteHeading3Line from "~icons/mingcute/heading-3-line";
@@ -119,11 +118,9 @@ const SLASH_COMMANDS: SlashCommand[] = [
 
 export function SlashCommandMenu({
 	editor,
-	containerRef,
 	viewportRef,
 }: {
 	editor: Editor | null;
-	containerRef: RefObject<HTMLDivElement | null>;
 	viewportRef: RefObject<HTMLDivElement | null>;
 }) {
 	const [token, setToken] = useState<SlashToken | null>(null);
@@ -161,7 +158,7 @@ export function SlashCommandMenu({
 				setPosition(null);
 				return;
 			}
-			const nextPosition = positionForToken(editor, nextToken, containerRef);
+			const nextPosition = positionForToken(editor, nextToken, viewportRef);
 			setToken(nextToken);
 			setPosition(nextPosition);
 		};
@@ -182,7 +179,7 @@ export function SlashCommandMenu({
 			viewport?.removeEventListener("scroll", update);
 			window.removeEventListener("resize", update);
 		};
-	}, [containerRef, editor, viewportRef]);
+	}, [editor, viewportRef]);
 
 	useEffect(() => {
 		if (!editor) return;
@@ -280,20 +277,11 @@ export function SlashCommandMenu({
 									isSelected && "bg-muted text-foreground",
 								)}
 							>
-								<span className="flex size-6 shrink-0 items-center justify-center rounded-sm border border-border bg-card text-muted-foreground">
-									{isSelected ? (
-										<MingcuteCheckLine className="size-3.5" />
-									) : (
-										<Icon className="size-3.5" />
-									)}
+								<span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
+									<Icon className="size-3.5" />
 								</span>
-								<span className="min-w-0 flex-1">
-									<span className="block truncate text-foreground">
-										{command.title}
-									</span>
-									<span className="block truncate text-[10px] leading-[13px] text-muted-foreground">
-										{command.description}
-									</span>
+								<span className="block min-w-0 flex-1 truncate text-foreground">
+									{command.title}
 								</span>
 							</Command.Item>
 						);
@@ -327,15 +315,15 @@ function findSlashToken(editor: Editor): SlashToken | null {
 function positionForToken(
 	editor: Editor,
 	token: SlashToken,
-	containerRef: RefObject<HTMLDivElement | null>,
+	viewportRef: RefObject<HTMLDivElement | null>,
 ): MenuPosition | null {
-	const container = containerRef.current;
-	if (!container) return null;
+	const viewport = viewportRef.current;
+	if (!viewport) return null;
 	const coords = editor.view.coordsAtPos(token.from);
-	const containerRect = container.getBoundingClientRect();
+	const viewportRect = viewport.getBoundingClientRect();
 	return {
-		x: Math.max(8, coords.left - containerRect.left),
-		y: coords.bottom - containerRect.top + 6,
+		x: Math.max(8, coords.left - viewportRect.left + viewport.scrollLeft),
+		y: coords.bottom - viewportRect.top + viewport.scrollTop + 6,
 	};
 }
 
