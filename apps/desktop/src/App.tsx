@@ -22,6 +22,7 @@ import {
 	getPendingRenameTarget,
 	handleExternalFileChange,
 	loadPath,
+	openWorkspace,
 	openWorkspaceWithSidebar,
 	refreshFiles,
 	reloadFromDiskConflict,
@@ -254,6 +255,17 @@ function App() {
 
 			if (typeof launchPath === "string" && launchPath.length > 0) {
 				await loadPath(launchPath);
+				return;
+			}
+			const launchWorkspacePath = await desktopApi.getLaunchWorkspacePath();
+			if (!active) return;
+
+			if (
+				typeof launchWorkspacePath === "string" &&
+				launchWorkspacePath.length > 0
+			) {
+				await openWorkspace(launchWorkspacePath);
+				setSidebarOpen(true);
 				return;
 			}
 			const nextState = viewerStore.get();
