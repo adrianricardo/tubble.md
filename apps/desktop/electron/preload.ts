@@ -55,6 +55,8 @@ const desktopApi = {
 	toAssetUrl: (path) =>
 		`hubble-asset://local/?path=${encodeURIComponent(path)}`,
 	getLaunchFilePath: () => ipcRenderer.invoke("desktop:get-launch-file-path"),
+	getLaunchWorkspacePath: () =>
+		ipcRenderer.invoke("desktop:get-launch-workspace-path"),
 	setMenuState: (state) => ipcRenderer.invoke("desktop:set-menu-state", state),
 	getUpdateState: () => ipcRenderer.invoke("desktop:get-update-state"),
 	checkForUpdates: () => ipcRenderer.invoke("desktop:check-for-updates"),

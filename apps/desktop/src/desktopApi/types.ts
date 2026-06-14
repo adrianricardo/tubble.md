@@ -78,6 +78,7 @@ export type DesktopApi = {
 	resolvePath(path: string): Promise<string>;
 	toAssetUrl(path: string): string;
 	getLaunchFilePath(): Promise<string | null>;
+	getLaunchWorkspacePath(): Promise<string | null>;
 	setMenuState(state: MenuState): Promise<void>;
 	getUpdateState(): Promise<DesktopUpdateState>;
 	checkForUpdates(): Promise<void>;

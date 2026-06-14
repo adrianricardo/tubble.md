@@ -37,15 +37,20 @@ type IgnoreRule = {
 	matcher: ReturnType<typeof ignore>;
 };
 
-const isDev = !app.isPackaged;
+const isDev = !app.isPackaged || process.env.HUBBLE_DESKTOP_FORCE_DEV === "1";
 const { autoUpdater } = electronUpdater;
+const devAppName = isDev ? process.env.HUBBLE_DESKTOP_DEV_APP_NAME : undefined;
+const appName = devAppName ?? "Hubble";
 const debugPort = process.env.HUBBLE_DESKTOP_DEBUG_PORT ?? "9222";
 const updateFeedUrl = process.env.HUBBLE_DESKTOP_UPDATE_URL;
 const supportsAutoUpdates = !isDev && process.platform === "darwin";
 // Check every 4 hours after the initial packaged-app update check.
 const updateCheckIntervalMs = 4 * 60 * 60 * 1000;
 
-app.setName("Hubble");
+app.setName(appName);
+if (devAppName) {
+	app.setPath("userData", path.join(app.getPath("appData"), devAppName));
+}
 
 if (isDev && process.env.HUBBLE_DESKTOP_ENABLE_CDP === "1") {
 	app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
@@ -56,6 +61,10 @@ let mainWindow: BrowserWindow | null = null;
 let pendingOpenPath: string | null = firstExistingFileArg(
 	process.argv.slice(1),
 );
+const launchWorkspacePath =
+	isDev && process.env.HUBBLE_DESKTOP_DEV_WORKSPACE
+		? resolvePath(process.env.HUBBLE_DESKTOP_DEV_WORKSPACE)
+		: null;
 let menuState: MenuState = { hasWorkspace: false };
 let updateState: DesktopUpdateState = {
 	isSupported: supportsAutoUpdates,
@@ -608,7 +617,7 @@ function matchesGlob(relativePath: string, glob: string): boolean {
 
 async function createWindow() {
 	mainWindow = new BrowserWindow({
-		title: "Hubble",
+		title: appName,
 		width: 800,
 		height: 600,
 		titleBarStyle: "hidden",
@@ -886,6 +895,11 @@ function registerIpc() {
 		return pathToOpen;
 	});
 
+	ipcMain.handle(
+		"desktop:get-launch-workspace-path",
+		() => launchWorkspacePath,
+	);
+
 	ipcMain.handle("desktop:get-update-state", () => updateState);
 
 	ipcMain.handle("desktop:check-for-updates", async () => {
@@ -942,6 +956,7 @@ if (!singleInstanceLock) {
 
 	app.whenReady().then(async () => {
 		await loadGrants();
+		if (launchWorkspacePath) grantRoot(launchWorkspacePath);
 		await saveGrants();
 		protocol.handle("hubble-asset", (request) => {
 			const url = new URL(request.url);
