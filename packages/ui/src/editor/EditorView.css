@@ -16,6 +16,7 @@
 	font-feature-settings: "liga" 0;
 	caret-color: transparent;
 	color: var(--foreground);
+	font-size: var(--font-size-content);
 }
 
 [data-hubble-editor]
@@ -109,8 +110,15 @@
 }
 
 [data-hubble-editor] .pm-fake-selection {
-	background: color-mix(in oklab, var(--brand) 34%, transparent);
+	background: color-mix(in oklab, var(--selected) 70%, transparent);
 	border-radius: 2px;
+}
+
+[data-hubble-editor]
+	:is(.pm-md-delimiter, .ProseMirror code, .ProseMirror pre) {
+	font-family:
+		"Lilex", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+		"Liberation Mono", "Courier New", monospace;
 }
 
 [data-hubble-editor] .pm-md-delimiter {
@@ -120,9 +128,26 @@
 	pointer-events: auto;
 	position: relative;
 	cursor: text;
-	font-family:
-		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-		"Courier New", monospace;
+}
+
+[data-hubble-editor] .ProseMirror code {
+	background: var(--muted);
+	padding: 0.1em 0.3em;
+	border-radius: 3px;
+	font-size: 0.9em;
+}
+
+[data-hubble-editor] .ProseMirror pre {
+	background: var(--muted);
+	padding: 0.6rem 0.8rem;
+	border-radius: var(--radius-md);
+	font-size: 0.9em;
+	overflow-x: auto;
+}
+
+[data-hubble-editor] .ProseMirror pre code {
+	background: transparent;
+	padding: 0;
 }
 
 [data-hubble-editor] .ProseMirror span[data-link="true"] {

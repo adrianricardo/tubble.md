@@ -430,9 +430,8 @@ function updateFloatingPosition(
 
 function playPreviewRevealAnimation(previewButton: HTMLButtonElement) {
 	const easing =
-		getComputedStyle(previewButton)
-			.getPropertyValue("--ease-spring-snappy")
-			.trim() || "ease-out";
+		getComputedStyle(previewButton).getPropertyValue("--ease-snappy").trim() ||
+		"ease-out";
 	return previewButton.animate(
 		[
 			{
@@ -1177,7 +1176,7 @@ export function LinkPopover({
 	const actionHintClass =
 		"text-[9px] leading-[14px] tracking-[0.12em] text-muted-foreground/85";
 	const actionButtonClass =
-		"h-auto flex-1 rounded-none border-0 px-2 text-foreground shadow-none inset-shadow-none hover:bg-muted/80";
+		"h-auto flex-1 rounded-none border-0 px-2 text-foreground shadow-none inset-shadow-none hover:bg-muted";
 	const activeLinkTarget =
 		activeLink?.kind === "wiki" ? (activeLink.target ?? activeLink.href) : null;
 	const previewText = activeLink
@@ -1205,7 +1204,7 @@ export function LinkPopover({
 							role="option"
 							aria-selected={isActive}
 							className={cn(
-								"flex w-full min-w-0 flex-col rounded-[calc(var(--radius)-2px)] border-0 bg-transparent px-2 py-1 text-start text-[11px] leading-[15px] text-popover-foreground hover:bg-muted",
+								"flex w-full min-w-0 flex-col rounded-[var(--radius-inner)] border-0 bg-transparent px-2 py-1 text-start text-[11px] leading-[15px] text-popover-foreground hover:bg-accent",
 								isActive && "bg-muted text-foreground",
 							)}
 							onMouseDown={(event) => event.preventDefault()}
@@ -1235,7 +1234,7 @@ export function LinkPopover({
 			}}
 		>
 			{machineState.mode === "creating" ? (
-				<div className="w-full overflow-hidden rounded-sm border border-border bg-popover shadow-panel">
+				<div className="w-full overflow-hidden rounded-[var(--radius-popover)] border border-border bg-popover shadow-overlay">
 					{suggestionList}
 					<div className="p-1">
 						<Input
@@ -1247,7 +1246,7 @@ export function LinkPopover({
 								setCreationHref(event.target.value);
 								setActiveSuggestionIndex(0);
 							}}
-							className="h-7 rounded-[calc(var(--radius)-1px)] border-border bg-background px-2 py-[5px] text-[11px] leading-[16px]"
+							className="h-7 rounded-sm border-border bg-background px-2 py-[5px] text-[11px] leading-[16px]"
 						/>
 					</div>
 					<div className="flex h-6 items-center px-2 text-[9px] leading-[14px] tracking-[0.12em] text-muted-foreground/85">
@@ -1261,7 +1260,7 @@ export function LinkPopover({
 						variant="outline"
 						size="sm"
 						className={cn(
-							"h-7 min-w-0 justify-start gap-0 overflow-hidden border-border bg-card px-0 text-left shadow-panel inset-shadow-chrome hover:bg-card",
+							"h-7 min-w-0 justify-start gap-0 overflow-hidden border-border bg-card px-0 text-left hover:bg-muted",
 							styles.previewButton,
 						)}
 						onClick={() => dispatchMachineEvent({ type: "EXPAND_REQUESTED" })}
@@ -1275,7 +1274,7 @@ export function LinkPopover({
 						<span className="relative flex h-full w-[42px] shrink-0 items-center justify-center overflow-hidden border-s border-border bg-primary text-primary-foreground">
 							<span
 								className={cn(
-									"absolute inset-0 flex items-center justify-center text-[11px] font-semibold leading-[16px] tracking-[0.12em] transition-transform duration-[var(--default-transition-duration)] ease-spring-snappy",
+									"absolute inset-0 flex items-center justify-center text-[11px] font-semibold leading-[16px] tracking-[0.12em] transition-transform duration-[var(--default-transition-duration)] ease-snappy",
 									inputMode === "keyboard"
 										? "translate-y-0"
 										: "-translate-y-[120%]",
@@ -1285,7 +1284,7 @@ export function LinkPopover({
 							</span>
 							<span
 								className={cn(
-									"absolute inset-0 flex items-center justify-center transition-transform duration-[var(--default-transition-duration)] ease-spring-snappy",
+									"absolute inset-0 flex items-center justify-center transition-transform duration-[var(--default-transition-duration)] ease-snappy",
 									inputMode === "keyboard"
 										? "translate-y-[120%]"
 										: "translate-y-0",
@@ -1300,7 +1299,7 @@ export function LinkPopover({
 					</Button>
 				</div>
 			) : (
-				<div className="w-full overflow-hidden rounded-sm border border-border bg-popover shadow-panel">
+				<div className="w-full overflow-hidden rounded-[var(--radius-popover)] border border-border bg-popover shadow-overlay">
 					{suggestionList}
 					<div className="p-1">
 						<Input
@@ -1312,7 +1311,7 @@ export function LinkPopover({
 								handleExistingLinkInput(event.target.value);
 								setActiveSuggestionIndex(0);
 							}}
-							className="h-7 rounded-[calc(var(--radius)-1px)] border-border bg-background px-2 py-[5px] text-[11px] leading-[16px]"
+							className="h-7 rounded-sm border-border bg-background px-2 py-[5px] text-[11px] leading-[16px]"
 						/>
 					</div>
 					<Separator className="bg-border/90" />

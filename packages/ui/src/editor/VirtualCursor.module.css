@@ -1,7 +1,7 @@
 .cursor {
 	position: absolute;
 	border-radius: 2px;
-	background: var(--brand);
+	background: var(--brand-accent);
 	pointer-events: none;
 	transform-origin: top;
 	transition:

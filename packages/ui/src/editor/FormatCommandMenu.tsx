@@ -221,7 +221,7 @@ export function FormatCommandMenu({
 
 	return (
 		<div
-			className="absolute z-[5] w-[250px] overflow-hidden rounded-sm border border-border bg-popover text-popover-foreground shadow-panel"
+			className="absolute z-[5] w-[250px] overflow-hidden rounded-[var(--radius-popover)] border border-border bg-popover text-popover-foreground shadow-overlay"
 			style={{
 				insetInlineStart: `${position.x}px`,
 				insetBlockStart: `${position.y}px`,
@@ -291,8 +291,8 @@ function renderGroup(
 						onMouseDown={(event) => event.preventDefault()}
 						onSelect={() => runCommand(command.kind)}
 						className={cn(
-							"flex min-w-0 cursor-default items-center gap-2 rounded-[calc(var(--radius)-2px)] px-2 py-1.5 text-start text-[11px] leading-[15px] outline-hidden",
-							"data-[selected=true]:bg-muted data-[selected=true]:text-foreground",
+							"flex min-w-0 cursor-default items-center gap-2 rounded-[var(--radius-inner)] px-2 py-1.5 text-start text-[11px] leading-[15px] outline-hidden",
+							"data-[selected=true]:bg-accent data-[selected=true]:text-foreground",
 						)}
 					>
 						<span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">

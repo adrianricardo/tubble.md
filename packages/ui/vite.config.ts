@@ -24,6 +24,7 @@ export default defineConfig({
 				index: resolve("./src/index.ts"),
 				tailwind: resolve("./src/tailwind.css"),
 				theme: resolve("./src/theme.css"),
+				fonts: resolve("./src/fonts.css"),
 			},
 			formats: ["es"],
 			fileName: (_format, entryName) => `${entryName}.js`,

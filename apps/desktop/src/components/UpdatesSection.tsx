@@ -25,7 +25,7 @@ export function SidebarUpdateCallout({
 					<Button
 						size="sm"
 						variant="ghost"
-						className="text-foreground hover:bg-primary/10 hover:text-foreground"
+						className="text-foreground hover:bg-muted hover:text-foreground"
 						onClick={onDismiss}
 					>
 						Dismiss

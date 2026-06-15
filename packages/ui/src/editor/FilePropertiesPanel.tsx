@@ -96,7 +96,7 @@ export function FilePropertiesPanel({
 				<button
 					ref={addButtonRef}
 					type="button"
-					className="grid h-7 grid-cols-[minmax(7rem,0.75fr)_2fr] items-center gap-2 text-muted-foreground text-xs"
+					className="grid h-7 grid-cols-[minmax(7rem,0.75fr)_2fr] items-center gap-2 text-muted-foreground text-xs transition-colors hover:text-foreground"
 					onClick={() => {
 						const draftId = crypto.randomUUID();
 						setFocusDraftId(draftId);
@@ -266,7 +266,7 @@ function PropertyRow({
 				type="button"
 				aria-label={`Delete ${property.key || "property"}`}
 				title="Delete property"
-				className="inline-flex size-7 items-center justify-center rounded-sm bg-accent/0 text-muted-foreground/45 opacity-0 outline-none transition-[background-color,color,opacity] duration-150 ease-out hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:opacity-100 group-focus-within/property:opacity-100 group-hover/property:opacity-100"
+				className="inline-flex size-7 items-center justify-center rounded-sm bg-muted/0 text-muted-foreground/45 opacity-0 outline-none transition-[background-color,color,opacity] duration-150 ease-out hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground focus-visible:opacity-100 group-focus-within/property:opacity-100 group-hover/property:opacity-100"
 				onClick={() => onDelete()}
 			>
 				<MingcuteCloseLine className="size-3.5" />
@@ -643,7 +643,7 @@ function PropertyTypeSelect({
 			</Select.Trigger>
 			<Select.Portal>
 				<Select.Positioner align="start" side="bottom" sideOffset={4}>
-					<Select.Popup className="z-50 w-36 origin-(--transform-origin) rounded-sm border border-border bg-popover p-1 text-[11px] text-popover-foreground shadow-panel inset-shadow-chrome outline-hidden">
+					<Select.Popup className="z-50 w-36 origin-(--transform-origin) rounded-sm border border-border bg-popover p-1 text-[11px] text-popover-foreground outline-hidden">
 						{propertyTypes.map((type) => (
 							<Select.Item
 								key={type}

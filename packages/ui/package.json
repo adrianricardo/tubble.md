@@ -12,7 +12,8 @@
 		},
 		"./style.css": "./dist/index.css",
 		"./tailwind.css": "./dist/tailwind.css",
-		"./theme.css": "./dist/theme.css"
+		"./theme.css": "./dist/theme.css",
+		"./fonts.css": "./dist/fonts.css"
 	},
 	"files": [
 		"dist"

@@ -119,7 +119,7 @@ export function FormattingStatusBar({
 			</Button>
 			<div className="flex items-center gap-2 text-muted-foreground">
 				{paletteState.canEscapeBoundary && (
-					<span className="inline-flex h-4 items-center rounded-sm border border-border bg-secondary px-1 text-[11px] leading-none text-foreground shadow-panel inset-shadow-chrome">
+					<span className="inline-flex h-4 items-center rounded-sm border border-border bg-secondary px-1 text-[11px] leading-none text-foreground shadow-overlay">
 						esc
 					</span>
 				)}

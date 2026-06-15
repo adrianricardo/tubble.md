@@ -297,7 +297,7 @@ export function Sidebar({
 						</Select.Trigger>
 						<Select.Portal>
 							<Select.Positioner align="end" side="bottom" sideOffset={4}>
-								<Select.Popup className="z-50 w-36 origin-(--transform-origin) rounded-sm border border-border bg-popover p-1 text-[11px] text-popover-foreground shadow-panel inset-shadow-chrome outline-hidden transition-[transform,opacity] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+								<Select.Popup className="z-50 w-36 origin-(--transform-origin) rounded-[var(--radius-popover)] border border-border bg-popover p-1 text-[11px] text-popover-foreground shadow-overlay outline-hidden transition-[transform,opacity] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
 									<p className="px-2 py-1 text-[10px] font-medium text-muted-foreground">
 										Sort by
 									</p>
@@ -312,7 +312,7 @@ export function Sidebar({
 			<div
 				ref={navRef}
 				role="tree"
-				className="flex-1 overflow-y-auto overscroll-contain py-1 outline-none"
+				className="flex-1 overflow-y-auto overscroll-contain px-1.5 py-1 outline-none"
 				tabIndex={0}
 				onKeyDown={onKeyDown}
 				data-sidebar-nav
@@ -333,10 +333,10 @@ export function Sidebar({
 							aria-expanded={row.kind === "folder" ? row.expanded : undefined}
 							aria-selected={isActive}
 							className={cn(
-								"group/sidebar-row flex w-full items-center text-sidebar-foreground hover:bg-sidebar-accent",
+								"group/sidebar-row flex w-full items-center rounded-[var(--radius-row)] text-sidebar-foreground",
+								!isActive && isFocused && "bg-accent",
 								isActive &&
 									"bg-sidebar-accent text-sidebar-accent-foreground font-medium",
-								isFocused && "bg-sidebar-accent",
 								isRenaming && "relative z-30",
 							)}
 							onPointerEnter={() => setFocusedIndex(index)}
@@ -355,7 +355,7 @@ export function Sidebar({
 						>
 							<div
 								className={cn(
-									"flex min-w-0 flex-1 items-center gap-1 [padding-block:0.25rem] [padding-inline-end:0.5rem] text-start text-[13px]",
+									"flex min-w-0 flex-1 items-center gap-1 [padding-block:var(--row-pad-block)] [padding-inline-end:var(--row-pad-inline)] text-start text-[length:var(--font-size-sidebar)]",
 									isRenaming ? "overflow-visible" : "truncate",
 								)}
 								style={
@@ -552,6 +552,7 @@ export function SidebarFrame({
 	return (
 		<aside
 			ref={asideRef}
+			data-sidebar-root
 			className={cn(
 				"relative flex shrink-0 flex-col overflow-visible border-e border-sidebar-border bg-sidebar",
 				isResizing && "select-none",
@@ -701,7 +702,7 @@ function ActionsMenu({
 				render={
 					<button
 						type="button"
-						className="me-1 inline-flex size-6 shrink-0 items-center justify-center rounded-sm border border-transparent bg-transparent text-muted-foreground opacity-0 outline-hidden transition-opacity hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/40 group-hover/sidebar-row:opacity-100 aria-expanded:opacity-100"
+						className="me-1 inline-flex size-6 shrink-0 items-center justify-center rounded-sm border border-transparent bg-transparent text-muted-foreground/70 opacity-0 outline-hidden transition-[opacity,color] hover:text-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/40 group-hover/sidebar-row:opacity-100 aria-expanded:text-foreground aria-expanded:opacity-100"
 						aria-label={`Actions for ${label}`}
 						title={`Actions for ${label}`}
 						onContextMenu={(event) => {
@@ -715,7 +716,7 @@ function ActionsMenu({
 			</Menu.Trigger>
 			<Menu.Portal>
 				<Menu.Positioner align="end" side="bottom" sideOffset={4}>
-					<Menu.Popup className="z-50 w-36 origin-(--transform-origin) rounded-sm border border-border bg-popover p-1 text-[11px] text-popover-foreground shadow-panel inset-shadow-chrome outline-hidden transition-[transform,opacity] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+					<Menu.Popup className="z-50 w-36 origin-(--transform-origin) rounded-[var(--radius-popover)] border border-border bg-popover p-1 text-[11px] text-popover-foreground shadow-overlay outline-hidden transition-[transform,opacity] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
 						{children}
 					</Menu.Popup>
 				</Menu.Positioner>
@@ -770,7 +771,7 @@ function FileRenameInput({
 			<input
 				ref={ref}
 				aria-invalid={error ? true : undefined}
-				className="min-w-0 flex-1 rounded-none border-0 bg-muted/70 p-0 text-[13px] text-sidebar-foreground outline-none selection:bg-muted-foreground/20 selection:text-sidebar-foreground focus:outline-none focus-visible:outline-none focus-visible:ring-0"
+				className="min-w-0 flex-1 rounded-none border-0 bg-muted/70 p-0 text-[13px] text-sidebar-foreground outline-none selection:bg-selected/70 selection:text-sidebar-foreground focus:outline-none focus-visible:outline-none focus-visible:ring-0"
 				value={value}
 				onBlur={onCommit}
 				onChange={(event) => onChange(event.target.value)}
@@ -785,7 +786,7 @@ function FileRenameInput({
 				}}
 			/>
 			{error && (
-				<span className="absolute top-full start-0 z-20 mt-1 w-max max-w-[calc(var(--sidebar-width)-2rem)] rounded-sm bg-[oklch(0.78_0.11_4)] px-2 py-1.5 text-[11px] font-normal leading-4 text-[oklch(0.18_0.02_4)] shadow-panel">
+				<span className="absolute top-full start-0 z-20 mt-1 w-max max-w-[calc(var(--sidebar-width)-2rem)] rounded-sm bg-[oklch(0.78_0.11_4)] px-2 py-1.5 text-[11px] font-normal leading-4 text-[oklch(0.18_0.02_4)] shadow-overlay">
 					{error}
 				</span>
 			)}

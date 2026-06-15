@@ -3,9 +3,9 @@
 	--link-popover-preview-inline-size-end: 174px;
 	inline-size: var(--link-popover-preview-inline-size-end);
 	transition:
-		inline-size var(--default-transition-duration) var(--ease-spring-snappy),
-		transform var(--default-transition-duration) var(--ease-spring-snappy),
-		opacity var(--default-transition-duration) var(--ease-spring-snappy);
+		inline-size var(--default-transition-duration) var(--ease-snappy),
+		transform var(--default-transition-duration) var(--ease-snappy),
+		opacity var(--default-transition-duration) var(--ease-snappy);
 	will-change: inline-size, transform, opacity;
 }
 
