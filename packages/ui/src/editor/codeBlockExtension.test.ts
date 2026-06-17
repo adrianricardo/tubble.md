@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe("code block editor extension", () => {
-	it("inserts spaces for Tab inside code blocks", () => {
+	it("inserts two spaces for Tab inside TypeScript code blocks", () => {
 		const editor = createCodeBlockEditor();
 
 		expect(editor.commands.keyboardShortcut("Tab")).toBe(true);
@@ -22,12 +22,12 @@ describe("code block editor extension", () => {
 		expect(editor.getJSON().content?.[0]).toMatchObject({
 			type: "codeBlock",
 			attrs: { language: "ts" },
-			content: [{ type: "text", text: "const x = 1;    " }],
+			content: [{ type: "text", text: "const x = 1;  " }],
 		});
 	});
 
-	it("deletes a soft-tab segment with Backspace inside leading indentation", () => {
-		const editor = createCodeBlockEditor("    const x = 1;", 5);
+	it("deletes a two-space soft-tab segment for TypeScript", () => {
+		const editor = createCodeBlockEditor("  const x = 1;", 3);
 
 		expect(editor.commands.keyboardShortcut("Backspace")).toBe(true);
 
@@ -37,9 +37,37 @@ describe("code block editor extension", () => {
 			content: [{ type: "text", text: "const x = 1;" }],
 		});
 	});
+
+	it("deletes trailing soft-tab spaces at a tab stop", () => {
+		const editor = createCodeBlockEditor("const x = 1;  ", 15);
+
+		expect(editor.commands.keyboardShortcut("Backspace")).toBe(true);
+
+		expect(editor.getJSON().content?.[0]).toMatchObject({
+			type: "codeBlock",
+			attrs: { language: "ts" },
+			content: [{ type: "text", text: "const x = 1;" }],
+		});
+	});
+
+	it("uses four-space indents for Python code blocks", () => {
+		const editor = createCodeBlockEditor("print('ok')", undefined, "python");
+
+		expect(editor.commands.keyboardShortcut("Tab")).toBe(true);
+
+		expect(editor.getJSON().content?.[0]).toMatchObject({
+			type: "codeBlock",
+			attrs: { language: "python" },
+			content: [{ type: "text", text: "print('ok')    " }],
+		});
+	});
 });
 
-function createCodeBlockEditor(text = "const x = 1;", cursorPos?: number) {
+function createCodeBlockEditor(
+	text = "const x = 1;",
+	cursorPos?: number,
+	language = "ts",
+) {
 	const editor = new Editor({
 		element: document.createElement("div"),
 		extensions: [StarterKit.configure({ codeBlock: false }), HubbleCodeBlock],
@@ -48,7 +76,7 @@ function createCodeBlockEditor(text = "const x = 1;", cursorPos?: number) {
 			content: [
 				{
 					type: "codeBlock",
-					attrs: { language: "ts" },
+					attrs: { language },
 					content: [{ type: "text", text }],
 				},
 			],

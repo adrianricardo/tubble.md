@@ -37,8 +37,12 @@
 	margin-block-start: var(--editor-paragraph-gap);
 }
 
-[data-hubble-editor] .ProseMirror > :is(p, .pm-code-block) + .pm-code-block,
-[data-hubble-editor] .ProseMirror > .pm-code-block + :is(p, ul, ol) {
+[data-hubble-editor] .ProseMirror > .react-renderer.node-codeBlock {
+	margin-block: var(--editor-paragraph-gap);
+}
+
+[data-hubble-editor] .ProseMirror > * + .react-renderer.node-codeBlock,
+[data-hubble-editor] .ProseMirror > .react-renderer.node-codeBlock + * {
 	margin-block-start: var(--editor-paragraph-gap);
 }
 
@@ -163,12 +167,40 @@
 	display: flex;
 	align-items: center;
 	gap: 0.15rem;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 160ms var(--ease-snappy);
+}
+
+[data-hubble-editor]
+	.react-renderer.node-codeBlock:hover
+	.pm-code-block-controls {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+[data-hubble-editor] .pm-code-block-controls[data-select-open="true"] {
+	opacity: 0;
+	pointer-events: none;
+}
+
+[data-hubble-editor]
+	.pm-code-block-controls:has(.pm-code-block-language[aria-expanded="true"]) {
+	opacity: 0;
+	pointer-events: none;
+}
+
+[data-hubble-editor]
+	.react-renderer.node-codeBlock:hover
+	.pm-code-block-controls:has(.pm-code-block-language[aria-expanded="true"]) {
+	opacity: 0;
+	pointer-events: none;
 }
 
 [data-hubble-editor] .pm-code-block-language {
 	max-inline-size: 9rem;
 	border: 0;
-	padding-inline: 0.4rem 0.2rem;
+	padding-inline: 0.5rem;
 }
 
 [data-hubble-editor] .pm-code-block-language [data-slot="value"] {

@@ -9,11 +9,22 @@ import {
 } from "@tiptap/react";
 import { common, createLowlight } from "lowlight";
 import { useState } from "react";
+import MingcuteCheckLine from "~icons/mingcute/check-line";
 import MingcuteCopy2Line from "~icons/mingcute/copy-2-line";
-import MingcuteSelectorVerticalLine from "~icons/mingcute/selector-vertical-line";
 import { Button } from "../primitives/button";
 
-const TAB_SIZE = 4;
+const DEFAULT_TAB_SIZE = 4;
+const TWO_SPACE_LANGUAGES = new Set([
+	"css",
+	"html",
+	"js",
+	"json",
+	"jsx",
+	"md",
+	"ts",
+	"tsx",
+]);
+export const CODE_BLOCK_COPY_EVENT = "hubble:code-block-copy";
 
 const lowlight = createLowlight(common);
 lowlight.registerAlias({
@@ -28,6 +39,30 @@ export const HubbleCodeBlock = CodeBlockLowlight.extend({
 	addKeyboardShortcuts() {
 		return {
 			...this.parent?.(),
+			Tab: ({ editor }) => {
+				const { state } = editor;
+				const { selection } = state;
+				const { $from, empty } = selection;
+				if ($from.parent.type !== this.type) return false;
+
+				const tabSize = tabSizeForLanguage($from.parent.attrs.language);
+				const indent = " ".repeat(tabSize);
+
+				if (empty) {
+					return editor.commands.insertContent(indent);
+				}
+
+				return editor.commands.command(({ tr }) => {
+					const { from, to } = selection;
+					const text = state.doc.textBetween(from, to, "\n", "\n");
+					const indentedText = text
+						.split("\n")
+						.map((line) => indent + line)
+						.join("\n");
+					tr.replaceWith(from, to, state.schema.text(indentedText));
+					return true;
+				});
+			},
 			Backspace: ({ editor }) => {
 				const { state } = editor;
 				const { selection } = state;
@@ -46,19 +81,20 @@ export const HubbleCodeBlock = CodeBlockLowlight.extend({
 				const lineStart = textBeforeCursor.lastIndexOf("\n") + 1;
 				const column = textBeforeCursor.length - lineStart;
 				const linePrefix = textBeforeCursor.slice(lineStart);
+				const tabSize = tabSizeForLanguage($from.parent.attrs.language);
+				const previousSegment = linePrefix.slice(-tabSize);
 
+				// Treat soft-tab spaces as one indentation unit at tab stops.
 				if (
 					column === 0 ||
-					column % TAB_SIZE !== 0 ||
-					linePrefix.length !== column ||
-					!/^\s+$/.test(linePrefix) ||
-					!linePrefix.endsWith(" ".repeat(TAB_SIZE))
+					column % tabSize !== 0 ||
+					previousSegment !== " ".repeat(tabSize)
 				) {
 					return false;
 				}
 
 				return editor.commands.command(({ tr }) => {
-					const from = $from.pos - TAB_SIZE;
+					const from = $from.pos - tabSize;
 					tr.delete(from, $from.pos);
 					tr.setSelection(TextSelection.create(tr.doc, from));
 					return true;
@@ -71,19 +107,25 @@ export const HubbleCodeBlock = CodeBlockLowlight.extend({
 	},
 }).configure({
 	lowlight,
-	enableTabIndentation: true,
-	tabSize: TAB_SIZE,
+	enableTabIndentation: false,
+	tabSize: DEFAULT_TAB_SIZE,
 });
 
 function CodeBlockView({ node, updateAttributes }: NodeViewProps) {
 	const language =
 		typeof node.attrs.language === "string" ? node.attrs.language : "";
-	const [copied, setCopied] = useState(false);
+	const [selectOpen, setSelectOpen] = useState(false);
 
 	return (
 		<NodeViewWrapper className="pm-code-block" as="div">
-			<div className="pm-code-block-controls" contentEditable={false}>
+			<div
+				className="pm-code-block-controls"
+				contentEditable={false}
+				data-select-open={selectOpen}
+			>
 				<Select.Root
+					open={selectOpen}
+					onOpenChange={setSelectOpen}
 					value={language}
 					onValueChange={(next) => updateAttributes({ language: next || null })}
 				>
@@ -102,20 +144,19 @@ function CodeBlockView({ node, updateAttributes }: NodeViewProps) {
 						<Select.Value>
 							{languageLabel(language) || "Plain text"}
 						</Select.Value>
-						<MingcuteSelectorVerticalLine
-							className="size-3.5 shrink-0 text-muted-foreground"
-							aria-hidden="true"
-						/>
 					</Select.Trigger>
 					<Select.Portal>
-						<Select.Positioner align="end" side="bottom" sideOffset={4}>
+						<Select.Positioner align="end" side="bottom" sideOffset={8}>
 							<Select.Popup className="z-50 w-40 origin-(--transform-origin) rounded-[var(--radius-popover)] border border-border bg-popover p-1 text-[11px] text-popover-foreground shadow-overlay outline-hidden transition-[transform,opacity] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
 								{codeBlockLanguages.map((option) => (
 									<Select.Item
 										key={option.value}
 										value={option.value}
-										className="flex w-full cursor-pointer items-center rounded-sm px-2 py-1 text-start text-[11px] text-foreground outline-hidden select-none data-highlighted:bg-accent"
+										className="flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1 text-start text-[11px] text-foreground outline-hidden select-none data-highlighted:bg-accent"
 									>
+										<Select.ItemIndicator className="inline-flex" keepMounted>
+											<MingcuteCheckLine className="size-3 [[data-selected]_&]:opacity-100 opacity-0" />
+										</Select.ItemIndicator>
 										<Select.ItemText>{option.label}</Select.ItemText>
 									</Select.Item>
 								))}
@@ -128,12 +169,9 @@ function CodeBlockView({ node, updateAttributes }: NodeViewProps) {
 					variant="ghost"
 					size="icon-xs"
 					aria-label="Copy code"
-					title={copied ? "Copied" : "Copy code"}
+					title="Copy code"
 					onClick={() => {
-						void navigator.clipboard.writeText(node.textContent).then(() => {
-							setCopied(true);
-							window.setTimeout(() => setCopied(false), 1200);
-						});
+						void copyCodeBlock(node.textContent);
 					}}
 				>
 					<MingcuteCopy2Line className="size-3.5" />
@@ -151,6 +189,30 @@ function CodeBlockView({ node, updateAttributes }: NodeViewProps) {
 
 function languageLabel(value: string) {
 	return codeBlockLanguages.find((option) => option.value === value)?.label;
+}
+
+function tabSizeForLanguage(language: unknown) {
+	return typeof language === "string" && TWO_SPACE_LANGUAGES.has(language)
+		? 2
+		: DEFAULT_TAB_SIZE;
+}
+
+async function copyCodeBlock(text: string) {
+	try {
+		await navigator.clipboard.writeText(text);
+		// TODO: Revisit if UI grows a shared toast store; this bridges TipTap's node view to EditorView's onMessage without adding app state here.
+		window.dispatchEvent(
+			new CustomEvent(CODE_BLOCK_COPY_EVENT, {
+				detail: { message: "Code copied", type: "success" },
+			}),
+		);
+	} catch {
+		window.dispatchEvent(
+			new CustomEvent(CODE_BLOCK_COPY_EVENT, {
+				detail: { message: "Failed to copy code", type: "error" },
+			}),
+		);
+	}
 }
 
 const codeBlockLanguages = [
