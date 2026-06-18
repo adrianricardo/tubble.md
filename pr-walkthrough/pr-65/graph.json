@@ -1,0 +1,532 @@
+{
+  "meta": {
+    "title": "Add synced note pinning",
+    "prUrl": "https://github.com/bholmesdev/hubble.md/pull/65",
+    "baseRef": "main",
+    "headRef": "codex/issue-64-synced-note-pinning",
+    "summary": "Adds a versioned .hubble/config.json workspace config that stores pinned notes, loads it on workspace open, persists pin/unpin/rename/delete updates, and hoists pinned notes into a top 'Pinned' sidebar section with filled pin glyphs."
+  },
+  "graphs": [
+    {
+      "id": "system-overview",
+      "label": "System overview",
+      "color": "#c0872a",
+      "summary": "Concise reference map of the Hubble desktop sidebar/workspace subsystem: the Electron IPC bridge, the central app store, the store action layer, and the sidebar UI tree.",
+      "nodes": [
+        {
+          "id": "desktop-api-bridge",
+          "title": "Desktop API bridge (Electron)",
+          "kind": "overview card",
+          "x": -360,
+          "y": -210,
+          "width": 360,
+          "height": 200,
+          "summaryLines": 7,
+          "summary": "The renderer never touches the filesystem directly. The Electron main process registers ipcMain.handle channels, preload.ts re-exposes them as a typed window.desktopApi, and the renderer imports that object as desktopApi. A grants system (granted roots/files) gates every path so the main process only reads or writes within folders the user has authorized.",
+          "details": [
+            "main process: ipcMain.handle(...) channels for listDirectory, read/writeFileText, folder picker, etc.",
+            "preload.ts: contextBridge surface mapping each method to ipcRenderer.invoke.",
+            "Grants: assertGranted / assertGrantedRoot enforce that a path is inside an authorized root before any fs access."
+          ],
+          "files": [],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "workspace-store",
+          "title": "App store + persistence",
+          "kind": "overview card",
+          "x": 40,
+          "y": -210,
+          "width": 360,
+          "height": 200,
+          "summaryLines": 7,
+          "summary": "A single @simplestack/store appStore holds { workspace, document, ui }. Selectors such as workspaceStore and viewerStore expose slices to React. Part of the workspace slice (recent workspaces, sort mode, last-opened paths) is serialized to localStorage and rehydrated on launch, while transient data like the file list is recomputed at runtime.",
+          "details": [
+            "state.ts: appStore = store(getInitialState, { middleware: [localStoragePersist] }).",
+            "Selectors: workspaceStore, viewerStore, uiStore and finer slices like currentPathStore.",
+            "persistence.ts hydrateWorkspace defines which fields survive a reload."
+          ],
+          "files": [],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "store-actions",
+          "title": "Store action layer",
+          "kind": "overview card",
+          "x": -360,
+          "y": 40,
+          "width": 360,
+          "height": 200,
+          "summaryLines": 7,
+          "summary": "actions.ts is the one place where filesystem effects and state transitions meet. Async functions like openWorkspace, refreshFiles, renameMarkdownFile, deleteMarkdownFile and loadPath call through desktopApi, then commit results into the store. They also handle workspace-path guards (ignoring stale responses) and surface failures through toast notifications.",
+          "details": [
+            "Pattern: read/write via desktopApi, then workspaceStore.set / viewerStore.set.",
+            "Guards re-check workspacePath before applying async results to avoid races across workspace switches.",
+            "Errors are reported with sonner toast.error rather than thrown to the UI."
+          ],
+          "files": [],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "sidebar-ui",
+          "title": "Sidebar UI + tree",
+          "kind": "overview card",
+          "x": 40,
+          "y": 40,
+          "width": 360,
+          "height": 200,
+          "summaryLines": 7,
+          "summary": "The reusable packages/ui Sidebar renders a flat list of rows it receives as props, plus a per-file actions menu and keyboard navigation. useSidebarTree turns the flat file list into a folder tree and flattens it back into ordered SidebarRow items. The desktop app's own Sidebar wrapper adapts store state into those props and wires row callbacks back to store actions.",
+          "details": [
+            "useSidebarTree: buildFileTree then flatten into folder/file rows for rendering.",
+            "ui Sidebar.tsx: renders rows, FileActionsMenu (reveal/rename/delete), and handles focus/keyboard.",
+            "apps/desktop Sidebar.tsx: maps workspace store -> props and binds callbacks to actions."
+          ],
+          "files": [],
+          "comments": [],
+          "links": []
+        }
+      ],
+      "edges": [],
+      "tour": [
+        {
+          "nodeId": "desktop-api-bridge",
+          "title": "Start at the IPC boundary",
+          "body": "Every filesystem read or write in Hubble crosses the Electron main/preload bridge and is gated by the grants system. Knowing this boundary explains where workspace data physically comes from."
+        },
+        {
+          "nodeId": "workspace-store",
+          "title": "Where workspace state lives",
+          "body": "The app store is the single source of truth for the open workspace. A subset persists to localStorage; the rest is recomputed. Reviewers should know which fields are durable vs. transient."
+        },
+        {
+          "nodeId": "store-actions",
+          "title": "How effects reach state",
+          "body": "The action layer is the only seam where desktopApi calls and store mutations meet, with workspace-path guards and toast-based error handling. Most behavioral logic lives here."
+        },
+        {
+          "nodeId": "sidebar-ui",
+          "title": "How files become rows",
+          "body": "useSidebarTree converts a flat file list into an ordered row list, and the Sidebar renders those rows plus the per-file actions menu. This is the surface the user actually interacts with."
+        }
+      ]
+    },
+    {
+      "id": "data-flow",
+      "label": "Data flow graph",
+      "color": "#34895c",
+      "summary": "How pinned-note state moves between the on-disk config, the IPC layer, the action layer, the store, and the rendered sidebar — including the persistence write-back loop.",
+      "nodes": [
+        {
+          "id": "config-file",
+          "title": ".hubble/config.json",
+          "kind": "input",
+          "x": -380,
+          "y": -40,
+          "summary": "Versioned per-workspace config storing pinned notes as workspace-relative paths.",
+          "details": [
+            "Shape: { version: 1, pinnedNotes: string[] } where entries are relative paths like notes/a.md.",
+            "Written pretty-printed with a trailing newline; the file is auto-granted after write so later reads succeed."
+          ],
+          "files": [
+            { "path": "apps/desktop/electron/main.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-24986faf95d15dba70ae9a1bd169d0cf9f503f399de4c2c75deac2ea4c09a06aR98" }
+          ],
+          "comments": [],
+          "links": [{ "label": "PR #65", "url": "https://github.com/bholmesdev/hubble.md/pull/65" }]
+        },
+        {
+          "id": "ipc-config",
+          "title": "read/write workspace config IPC",
+          "kind": "io",
+          "x": -120,
+          "y": -40,
+          "summary": "Main-process handlers parse, validate, and normalize config before it crosses the bridge.",
+          "details": [
+            "desktop:read-workspace-config parses the file, drops invalid entries, and returns an empty config on ENOENT or version mismatch.",
+            "desktop:write-workspace-config normalizes (validates + de-dupes) entries, mkdir -p the .hubble dir, writes, then grants the file.",
+            "isValidConfigNote rejects empty, absolute, and '..' traversal paths."
+          ],
+          "files": [
+            { "path": "apps/desktop/electron/main.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-24986faf95d15dba70ae9a1bd169d0cf9f503f399de4c2c75deac2ea4c09a06aR802" },
+            { "path": "apps/desktop/electron/preload.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-bda98b937704b4997d3c073e79aac34879b1501569b5eb1c42a48945181bb171R22" },
+            { "path": "apps/desktop/src/desktopApi/types.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-5d12dd79c5b7bbde38c2466eab476d341698ee8df3af84ac5e4f4269f3ef50cbR54" }
+          ],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "load-pins",
+          "title": "loadPinnedNotes / openWorkspace",
+          "kind": "action",
+          "x": 140,
+          "y": -150,
+          "summary": "On workspace open, reads the config and converts relative entries to absolute paths in the store.",
+          "details": [
+            "openWorkspace resets pinnedNotes to [] then runs refreshFiles and loadPinnedNotes together via Promise.all.",
+            "loadPinnedNotes maps each relative note to an absolute path and guards against stale workspace switches."
+          ],
+          "files": [
+            { "path": "apps/desktop/src/store/actions.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-a2a74a810ff712fda4ad421e0d3c8f752ce18986899be40a72abd06facb18b55R54" }
+          ],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "workspace-state",
+          "title": "workspaceStore.pinnedNotes",
+          "kind": "owner",
+          "x": 140,
+          "y": 90,
+          "summary": "Store owns pinned notes as absolute paths; rename/delete/deleteFolder keep them consistent.",
+          "details": [
+            "pinnedNotes is added to WorkspaceState and reset (not persisted) on hydrate, since it is reloaded from config on open.",
+            "renameMarkdownFile remaps pinned paths, while deleteMarkdownFile/deleteFolder prune removed entries, each followed by a config write-back."
+          ],
+          "files": [
+            { "path": "apps/desktop/src/store/persistence.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-1ad6d772dd87a419a95264f4c56e4839e97cd93c266e9fc88e728867b0651e9cR9" },
+            { "path": "apps/desktop/src/store/actions.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-a2a74a810ff712fda4ad421e0d3c8f752ce18986899be40a72abd06facb18b55R291" }
+          ],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "sidebar-render",
+          "title": "Pinned sidebar section",
+          "kind": "output",
+          "x": 420,
+          "y": 20,
+          "summary": "The sidebar marks pinned files and hoists them into a top 'Pinned' section, removing them from their folders.",
+          "details": [
+            "desktop Sidebar builds a pinnedSet and passes pinned: boolean per file into the UI Sidebar.",
+            "flattenRows emits a 'Pinned' section row plus the pinned files at depth 0, and appendFolderChildren skips pinned files so they are not duplicated.",
+            "Rows render a filled pin glyph; the actions menu shows Pin/Unpin with line vs. filled icons."
+          ],
+          "files": [
+            { "path": "apps/desktop/src/components/Sidebar.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-a9034d5bc3d12dd2925117e42e100b888058594e30dd773eb5db899d5a039d48R75" },
+            { "path": "packages/ui/src/components/useSidebarTree.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-446159e6f1d98f4e80836ad7f1fefa0d354e80027cfecb953d0620235830c918R209" },
+            { "path": "packages/ui/src/components/Sidebar.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-14887d52a356c0296a4526f56ae4a35e13554e492d9497755911095dc5ffc78bR447" }
+          ],
+          "comments": [],
+          "links": []
+        }
+      ],
+      "edges": [
+        { "source": "config-file", "target": "ipc-config", "label": "read on workspace open" },
+        { "source": "ipc-config", "target": "load-pins", "label": "returns parsed config" },
+        { "source": "load-pins", "target": "workspace-state", "label": "sets absolute pins" },
+        { "source": "workspace-state", "target": "sidebar-render", "label": "renders Pinned section" },
+        { "source": "workspace-state", "target": "ipc-config", "label": "persists via writePinnedNotes" },
+        { "source": "ipc-config", "target": "config-file", "label": "writes normalized config" }
+      ],
+      "tour": [
+        {
+          "nodeId": "config-file",
+          "title": "Source of truth on disk",
+          "body": "Pinned notes live in a versioned .hubble/config.json as workspace-relative paths. Storing relative paths makes the config portable if the workspace folder moves."
+        },
+        {
+          "nodeId": "ipc-config",
+          "title": "Validate at the boundary",
+          "body": "The read/write IPC handlers are where untrusted file contents are parsed, validated (no absolute or '..' paths), normalized, and de-duped before anything reaches the renderer or the disk."
+        },
+        {
+          "nodeId": "load-pins",
+          "title": "Relative becomes absolute",
+          "body": "On open, loadPinnedNotes converts stored relative paths to absolute paths so they can be matched against the absolute file list. Note it runs in parallel with refreshFiles."
+        },
+        {
+          "nodeId": "workspace-state",
+          "title": "Store keeps pins consistent",
+          "body": "The store holds pins as absolute paths and updates them on rename/delete/deleteFolder, each writing back to config. This is the main place to check for state-consistency bugs."
+        },
+        {
+          "nodeId": "sidebar-render",
+          "title": "Rendered output",
+          "body": "Finally the tree hoists pinned files into a 'Pinned' section and skips them in their folders, so a reviewer can verify pinned notes appear once, at the top, with a filled glyph."
+        }
+      ]
+    },
+    {
+      "id": "code-dependency",
+      "label": "Code dependency graph",
+      "color": "#2e5d9e",
+      "summary": "Which changed modules depend on which. The shared types contract is the leaf; the action layer and Electron main are the entry points that drive behavior.",
+      "nodes": [
+        {
+          "id": "desktop-api-types",
+          "title": "desktopApi/types.ts",
+          "kind": "leaf",
+          "x": 60,
+          "y": 120,
+          "summary": "Shared contract: WorkspaceConfig type plus the read/writeWorkspaceConfig methods on DesktopApi.",
+          "details": [
+            "Both the Electron implementation and the renderer depend on this type, keeping the IPC payload shape in sync.",
+            "WorkspaceConfig = { version: 1; pinnedNotes: string[] }."
+          ],
+          "files": [
+            { "path": "apps/desktop/src/desktopApi/types.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-5d12dd79c5b7bbde38c2466eab476d341698ee8df3af84ac5e4f4269f3ef50cbR54" }
+          ],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "electron-main",
+          "title": "electron/main.ts",
+          "kind": "entry",
+          "x": -360,
+          "y": 120,
+          "summary": "Implements the config IPC handlers and the parse/validate/normalize helpers.",
+          "details": [
+            "Adds workspaceConfigPath, emptyWorkspaceConfig, isValidConfigNote, parseWorkspaceConfig, normalizeWorkspaceConfig.",
+            "Registers desktop:read-workspace-config and desktop:write-workspace-config; reuses the grants system."
+          ],
+          "files": [
+            { "path": "apps/desktop/electron/main.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-24986faf95d15dba70ae9a1bd169d0cf9f503f399de4c2c75deac2ea4c09a06aR118" }
+          ],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "preload",
+          "title": "electron/preload.ts",
+          "kind": "io",
+          "x": -360,
+          "y": -90,
+          "summary": "Bridges the two config channels into window.desktopApi for the renderer.",
+          "details": [
+            "readWorkspaceConfig(workspacePath) and writeWorkspaceConfig(workspacePath, config) wrap ipcRenderer.invoke."
+          ],
+          "files": [
+            { "path": "apps/desktop/electron/preload.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-bda98b937704b4997d3c073e79aac34879b1501569b5eb1c42a48945181bb171R22" }
+          ],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "store-actions",
+          "title": "store/actions.ts",
+          "kind": "entry",
+          "x": 60,
+          "y": -120,
+          "summary": "Drives pin behavior: load/write helpers, togglePinnedNote, and rename/delete consistency.",
+          "details": [
+            "relativeWorkspacePath / absoluteWorkspacePath convert between stored and in-memory forms.",
+            "togglePinnedNote optimistically updates the store then writes; on failure it toasts and reloads from disk."
+          ],
+          "files": [
+            { "path": "apps/desktop/src/store/actions.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-a2a74a810ff712fda4ad421e0d3c8f752ce18986899be40a72abd06facb18b55R503" }
+          ],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "sidebar-view",
+          "title": "Sidebar views (desktop + ui)",
+          "kind": "owner",
+          "x": 420,
+          "y": -60,
+          "summary": "Desktop Sidebar wires togglePinnedNote and the pinned flag; ui Sidebar + useSidebarTree render the section.",
+          "details": [
+            "components/Sidebar.tsx: passes pinned per file and onTogglePinnedFile -> togglePinnedNote.",
+            "useSidebarTree: new 'section' row kind; flattenRows hoists pinned files and appendFolderChildren skips them.",
+            "ui Sidebar.tsx: renders section rows, the Pin/Unpin menu item, and the filled pin glyph; absolute-positions the actions menu."
+          ],
+          "files": [
+            { "path": "apps/desktop/src/components/Sidebar.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-a9034d5bc3d12dd2925117e42e100b888058594e30dd773eb5db899d5a039d48R75" },
+            { "path": "packages/ui/src/components/useSidebarTree.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-446159e6f1d98f4e80836ad7f1fefa0d354e80027cfecb953d0620235830c918R21" },
+            { "path": "packages/ui/src/components/Sidebar.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-14887d52a356c0296a4526f56ae4a35e13554e492d9497755911095dc5ffc78bR336" }
+          ],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "tests",
+          "title": "store/actions.test.ts",
+          "kind": "test",
+          "x": 420,
+          "y": 150,
+          "summary": "Unit tests over the action layer with a mocked desktopApi.",
+          "details": [
+            "Covers: missing config -> empty pins, persisted relative pins -> absolute, pin/unpin write payloads, and rename remapping both store and config."
+          ],
+          "files": [
+            { "path": "apps/desktop/src/store/actions.test.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-0125034a7d6d625d2e6a2fc442193d641990fb63ecafea5c395d10b82c7640fbR169" }
+          ],
+          "comments": [],
+          "links": []
+        }
+      ],
+      "edges": [
+        { "source": "sidebar-view", "target": "store-actions", "label": "calls togglePinnedNote" },
+        { "source": "store-actions", "target": "preload", "label": "invokes desktopApi" },
+        { "source": "preload", "target": "electron-main", "label": "IPC channel pair" },
+        { "source": "store-actions", "target": "desktop-api-types", "label": "uses WorkspaceConfig" },
+        { "source": "electron-main", "target": "desktop-api-types", "label": "implements shape" },
+        { "source": "tests", "target": "store-actions", "label": "mocks + asserts" }
+      ],
+      "tour": [
+        {
+          "nodeId": "store-actions",
+          "title": "The behavioral entry point",
+          "body": "Start at actions.ts: it owns the pin/unpin logic and the relative/absolute conversions. Most of the review-worthy logic flows out from here."
+        },
+        {
+          "nodeId": "sidebar-view",
+          "title": "Who calls the action",
+          "body": "The desktop Sidebar binds the menu callback to togglePinnedNote, and the ui tree decides how pinned files are grouped and rendered. This is the caller side of the action."
+        },
+        {
+          "nodeId": "preload",
+          "title": "Crossing into the main process",
+          "body": "actions.ts reaches the filesystem only through the preload bridge, which forwards to the two new IPC channels. This is the renderer/main seam."
+        },
+        {
+          "nodeId": "electron-main",
+          "title": "The trusted implementation",
+          "body": "main.ts implements those channels and is where validation/normalization lives. Pair this with the data-flow boundary node when reviewing path-safety."
+        },
+        {
+          "nodeId": "desktop-api-types",
+          "title": "The shared contract",
+          "body": "Both sides depend on WorkspaceConfig in types.ts. If the payload shape drifts, this is the leaf that keeps renderer and main in agreement."
+        },
+        {
+          "nodeId": "tests",
+          "title": "What is covered",
+          "body": "Tests target the action layer with a mocked desktopApi, asserting load, toggle, and rename behavior — useful for confirming the core logic without the Electron shell."
+        }
+      ]
+    },
+    {
+      "id": "user-action",
+      "label": "User action graph",
+      "color": "#754dac",
+      "summary": "What the user does to pin a note, how that flows through the implementation, and the visible feedback plus the failure path.",
+      "nodes": [
+        {
+          "id": "open-row-menu",
+          "title": "Open file actions menu",
+          "kind": "user",
+          "x": -360,
+          "y": -30,
+          "summary": "User hovers a note row and opens its actions menu (or right-clicks the row).",
+          "details": [
+            "The actions trigger is absolutely positioned at the row's inline-end and appears on hover/focus.",
+            "The menu offers Reveal, Rename, Pin/Unpin, and Delete depending on which callbacks are wired."
+          ],
+          "files": [
+            { "path": "packages/ui/src/components/Sidebar.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-14887d52a356c0296a4526f56ae4a35e13554e492d9497755911095dc5ffc78bR789" }
+          ],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "click-pin",
+          "title": "Click Pin / Unpin",
+          "kind": "action",
+          "x": -90,
+          "y": -30,
+          "summary": "Selecting Pin/Unpin invokes onTogglePinnedFile, which calls togglePinnedNote(path).",
+          "details": [
+            "The menu item icon is a line pin when unpinned and a filled pin when pinned.",
+            "togglePinnedNote ignores paths outside the current workspace."
+          ],
+          "files": [
+            { "path": "packages/ui/src/components/Sidebar.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-14887d52a356c0296a4526f56ae4a35e13554e492d9497755911095dc5ffc78bR751" },
+            { "path": "apps/desktop/src/components/Sidebar.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-a9034d5bc3d12dd2925117e42e100b888058594e30dd773eb5db899d5a039d48R93" }
+          ],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "optimistic-update",
+          "title": "Optimistic store update + write",
+          "kind": "state",
+          "x": 180,
+          "y": -120,
+          "summary": "The store updates pinnedNotes immediately, then persists the change to config.json.",
+          "details": [
+            "togglePinnedNote computes the next pin set, sets the store, then awaits writePinnedNotes.",
+            "writePinnedNotes converts to relative paths before the IPC write."
+          ],
+          "files": [
+            { "path": "apps/desktop/src/store/actions.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-a2a74a810ff712fda4ad421e0d3c8f752ce18986899be40a72abd06facb18b55R506" }
+          ],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "pinned-section",
+          "title": "Note hoisted to 'Pinned'",
+          "kind": "result",
+          "x": 460,
+          "y": -120,
+          "summary": "The note jumps to the top 'Pinned' section and shows a filled pin glyph on its row.",
+          "details": [
+            "useSidebarTree emits the Pinned section and omits the file from its folder, so it appears once at the top.",
+            "Pinned rows render MingcutePinFill; the row label keeps its folder-prefixed display path."
+          ],
+          "files": [
+            { "path": "packages/ui/src/components/useSidebarTree.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-446159e6f1d98f4e80836ad7f1fefa0d354e80027cfecb953d0620235830c918R209" },
+            { "path": "packages/ui/src/components/Sidebar.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-14887d52a356c0296a4526f56ae4a35e13554e492d9497755911095dc5ffc78bR447" }
+          ],
+          "comments": [],
+          "links": []
+        },
+        {
+          "id": "error-revert",
+          "title": "Write failure -> toast + reload",
+          "kind": "error",
+          "x": 180,
+          "y": 110,
+          "summary": "If persisting fails, the user sees an error toast and the pins are reloaded from disk.",
+          "details": [
+            "togglePinnedNote catches write errors, shows toast.error('Failed to update pinned notes'), and calls loadPinnedNotes to resync.",
+            "This reverts the optimistic change so the UI matches the last successfully written config."
+          ],
+          "files": [
+            { "path": "apps/desktop/src/store/actions.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/65/files#diff-a2a74a810ff712fda4ad421e0d3c8f752ce18986899be40a72abd06facb18b55R519" }
+          ],
+          "comments": [],
+          "links": []
+        }
+      ],
+      "edges": [
+        { "source": "open-row-menu", "target": "click-pin", "label": "user selects Pin" },
+        { "source": "click-pin", "target": "optimistic-update", "label": "toggles store" },
+        { "source": "optimistic-update", "target": "pinned-section", "label": "re-renders tree" },
+        { "source": "optimistic-update", "target": "error-revert", "label": "on write failure" }
+      ],
+      "tour": [
+        {
+          "nodeId": "open-row-menu",
+          "title": "The entry surface",
+          "body": "Pinning begins from the per-file actions menu on a sidebar row, which now includes a Pin/Unpin item alongside reveal, rename, and delete."
+        },
+        {
+          "nodeId": "click-pin",
+          "title": "The user action",
+          "body": "Choosing Pin/Unpin routes through onTogglePinnedFile to togglePinnedNote. The icon state (line vs. filled) tells the user the current pin status."
+        },
+        {
+          "nodeId": "optimistic-update",
+          "title": "Immediate state change",
+          "body": "The store updates first so the UI feels instant, then the change is written to config.json as relative paths. Watch for the optimistic-then-persist ordering."
+        },
+        {
+          "nodeId": "pinned-section",
+          "title": "Visible feedback",
+          "body": "The note moves into the top 'Pinned' section with a filled glyph and is removed from its folder, giving clear confirmation the pin took effect."
+        },
+        {
+          "nodeId": "error-revert",
+          "title": "Failure handling",
+          "body": "If the config write fails, a toast appears and pins reload from disk, reverting the optimistic update. This is the path to inspect for resilience."
+        }
+      ]
+    }
+  ]
+}
