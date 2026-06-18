@@ -1,0 +1,413 @@
+<!doctype html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Keep command menus within editor viewport</title>
+          <style>:root {
+  --warp-bg: #121212;
+  --warp-panel: #1e1e1d;
+  --warp-panel-2: #292929;
+  --warp-border: #404040;
+  --warp-text: #faf9f6;
+  --warp-muted: #b4b4b2;
+  --warp-dim: #868584;
+  --warp-accent: #a43787;
+  --warp-green: #34895c;
+  --warp-blue: #2e5d9e;
+  --warp-purple: #754dac;
+  --warp-yellow: #c0872a;
+  --warp-font-sans: 'Matter', 'DM Sans', system-ui, sans-serif;
+  --warp-font-mono: 'Matter Mono', 'Roboto Mono', ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: var(--warp-bg); color: var(--warp-text); font-family: var(--warp-font-sans); }
+a { color: var(--warp-text); text-decoration-color: var(--warp-accent); text-underline-offset: 3px; }
+button, input { font: inherit; }
+.d3-walkthrough-shell { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+.d3-walkthrough-header { display: grid; gap: 10px; padding: 28px 32px 20px; border-bottom: 1px solid var(--warp-border); background: linear-gradient(180deg, #1e1e1d, #121212); }
+.d3-kicker { color: var(--warp-accent); font-family: var(--warp-font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+.d3-walkthrough-header h1 { margin: 0; max-width: 1080px; font-size: clamp(34px, 5vw, 72px); line-height: 0.95; letter-spacing: -0.04em; }
+.d3-meta-row { display: flex; flex-wrap: wrap; gap: 8px; color: var(--warp-muted); font-family: var(--warp-font-mono); font-size: 12px; }
+.d3-summary { max-width: 920px; margin: 0; color: var(--warp-muted); font-size: 17px; line-height: 1.45; }
+.d3-canvas-layout { min-height: 0; display: grid; grid-template-columns: 310px minmax(560px, 1fr) 390px; gap: 0; }
+.d3-control-panel, .d3-detail-panel { min-height: 0; overflow: auto; background: var(--warp-panel); border-right: 1px solid var(--warp-border); padding: 18px; }
+.d3-detail-panel { border-right: 0; border-left: 1px solid var(--warp-border); }
+.d3-panel-title { margin: 0 0 12px; font-size: 12px; color: var(--warp-muted); font-family: var(--warp-font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.d3-control-stack { display: grid; gap: 10px; margin-bottom: 18px; }
+.d3-control-button, .d3-graph-toggle { border: 1px solid var(--warp-border); background: var(--warp-panel-2); color: var(--warp-text); border-radius: 10px; padding: 10px 12px; cursor: pointer; text-align: left; }
+.d3-control-button:hover, .d3-graph-toggle:hover, .d3-control-button:focus, .d3-graph-toggle:focus { border-color: var(--warp-accent); outline: none; }
+.d3-graph-toggle[aria-pressed="true"] { border-color: var(--graph-color, var(--warp-accent)); box-shadow: inset 3px 0 0 var(--graph-color, var(--warp-accent)); }
+.d3-tour-card { border: 1px solid var(--warp-border); background: #121212; border-radius: 12px; padding: 12px; margin-bottom: 14px; }
+.d3-tour-step-label { color: var(--warp-accent); font-family: var(--warp-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+.d3-tour-title { margin: 6px 0; font-size: 18px; line-height: 1.15; }
+.d3-tour-body { color: var(--warp-muted); line-height: 1.4; margin: 0; }
+.d3-search { width: 100%; border: 1px solid var(--warp-border); background: #121212; color: var(--warp-text); border-radius: 10px; padding: 10px 12px; }
+.d3-search:focus { border-color: var(--warp-accent); outline: none; }
+.d3-help { color: var(--warp-dim); font-family: var(--warp-font-mono); font-size: 11px; line-height: 1.5; }
+.d3-canvas-stage { min-height: 0; position: relative; overflow: hidden; background: radial-gradient(circle at 20% 20%, #a4378722, transparent 28%), radial-gradient(circle at 80% 70%, #2e5d9e22, transparent 26%), #121212; }
+#pr-walkthrough-canvas { width: 100%; height: 100%; min-height: 700px; display: block; }
+.d3-canvas-error { position: absolute; inset: 18px; display: none; place-items: center; border: 1px solid var(--warp-border); background: #1e1e1df2; color: var(--warp-text); padding: 24px; z-index: 2; }
+body.d3-canvas-error .d3-canvas-error { display: grid; }
+.d3-graph-title { fill: #faf9f6; opacity: 0.36; font-family: var(--warp-font-mono); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+.d3-edge path { fill: none; stroke: var(--edge-color, #868584); stroke-width: 2; stroke-opacity: 0.68; }
+.d3-edge-arrow path { fill: var(--edge-color, #868584); }
+.d3-edge text { fill: #cccbc8; font-family: var(--warp-font-mono); font-size: 11px; paint-order: stroke; stroke: #121212; stroke-width: 4px; stroke-linejoin: round; }
+.d3-node { cursor: pointer; }
+.d3-node rect { fill: #1e1e1d; stroke: var(--node-color, var(--warp-accent)); stroke-width: 2; filter: drop-shadow(0 10px 24px #00000066); }
+.d3-node.is-selected rect { stroke: var(--warp-accent); stroke-width: 4; }
+.d3-node.is-tour-node rect { stroke: var(--warp-accent); stroke-width: 4; filter: drop-shadow(0 0 18px #a4378788); }
+.d3-node.is-dimmed, .d3-edge.is-dimmed { opacity: 0.18; }
+.d3-node-title { fill: #faf9f6; font-family: var(--warp-font-sans); font-size: 15px; font-weight: 700; pointer-events: none; }
+.d3-node-kind { fill: #b4b4b2; font-family: var(--warp-font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; pointer-events: none; }
+.d3-node-summary { fill: #cccbc8; font-family: var(--warp-font-sans); font-size: 12px; pointer-events: none; }
+.d3-detail-title { margin: 0 0 6px; font-size: 24px; line-height: 1.1; }
+.d3-detail-kind { color: var(--warp-accent); font-family: var(--warp-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+.d3-detail-summary { color: var(--warp-muted); line-height: 1.45; }
+.d3-detail-section { margin-top: 18px; }
+.d3-detail-section h3 { margin: 0 0 8px; color: var(--warp-muted); font-family: var(--warp-font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+.d3-detail-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.d3-detail-list li { border: 1px solid var(--warp-border); background: #121212; border-radius: 10px; padding: 10px; color: var(--warp-muted); line-height: 1.35; }
+.d3-file-link { display: block; overflow-wrap: anywhere; color: var(--warp-text); font-family: var(--warp-font-mono); font-size: 12px; }
+.d3-comment-author { display: block; color: var(--warp-accent); font-family: var(--warp-font-mono); font-size: 11px; margin-bottom: 4px; }
+.d3-empty { color: var(--warp-dim); }
+@media (max-width: 1180px) { .d3-canvas-layout { grid-template-columns: 1fr; grid-template-rows: auto minmax(680px, 1fr) auto; } .d3-control-panel, .d3-detail-panel { border: 0; border-bottom: 1px solid var(--warp-border); max-height: 360px; } }</style>
+        </head>
+        <body>
+          <main class="d3-walkthrough-shell">
+            <header class="d3-walkthrough-header">
+              <div class="d3-kicker">Warp PR walkthrough</div>
+              <h1>Keep command menus within editor viewport</h1>
+              <div class="d3-meta-row"><span>main ← codex/issue-68-slash-menu-viewport</span><a href="https://github.com/bholmesdev/hubble.md/pull/74" target="_blank" rel="noreferrer">Open PR</a></div>
+              <p class="d3-summary">Reviewer orientation for PR #74. The slash (/) and format (Cmd+/) command menus now anchor with @floating-ui/dom collision handling via a new shared commandMenuPosition hook, matching the existing LinkPopover. Menus flip/shift to stay inside the editor viewport and stay hidden until measured. No PR-changed specs; no human or agent review comments existed at generation time.</p>
+            </header>
+            <section class="d3-canvas-layout">
+              <aside class="d3-control-panel" aria-label="Canvas controls">
+          <p class="d3-panel-title">View</p>
+          <div class="d3-control-stack"><button class="d3-graph-toggle" type="button" data-graph-id="system-overview" aria-pressed="false" style="--graph-color: #c0872a">System overview</button>
+<button class="d3-graph-toggle" type="button" data-graph-id="data-flow" aria-pressed="false" style="--graph-color: #34895c">Data flow graph</button>
+<button class="d3-graph-toggle" type="button" data-graph-id="code-dependency" aria-pressed="false" style="--graph-color: #2e5d9e">Code dependency graph</button>
+<button class="d3-graph-toggle" type="button" data-graph-id="user-action" aria-pressed="false" style="--graph-color: #754dac">User action graph</button></div>
+          <p class="d3-panel-title">Tour</p>
+          <div class="d3-tour-card" aria-live="polite">
+            <div class="d3-tour-step-label">Step 0 / 0</div>
+            <h2 class="d3-tour-title">View tour</h2>
+            <p class="d3-tour-body">Use Next tour step to start.</p>
+          </div>
+          <div class="d3-control-stack">
+            <button class="d3-control-button" type="button" data-d3-action="tour-prev">Previous tour step</button>
+            <button class="d3-control-button" type="button" data-d3-action="tour-next">Next tour step</button>
+            <button class="d3-control-button" type="button" data-d3-action="tour-restart">Restart tour</button>
+          </div>
+          <p class="d3-panel-title">Canvas</p>
+          <div class="d3-control-stack">
+            <button class="d3-control-button" type="button" data-d3-action="fit">Fit to view</button>
+            <button class="d3-control-button" type="button" data-d3-action="reset">Reset zoom</button>
+          </div>
+          <label class="d3-panel-title" for="d3-node-search">Search active graph</label>
+          <input id="d3-node-search" class="d3-search" type="search" placeholder="Search nodes, files, comments" />
+          <p class="d3-help">Keyboard: n/→ next, p/← previous, 1 overview, 2 data, 3 code, 4 user, + zoom in, - zoom out, 0 reset, f fit, / search, Esc clear.</p>
+        </aside>
+              <section class="d3-canvas-stage">
+                <svg id="pr-walkthrough-canvas" role="img" aria-label="Interactive PR walkthrough graph"></svg>
+                <div class="d3-canvas-error" role="alert"></div>
+              </section>
+              <aside id="pr-walkthrough-details" class="d3-detail-panel" aria-label="Selected point details"></aside>
+            </section>
+            <script>window.PR_WALKTHROUGH_D3_DATA = {"meta": {"title": "Keep command menus within editor viewport", "prUrl": "https://github.com/bholmesdev/hubble.md/pull/74", "baseRef": "main", "headRef": "codex/issue-68-slash-menu-viewport", "summary": "Reviewer orientation for PR #74. The slash (/) and format (Cmd+/) command menus now anchor with @floating-ui/dom collision handling via a new shared commandMenuPosition hook, matching the existing LinkPopover. Menus flip/shift to stay inside the editor viewport and stay hidden until measured. No PR-changed specs; no human or agent review comments existed at generation time."}, "graphs": [{"id": "system-overview", "label": "System overview", "color": "#c0872a", "summary": "Standalone overview of the editor overlay subsystem: how floating UI is mounted, anchored, and rendered around the document. PR-agnostic.", "nodes": [{"id": "host", "title": "Editor host & viewport", "kind": "component", "x": -380, "y": -150, "width": 360, "height": 190, "summaryLines": 6, "summary": "The editor host renders the Tiptap document inside a single scrollable, position:relative viewport container. Every editor overlay (cursor, popovers, command menus) is mounted as an absolutely-positioned sibling inside that container, so all overlay coordinates are expressed relative to the viewport rather than the page.", "details": ["The viewport is the overflow:auto scroll container; overlays use position:absolute within it.", "Overlays receive a shared viewportRef so they can measure and clamp against the same box.", "Because overlays live inside the scroll container, scrolling and resizing must trigger re-measurement."]}, {"id": "model", "title": "Document model & coordinates", "kind": "component", "x": 20, "y": -150, "width": 360, "height": 190, "summaryLines": 6, "summary": "The rich-text engine owns the document and its on-screen geometry. Given a document position it can return the pixel rectangle of that position via coordsAtPos, and it emits transaction, selection, focus, and blur events. Overlays subscribe to those events to know when their anchor may have moved.", "details": ["coordsAtPos(pos) maps a document offset to viewport-space pixel coordinates.", "Transaction and selectionUpdate events drive when overlays recompute their anchor.", "The model is the single source of truth for where an overlay should point."]}, {"id": "overlays", "title": "Floating overlay layer", "kind": "component", "x": -380, "y": 110, "width": 360, "height": 190, "summaryLines": 6, "summary": "A set of absolutely-positioned panels anchored to a document position rather than the page: the link popover, the virtual cursor, and the command menus. Each one converts a document position into a clamped {x,y} that keeps the panel inside the viewport, and hides itself until that measurement resolves to avoid flashing at stale coordinates.", "details": ["Panels share the same anchoring contract: pick a document position, measure it, clamp it, render.", "Collision handling (flip/shift) keeps a panel from overflowing the viewport edges.", "Hiding until measured prevents a one-frame flash at the previous or origin coordinates."]}, {"id": "palette", "title": "Command palette UI", "kind": "component", "x": 20, "y": 110, "width": 360, "height": 190, "summaryLines": 6, "summary": "The command list itself is a keyboard-navigable palette (cmdk) that renders, filters, and selects command items. It is concerned only with which command is highlighted and what running it does; it relies entirely on the overlay layer for where the panel appears on screen.", "details": ["Arrow keys move the selection; Enter/Tab or click applies the highlighted command.", "Filtering and selection state are independent from positioning concerns.", "Both the slash menu and the format menu reuse this same palette shell."]}], "edges": [], "tour": [{"nodeId": "host", "title": "Start at the viewport host", "body": "Orient yourself first: the editor renders inside one scrollable, relatively-positioned viewport, and all overlays are absolutely positioned inside it. Overlay coordinates are viewport-relative."}, {"nodeId": "model", "title": "The model owns geometry", "body": "The document engine turns a document position into pixel coordinates with coordsAtPos and emits change events. This is how an overlay learns where to point and when to recompute."}, {"nodeId": "overlays", "title": "Overlays anchor to positions", "body": "The floating overlay layer (popover, cursor, command menus) anchors panels to a document position, clamps them inside the viewport, and hides them until measured. This is the shared contract the PR touches."}, {"nodeId": "palette", "title": "The palette is just the list", "body": "The command palette handles highlighting and running commands but delegates placement to the overlay layer. Keeping the two concerns separate is what makes a shared positioning helper natural."}]}, {"id": "data-flow", "label": "Data flow graph", "color": "#34895c", "summary": "How an anchor position becomes a clamped, on-screen menu position, and how scroll/resize re-measure it.", "nodes": [{"id": "doc-pos", "title": "Anchor document position", "kind": "input", "x": -420, "y": -40, "summary": "getPos() returns the document offset to anchor to: the slash token's from, or the current selection's from for the format menu.", "details": ["SlashCommandMenu passes getMenuPos = () => token?.from ?? 0.", "FormatCommandMenu passes getMenuPos = () => editor.state.selection.from ?? 0.", "useCommandMenuPosition receives this getPos plus the editor, viewportRef, and floating menu ref."], "files": [{"path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb"}, {"path": "packages/ui/src/editor/FormatCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-736e7df77bf1b5363a4d8fedb3034fb6a4b981b7d0244676777243a06efacc24"}], "links": [{"label": "PR #74", "url": "https://github.com/bholmesdev/hubble.md/pull/74"}]}, {"id": "coords", "title": "Measured caret rect", "kind": "measure", "x": -110, "y": -130, "summary": "A floating-ui VirtualElement lazily measures the caret rectangle via editor.view.coordsAtPos(pos) each time placement is computed.", "details": ["The virtual reference's getBoundingClientRect() calls coordsAtPos(pos) on demand.", "contextElement is the viewport so floating-ui resolves coordinates against the scroll container.", "Measuring lazily means each recompute uses fresh geometry after edits or scrolls."], "files": [{"path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0"}]}, {"id": "placement", "title": "Collision-aware placement", "kind": "compute", "x": 210, "y": -40, "summary": "computePosition runs offset(6) + flip + shift bounded to the viewport, producing a clamped {x,y} that keeps the menu on screen near the right or bottom edge.", "details": ["placement is bottom-start with fallbacks top-start, bottom-end, top-end.", "flip and shift use the viewport as boundary with 8px padding.", "This is the behavior issue #68 asked for: no horizontal page scroll or off-screen overflow."], "files": [{"path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0"}]}, {"id": "render", "title": "Rendered menu position", "kind": "output", "x": 210, "y": 150, "summary": "setPosition stores {x,y}; the menu div applies insetInlineStart/insetBlockStart and stays visibility:hidden until a position resolves, so it never flashes at stale coordinates.", "details": ["Both menus drop the old synchronous positionForSelection/positionForToken helpers.", "Render gates on position !== null via visibility instead of unmounting.", "Initial position is null on open, then filled once floating-ui resolves."], "files": [{"path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb"}, {"path": "packages/ui/src/editor/FormatCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-736e7df77bf1b5363a4d8fedb3034fb6a4b981b7d0244676777243a06efacc24"}]}], "edges": [{"source": "doc-pos", "target": "coords", "label": "measured via coordsAtPos"}, {"source": "coords", "target": "placement", "label": "feeds reference rect"}, {"source": "placement", "target": "render", "label": "resolves to x/y"}, {"source": "render", "target": "coords", "label": "scroll/resize re-measures"}], "tour": [{"nodeId": "doc-pos", "title": "Start at the anchor", "body": "Data flow begins with a document position from getPos(): the slash token start, or the selection start for the format menu. Everything downstream derives from this single offset."}, {"nodeId": "coords", "title": "Measure the caret", "body": "A floating-ui virtual element measures that position with coordsAtPos on demand, against the viewport. Lazy measurement is what keeps placement correct after edits and scroll."}, {"nodeId": "placement", "title": "Clamp to the viewport", "body": "computePosition applies offset, flip, and shift bounded to the viewport. This is the core fix: menus near the right or bottom edge stay on screen instead of forcing page scroll."}, {"nodeId": "render", "title": "Render without flashing", "body": "The resolved {x,y} is stored and applied as inset; the menu stays hidden until measured. The recompute loop (render back to measure) re-runs on viewport scroll and window resize."}]}, {"id": "code-dependency", "label": "Code dependency graph", "color": "#2e5d9e", "summary": "Which changed components depend on the new shared hook, and where the leaf dependency on floating-ui sits.", "nodes": [{"id": "slash", "title": "SlashCommandMenu.tsx", "kind": "entry point", "x": -380, "y": -120, "summary": "The / command menu. Now imports and calls useCommandMenuPosition instead of its own positionForToken, and renders a ref'd div gated by visibility.", "details": ["Adds menuRef and getMenuPos = () => token?.from ?? 0.", "Removes the local positionForToken helper.", "Drop check on position in the render guard; uses visibility instead."], "files": [{"path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb"}]}, {"id": "format", "title": "FormatCommandMenu.tsx", "kind": "entry point", "x": -380, "y": 120, "summary": "The Cmd+/ format menu. Mirrors the slash menu refactor: calls useCommandMenuPosition, anchors to the selection start, removes its own positionForSelection helper.", "details": ["Adds menuRef and getMenuPos = () => editor.state.selection.from ?? 0.", "Removes the local positionForSelection helper.", "Open state no longer also requires a resolved position to render."], "files": [{"path": "packages/ui/src/editor/FormatCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-736e7df77bf1b5363a4d8fedb3034fb6a4b981b7d0244676777243a06efacc24"}]}, {"id": "hook", "title": "commandMenuPosition.ts", "kind": "shared module", "x": -20, "y": 0, "summary": "New shared module (the major seam of the PR). Exports useCommandMenuPosition, a hook that wires scroll/resize listeners, and updateCommandMenuPosition, which builds the virtual element and runs floating-ui.", "details": ["Centralizes the anchoring logic both menus previously duplicated.", "useCommandMenuPosition recomputes on mount, viewport scroll, and window resize.", "No PR-changed specs accompany this module; no review comments existed at generation time."], "files": [{"path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0"}]}, {"id": "floating-ui", "title": "@floating-ui/dom", "kind": "leaf dependency", "x": 320, "y": 0, "summary": "The leaf positioning library. Provides computePosition plus the offset, flip, and shift middleware and the VirtualElement type the hook relies on.", "details": ["Already a dependency used by LinkPopover; this PR reuses the same pattern for menus.", "Pinned at ^1.7.5 in packages/ui/package.json.", "Entry points depend on the hook, which depends on this library; the library depends on nothing in this PR."]}], "edges": [{"source": "slash", "target": "hook", "label": "calls useCommandMenuPosition"}, {"source": "format", "target": "hook", "label": "calls useCommandMenuPosition"}, {"source": "hook", "target": "floating-ui", "label": "depends on"}], "tour": [{"nodeId": "slash", "title": "Entry point: slash menu", "body": "Start with one consumer. SlashCommandMenu used to compute its own position; now it delegates to the shared hook and just provides an anchor and a ref."}, {"nodeId": "format", "title": "Entry point: format menu", "body": "The format menu is the second consumer and changes the same way. Two call sites converging on one helper is the reason the shared module exists."}, {"nodeId": "hook", "title": "The shared seam", "body": "commandMenuPosition.ts is the new file and the heart of the PR. Review this once and you understand the positioning behavior for both menus. It is also where to confirm scroll/resize listeners are cleaned up."}, {"nodeId": "floating-ui", "title": "Leaf dependency", "body": "The hook depends on @floating-ui/dom, the same library LinkPopover already uses. Nothing depends on the menus here, so this is the bottom of the dependency chain."}]}, {"id": "user-action", "label": "User action graph", "color": "#754dac", "summary": "What the user does to open a menu and how the change keeps it usable near a viewport edge.", "nodes": [{"id": "trigger", "title": "User opens a menu", "kind": "user action", "x": -420, "y": -30, "summary": "The user types / at the start of a block (slash menu) or presses Cmd+/ with the editor focused (format menu).", "details": ["Slash menu opens when findSlashToken detects a / token.", "Format menu toggles on the CmdOrCtrl+/ shortcut.", "Both open with position null, so nothing is shown at a stale spot yet."], "files": [{"path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb"}, {"path": "packages/ui/src/editor/FormatCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-736e7df77bf1b5363a4d8fedb3034fb6a4b981b7d0244676777243a06efacc24"}]}, {"id": "anchor", "title": "Menu anchors at the caret", "kind": "surface", "x": -120, "y": -130, "summary": "The shared hook measures the caret and places the menu just below it (bottom-start, 6px offset). The menu stays hidden until the measurement resolves, so the user never sees a flash.", "details": ["visibility:hidden until position resolves avoids a flash at (0,0) or the prior location.", "Anchoring now matches the hyperlink popover behavior called out in issue #68."], "files": [{"path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0"}]}, {"id": "edge-case", "title": "Near a viewport edge", "kind": "behavior", "x": 200, "y": -30, "summary": "When the caret is near the right or bottom edge, flip/shift reposition the menu so it stays fully inside the editor viewport instead of overflowing and forcing horizontal page scroll.", "details": ["This is the exact regression issue #68 reported near the right edge.", "shift slides the menu in; flip moves it above the caret when there is no room below.", "Inspect here if you want to confirm the acceptance criteria from #68."], "files": [{"path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0"}], "links": [{"label": "Closes issue #68", "url": "https://github.com/bholmesdev/hubble.md/issues/68"}]}, {"id": "select", "title": "User picks a command", "kind": "result", "x": 200, "y": 150, "summary": "With the menu reliably on screen, the user navigates with arrows and confirms with Enter/Tab or a click; the command applies and the menu closes.", "details": ["Selection and command execution are unchanged by this PR.", "The fix only ensures the menu is visible and in-bounds while the user chooses."], "files": [{"path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb"}]}], "edges": [{"source": "trigger", "target": "anchor", "label": "opens at caret"}, {"source": "anchor", "target": "edge-case", "label": "when near an edge"}, {"source": "edge-case", "target": "select", "label": "stays visible, user selects"}], "tour": [{"nodeId": "trigger", "title": "The user opens a menu", "body": "Begin at the surface: the user types / or presses Cmd+/. Both menus open in an unpositioned state, which sets up the no-flash behavior."}, {"nodeId": "anchor", "title": "It anchors at the caret", "body": "The shared hook measures the caret and shows the menu just below it, hidden until measured. This is the moment positioning quality is most visible to the user."}, {"nodeId": "edge-case", "title": "The edge case this PR fixes", "body": "Near the right or bottom edge, flip/shift keep the menu inside the viewport instead of pushing the page sideways. This is the user-facing point of the change and the acceptance criteria from issue #68."}, {"nodeId": "select", "title": "The user completes the action", "body": "Selection behavior is unchanged; the win is that the menu is reliably visible while the user chooses a command, then it closes as before."}]}]};</script>
+            <script id="pr-walkthrough-data" type="application/json">{"meta": {"title": "Keep command menus within editor viewport", "prUrl": "https://github.com/bholmesdev/hubble.md/pull/74", "baseRef": "main", "headRef": "codex/issue-68-slash-menu-viewport", "summary": "Reviewer orientation for PR #74. The slash (/) and format (Cmd+/) command menus now anchor with @floating-ui/dom collision handling via a new shared commandMenuPosition hook, matching the existing LinkPopover. Menus flip/shift to stay inside the editor viewport and stay hidden until measured. No PR-changed specs; no human or agent review comments existed at generation time."}, "graphs": [{"id": "system-overview", "label": "System overview", "color": "#c0872a", "summary": "Standalone overview of the editor overlay subsystem: how floating UI is mounted, anchored, and rendered around the document. PR-agnostic.", "nodes": [{"id": "host", "title": "Editor host & viewport", "kind": "component", "x": -380, "y": -150, "width": 360, "height": 190, "summaryLines": 6, "summary": "The editor host renders the Tiptap document inside a single scrollable, position:relative viewport container. Every editor overlay (cursor, popovers, command menus) is mounted as an absolutely-positioned sibling inside that container, so all overlay coordinates are expressed relative to the viewport rather than the page.", "details": ["The viewport is the overflow:auto scroll container; overlays use position:absolute within it.", "Overlays receive a shared viewportRef so they can measure and clamp against the same box.", "Because overlays live inside the scroll container, scrolling and resizing must trigger re-measurement."]}, {"id": "model", "title": "Document model & coordinates", "kind": "component", "x": 20, "y": -150, "width": 360, "height": 190, "summaryLines": 6, "summary": "The rich-text engine owns the document and its on-screen geometry. Given a document position it can return the pixel rectangle of that position via coordsAtPos, and it emits transaction, selection, focus, and blur events. Overlays subscribe to those events to know when their anchor may have moved.", "details": ["coordsAtPos(pos) maps a document offset to viewport-space pixel coordinates.", "Transaction and selectionUpdate events drive when overlays recompute their anchor.", "The model is the single source of truth for where an overlay should point."]}, {"id": "overlays", "title": "Floating overlay layer", "kind": "component", "x": -380, "y": 110, "width": 360, "height": 190, "summaryLines": 6, "summary": "A set of absolutely-positioned panels anchored to a document position rather than the page: the link popover, the virtual cursor, and the command menus. Each one converts a document position into a clamped {x,y} that keeps the panel inside the viewport, and hides itself until that measurement resolves to avoid flashing at stale coordinates.", "details": ["Panels share the same anchoring contract: pick a document position, measure it, clamp it, render.", "Collision handling (flip/shift) keeps a panel from overflowing the viewport edges.", "Hiding until measured prevents a one-frame flash at the previous or origin coordinates."]}, {"id": "palette", "title": "Command palette UI", "kind": "component", "x": 20, "y": 110, "width": 360, "height": 190, "summaryLines": 6, "summary": "The command list itself is a keyboard-navigable palette (cmdk) that renders, filters, and selects command items. It is concerned only with which command is highlighted and what running it does; it relies entirely on the overlay layer for where the panel appears on screen.", "details": ["Arrow keys move the selection; Enter/Tab or click applies the highlighted command.", "Filtering and selection state are independent from positioning concerns.", "Both the slash menu and the format menu reuse this same palette shell."]}], "edges": [], "tour": [{"nodeId": "host", "title": "Start at the viewport host", "body": "Orient yourself first: the editor renders inside one scrollable, relatively-positioned viewport, and all overlays are absolutely positioned inside it. Overlay coordinates are viewport-relative."}, {"nodeId": "model", "title": "The model owns geometry", "body": "The document engine turns a document position into pixel coordinates with coordsAtPos and emits change events. This is how an overlay learns where to point and when to recompute."}, {"nodeId": "overlays", "title": "Overlays anchor to positions", "body": "The floating overlay layer (popover, cursor, command menus) anchors panels to a document position, clamps them inside the viewport, and hides them until measured. This is the shared contract the PR touches."}, {"nodeId": "palette", "title": "The palette is just the list", "body": "The command palette handles highlighting and running commands but delegates placement to the overlay layer. Keeping the two concerns separate is what makes a shared positioning helper natural."}]}, {"id": "data-flow", "label": "Data flow graph", "color": "#34895c", "summary": "How an anchor position becomes a clamped, on-screen menu position, and how scroll/resize re-measure it.", "nodes": [{"id": "doc-pos", "title": "Anchor document position", "kind": "input", "x": -420, "y": -40, "summary": "getPos() returns the document offset to anchor to: the slash token's from, or the current selection's from for the format menu.", "details": ["SlashCommandMenu passes getMenuPos = () => token?.from ?? 0.", "FormatCommandMenu passes getMenuPos = () => editor.state.selection.from ?? 0.", "useCommandMenuPosition receives this getPos plus the editor, viewportRef, and floating menu ref."], "files": [{"path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb"}, {"path": "packages/ui/src/editor/FormatCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-736e7df77bf1b5363a4d8fedb3034fb6a4b981b7d0244676777243a06efacc24"}], "links": [{"label": "PR #74", "url": "https://github.com/bholmesdev/hubble.md/pull/74"}]}, {"id": "coords", "title": "Measured caret rect", "kind": "measure", "x": -110, "y": -130, "summary": "A floating-ui VirtualElement lazily measures the caret rectangle via editor.view.coordsAtPos(pos) each time placement is computed.", "details": ["The virtual reference's getBoundingClientRect() calls coordsAtPos(pos) on demand.", "contextElement is the viewport so floating-ui resolves coordinates against the scroll container.", "Measuring lazily means each recompute uses fresh geometry after edits or scrolls."], "files": [{"path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0"}]}, {"id": "placement", "title": "Collision-aware placement", "kind": "compute", "x": 210, "y": -40, "summary": "computePosition runs offset(6) + flip + shift bounded to the viewport, producing a clamped {x,y} that keeps the menu on screen near the right or bottom edge.", "details": ["placement is bottom-start with fallbacks top-start, bottom-end, top-end.", "flip and shift use the viewport as boundary with 8px padding.", "This is the behavior issue #68 asked for: no horizontal page scroll or off-screen overflow."], "files": [{"path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0"}]}, {"id": "render", "title": "Rendered menu position", "kind": "output", "x": 210, "y": 150, "summary": "setPosition stores {x,y}; the menu div applies insetInlineStart/insetBlockStart and stays visibility:hidden until a position resolves, so it never flashes at stale coordinates.", "details": ["Both menus drop the old synchronous positionForSelection/positionForToken helpers.", "Render gates on position !== null via visibility instead of unmounting.", "Initial position is null on open, then filled once floating-ui resolves."], "files": [{"path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb"}, {"path": "packages/ui/src/editor/FormatCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-736e7df77bf1b5363a4d8fedb3034fb6a4b981b7d0244676777243a06efacc24"}]}], "edges": [{"source": "doc-pos", "target": "coords", "label": "measured via coordsAtPos"}, {"source": "coords", "target": "placement", "label": "feeds reference rect"}, {"source": "placement", "target": "render", "label": "resolves to x/y"}, {"source": "render", "target": "coords", "label": "scroll/resize re-measures"}], "tour": [{"nodeId": "doc-pos", "title": "Start at the anchor", "body": "Data flow begins with a document position from getPos(): the slash token start, or the selection start for the format menu. Everything downstream derives from this single offset."}, {"nodeId": "coords", "title": "Measure the caret", "body": "A floating-ui virtual element measures that position with coordsAtPos on demand, against the viewport. Lazy measurement is what keeps placement correct after edits and scroll."}, {"nodeId": "placement", "title": "Clamp to the viewport", "body": "computePosition applies offset, flip, and shift bounded to the viewport. This is the core fix: menus near the right or bottom edge stay on screen instead of forcing page scroll."}, {"nodeId": "render", "title": "Render without flashing", "body": "The resolved {x,y} is stored and applied as inset; the menu stays hidden until measured. The recompute loop (render back to measure) re-runs on viewport scroll and window resize."}]}, {"id": "code-dependency", "label": "Code dependency graph", "color": "#2e5d9e", "summary": "Which changed components depend on the new shared hook, and where the leaf dependency on floating-ui sits.", "nodes": [{"id": "slash", "title": "SlashCommandMenu.tsx", "kind": "entry point", "x": -380, "y": -120, "summary": "The / command menu. Now imports and calls useCommandMenuPosition instead of its own positionForToken, and renders a ref'd div gated by visibility.", "details": ["Adds menuRef and getMenuPos = () => token?.from ?? 0.", "Removes the local positionForToken helper.", "Drop check on position in the render guard; uses visibility instead."], "files": [{"path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb"}]}, {"id": "format", "title": "FormatCommandMenu.tsx", "kind": "entry point", "x": -380, "y": 120, "summary": "The Cmd+/ format menu. Mirrors the slash menu refactor: calls useCommandMenuPosition, anchors to the selection start, removes its own positionForSelection helper.", "details": ["Adds menuRef and getMenuPos = () => editor.state.selection.from ?? 0.", "Removes the local positionForSelection helper.", "Open state no longer also requires a resolved position to render."], "files": [{"path": "packages/ui/src/editor/FormatCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-736e7df77bf1b5363a4d8fedb3034fb6a4b981b7d0244676777243a06efacc24"}]}, {"id": "hook", "title": "commandMenuPosition.ts", "kind": "shared module", "x": -20, "y": 0, "summary": "New shared module (the major seam of the PR). Exports useCommandMenuPosition, a hook that wires scroll/resize listeners, and updateCommandMenuPosition, which builds the virtual element and runs floating-ui.", "details": ["Centralizes the anchoring logic both menus previously duplicated.", "useCommandMenuPosition recomputes on mount, viewport scroll, and window resize.", "No PR-changed specs accompany this module; no review comments existed at generation time."], "files": [{"path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0"}]}, {"id": "floating-ui", "title": "@floating-ui/dom", "kind": "leaf dependency", "x": 320, "y": 0, "summary": "The leaf positioning library. Provides computePosition plus the offset, flip, and shift middleware and the VirtualElement type the hook relies on.", "details": ["Already a dependency used by LinkPopover; this PR reuses the same pattern for menus.", "Pinned at ^1.7.5 in packages/ui/package.json.", "Entry points depend on the hook, which depends on this library; the library depends on nothing in this PR."]}], "edges": [{"source": "slash", "target": "hook", "label": "calls useCommandMenuPosition"}, {"source": "format", "target": "hook", "label": "calls useCommandMenuPosition"}, {"source": "hook", "target": "floating-ui", "label": "depends on"}], "tour": [{"nodeId": "slash", "title": "Entry point: slash menu", "body": "Start with one consumer. SlashCommandMenu used to compute its own position; now it delegates to the shared hook and just provides an anchor and a ref."}, {"nodeId": "format", "title": "Entry point: format menu", "body": "The format menu is the second consumer and changes the same way. Two call sites converging on one helper is the reason the shared module exists."}, {"nodeId": "hook", "title": "The shared seam", "body": "commandMenuPosition.ts is the new file and the heart of the PR. Review this once and you understand the positioning behavior for both menus. It is also where to confirm scroll/resize listeners are cleaned up."}, {"nodeId": "floating-ui", "title": "Leaf dependency", "body": "The hook depends on @floating-ui/dom, the same library LinkPopover already uses. Nothing depends on the menus here, so this is the bottom of the dependency chain."}]}, {"id": "user-action", "label": "User action graph", "color": "#754dac", "summary": "What the user does to open a menu and how the change keeps it usable near a viewport edge.", "nodes": [{"id": "trigger", "title": "User opens a menu", "kind": "user action", "x": -420, "y": -30, "summary": "The user types / at the start of a block (slash menu) or presses Cmd+/ with the editor focused (format menu).", "details": ["Slash menu opens when findSlashToken detects a / token.", "Format menu toggles on the CmdOrCtrl+/ shortcut.", "Both open with position null, so nothing is shown at a stale spot yet."], "files": [{"path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb"}, {"path": "packages/ui/src/editor/FormatCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-736e7df77bf1b5363a4d8fedb3034fb6a4b981b7d0244676777243a06efacc24"}]}, {"id": "anchor", "title": "Menu anchors at the caret", "kind": "surface", "x": -120, "y": -130, "summary": "The shared hook measures the caret and places the menu just below it (bottom-start, 6px offset). The menu stays hidden until the measurement resolves, so the user never sees a flash.", "details": ["visibility:hidden until position resolves avoids a flash at (0,0) or the prior location.", "Anchoring now matches the hyperlink popover behavior called out in issue #68."], "files": [{"path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0"}]}, {"id": "edge-case", "title": "Near a viewport edge", "kind": "behavior", "x": 200, "y": -30, "summary": "When the caret is near the right or bottom edge, flip/shift reposition the menu so it stays fully inside the editor viewport instead of overflowing and forcing horizontal page scroll.", "details": ["This is the exact regression issue #68 reported near the right edge.", "shift slides the menu in; flip moves it above the caret when there is no room below.", "Inspect here if you want to confirm the acceptance criteria from #68."], "files": [{"path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0"}], "links": [{"label": "Closes issue #68", "url": "https://github.com/bholmesdev/hubble.md/issues/68"}]}, {"id": "select", "title": "User picks a command", "kind": "result", "x": 200, "y": 150, "summary": "With the menu reliably on screen, the user navigates with arrows and confirms with Enter/Tab or a click; the command applies and the menu closes.", "details": ["Selection and command execution are unchanged by this PR.", "The fix only ensures the menu is visible and in-bounds while the user chooses."], "files": [{"path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb"}]}], "edges": [{"source": "trigger", "target": "anchor", "label": "opens at caret"}, {"source": "anchor", "target": "edge-case", "label": "when near an edge"}, {"source": "edge-case", "target": "select", "label": "stays visible, user selects"}], "tour": [{"nodeId": "trigger", "title": "The user opens a menu", "body": "Begin at the surface: the user types / or presses Cmd+/. Both menus open in an unpositioned state, which sets up the no-flash behavior."}, {"nodeId": "anchor", "title": "It anchors at the caret", "body": "The shared hook measures the caret and shows the menu just below it, hidden until measured. This is the moment positioning quality is most visible to the user."}, {"nodeId": "edge-case", "title": "The edge case this PR fixes", "body": "Near the right or bottom edge, flip/shift keep the menu inside the viewport instead of pushing the page sideways. This is the user-facing point of the change and the acceptance criteria from issue #68."}, {"nodeId": "select", "title": "The user completes the action", "body": "Selection behavior is unchanged; the win is that the menu is reliably visible while the user chooses a command, then it closes as before."}]}]}</script>
+            <script>
+(() => {
+  const D3_CDN_URL = 'https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js';
+  let attemptedLoad = false;
+  let activeGraphId = null;
+  let selectedNodeId = null;
+  let tourIndex = 0;
+  const REQUIRED_GRAPH_IDS = ['system-overview', 'data-flow', 'code-dependency', 'user-action'];
+  const DEFAULT_NODE_WIDTH = 220;
+  const DEFAULT_NODE_HEIGHT = 116;
+  const OVERVIEW_NODE_WIDTH = 360;
+  const OVERVIEW_NODE_HEIGHT = 220;
+  let zoomBehavior = null;
+  let svgSelection = null;
+  let viewportSelection = null;
+  let currentData = null;
+
+  function setError(error) {
+    console.warn('D3 canvas render unavailable.', error || 'unknown error');
+    document.body.classList.add('d3-canvas-error');
+    const errorNode = document.querySelector('.d3-canvas-error');
+    if (errorNode) errorNode.textContent = `D3 canvas failed to render: ${error?.message || error || 'unknown error'}`;
+  }
+
+  function readInlineData() {
+    if (window.PR_WALKTHROUGH_D3_DATA) return window.PR_WALKTHROUGH_D3_DATA;
+    const script = document.getElementById('pr-walkthrough-data');
+    if (!script) throw new Error('Missing pr-walkthrough-data script tag');
+    return JSON.parse(script.textContent || '{}');
+  }
+
+  function activeGraph() {
+    return (currentData.graphs || []).find((graph) => graph.id === activeGraphId) || (currentData.graphs || [])[0];
+  }
+
+  function nodeMap(graph) { return new Map((graph.nodes || []).map((node) => [node.id, node])); }
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  }
+  function listItems(items, render) {
+    if (!items || items.length === 0) return '<p class="d3-empty">None attached.</p>';
+    return `<ul class="d3-detail-list">${items.map(render).join('')}</ul>`;
+  }
+
+  function renderTour(graph) {
+    const step = (graph.tour || [])[tourIndex];
+    const label = document.querySelector('.d3-tour-step-label');
+    const title = document.querySelector('.d3-tour-title');
+    const body = document.querySelector('.d3-tour-body');
+    const card = document.querySelector('.d3-tour-card');
+    if (card) card.dataset.tourIndex = String(tourIndex);
+    if (label) label.textContent = `Step ${Math.min(tourIndex + 1, (graph.tour || []).length)} / ${(graph.tour || []).length || 0}`;
+    if (title) title.textContent = step?.title || graph.label || 'View tour';
+    if (body) body.textContent = step?.body || graph.summary || '';
+  }
+
+  function renderDetails(node, graph) {
+    const panel = document.getElementById('pr-walkthrough-details');
+    if (!panel) return;
+    const step = (graph.tour || [])[tourIndex];
+    if (!node) {
+      panel.innerHTML = '<p class="d3-panel-title">Selected point</p><p class="d3-empty">Select a node or use the tour controls.</p>';
+      return;
+    }
+    const details = Array.isArray(node.details) ? node.details : [];
+    const files = Array.isArray(node.files) ? node.files : [];
+    const comments = Array.isArray(node.comments) ? node.comments : [];
+    const links = Array.isArray(node.links) ? node.links : [];
+    panel.innerHTML = `
+      <span class="d3-detail-kind">${escapeHtml(graph.label)} · ${escapeHtml(node.kind || 'point of interest')}</span>
+      <h2 class="d3-detail-title">${escapeHtml(node.title)}</h2>
+      <p class="d3-detail-summary">${escapeHtml(node.summary || '')}</p>
+      ${step?.nodeId === node.id ? `<section class="d3-detail-section"><h3>Tour context</h3><ul class="d3-detail-list"><li>${escapeHtml(step.body || '')}</li></ul></section>` : ''}
+      <section class="d3-detail-section"><h3>Explanation</h3>${details.length ? `<ul class="d3-detail-list">${details.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '<p class="d3-empty">No additional detail provided.</p>'}</section>
+      <section class="d3-detail-section"><h3>Changed files</h3>${listItems(files, (file) => `<li><a class="d3-file-link" href="${escapeHtml(file.url || '#')}" target="_blank" rel="noreferrer">${escapeHtml(file.path || file.label || 'file')}</a>${file.note ? `<p>${escapeHtml(file.note)}</p>` : ''}</li>`)}</section>
+      <section class="d3-detail-section"><h3>Existing review discussion</h3>${listItems(comments, (comment) => `<li><span class="d3-comment-author">${escapeHtml(comment.author || 'reviewer')}</span>${escapeHtml(comment.body || '')}${comment.url ? `<br><a href="${escapeHtml(comment.url)}" target="_blank" rel="noreferrer">Open comment</a>` : ''}</li>`)}</section>
+      <section class="d3-detail-section"><h3>Links</h3>${listItems(links, (link) => `<li><a href="${escapeHtml(link.url || '#')}" target="_blank" rel="noreferrer">${escapeHtml(link.label || link.url || 'link')}</a></li>`)}</section>
+    `;
+  }
+
+  function wrapText(selection, width, maxLines = 3) {
+    selection.each(function wrapEach() {
+      const text = window.d3.select(this);
+      const datum = text.datum();
+      const resolvedWidth = typeof width === 'function' ? Number(width(datum)) : Number(width);
+      const resolvedMaxLines = typeof maxLines === 'function' ? Number(maxLines(datum)) : Number(maxLines);
+      const words = text.text().split(new RegExp('\\s+')).filter(Boolean);
+      const lineHeight = 15;
+      const y = Number(text.attr('y') || 0);
+      text.text('');
+      let line = [];
+      let lineNumber = 0;
+      let tspan = text.append('tspan').attr('x', text.attr('x')).attr('y', y);
+      for (const word of words) {
+        line.push(word);
+        tspan.text(line.join(' '));
+        if (tspan.node().getComputedTextLength() > resolvedWidth && line.length > 1) {
+          line.pop();
+          tspan.text(line.join(' '));
+          line = [word];
+          lineNumber += 1;
+          if (lineNumber >= resolvedMaxLines) { tspan.text(`${tspan.text()}…`); break; }
+          tspan = text.append('tspan').attr('x', text.attr('x')).attr('y', y + lineNumber * lineHeight).text(word);
+        }
+      }
+    });
+  }
+  function nodeWidth(node, graph) {
+    return Number(node.width || (graph?.id === 'system-overview' ? OVERVIEW_NODE_WIDTH : DEFAULT_NODE_WIDTH));
+  }
+  function nodeHeight(node, graph) {
+    return Number(node.height || (graph?.id === 'system-overview' ? OVERVIEW_NODE_HEIGHT : DEFAULT_NODE_HEIGHT));
+  }
+  function nodeBoundaryPoint(from, to, padding, graph) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    if (dx === 0 && dy === 0) return { x: from.x, y: from.y };
+    const scale = 1 / Math.max(Math.abs(dx) / (nodeWidth(from, graph) / 2 + padding), Math.abs(dy) / (nodeHeight(from, graph) / 2 + padding));
+    return { x: from.x + dx * scale, y: from.y + dy * scale };
+  }
+  function pathForEdge(edge, nodes, graph) {
+    const source = nodes.get(edge.source);
+    const target = nodes.get(edge.target);
+    if (!source || !target) return '';
+    const start = nodeBoundaryPoint(source, target, 10, graph);
+    const end = nodeBoundaryPoint(target, source, 18, graph);
+    const dx = end.x - start.x;
+    const control = Math.max(80, Math.abs(dx) * 0.42);
+    return `M ${start.x} ${start.y} C ${start.x + control} ${start.y}, ${end.x - control} ${end.y}, ${end.x} ${end.y}`;
+  }
+
+  function applyFilters(graph) {
+    const query = (document.querySelector('.d3-search')?.value || '').trim().toLowerCase();
+    const tourNodeId = (graph.tour || [])[tourIndex]?.nodeId;
+    const matches = (node) => {
+      if (!query) return true;
+      const haystack = [node.title, node.kind, node.summary, ...(node.details || []), ...(node.files || []).map((file) => file.path || file.label || ''), ...(node.comments || []).map((comment) => `${comment.author || ''} ${comment.body || ''}`)].join(' ').toLowerCase();
+      return haystack.includes(query);
+    };
+    const visible = new Set((graph.nodes || []).filter(matches).map((node) => node.id));
+    window.d3.selectAll('.d3-node')
+      .classed('is-dimmed', (node) => !visible.has(node.id))
+      .classed('is-selected', (node) => node.id === selectedNodeId)
+      .classed('is-tour-node', (node) => node.id === tourNodeId);
+    window.d3.selectAll('.d3-edge').classed('is-dimmed', (edge) => !visible.has(edge.source) || !visible.has(edge.target));
+  }
+
+  function fitToView() {
+    if (!svgSelection || !viewportSelection || !zoomBehavior) return;
+    const svg = svgSelection.node();
+    const bounds = viewportSelection.node().getBBox();
+    const fullWidth = svg.clientWidth || 1000;
+    const fullHeight = svg.clientHeight || 700;
+    const width = Math.max(bounds.width, 1);
+    const height = Math.max(bounds.height, 1);
+    const scale = Math.min(1.25, 0.86 / Math.max(width / fullWidth, height / fullHeight));
+    const translate = [fullWidth / 2 - scale * (bounds.x + width / 2), fullHeight / 2 - scale * (bounds.y + height / 2)];
+    svgSelection.transition().duration(300).call(zoomBehavior.transform, window.d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale));
+  }
+  function focusNode(node) {
+    if (!node || !svgSelection || !zoomBehavior) return;
+    const svg = svgSelection.node();
+    const scale = Math.max(0.85, window.d3.zoomTransform(svg).k || 1);
+    const translate = [(svg.clientWidth || 1000) / 2 - node.x * scale, (svg.clientHeight || 700) / 2 - node.y * scale];
+    svgSelection.transition().duration(260).call(zoomBehavior.transform, window.d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale));
+  }
+  function resetZoom() { if (svgSelection && zoomBehavior) svgSelection.transition().duration(220).call(zoomBehavior.transform, window.d3.zoomIdentity); }
+  function zoomBy(factor) { if (svgSelection && zoomBehavior) svgSelection.transition().duration(140).call(zoomBehavior.scaleBy, factor); }
+
+  function selectTourStep(index, options = {}) {
+    const graph = activeGraph();
+    const tour = graph.tour || [];
+    if (!tour.length) return;
+    tourIndex = Math.max(0, Math.min(index, tour.length - 1));
+    const nodes = nodeMap(graph);
+    const node = nodes.get(tour[tourIndex].nodeId) || (graph.nodes || [])[0];
+    selectedNodeId = node?.id || null;
+    renderTour(graph);
+    renderDetails(node, graph);
+    applyFilters(graph);
+    if (!options.noFocus) focusNode(node);
+  }
+  function nextTourStep() { selectTourStep(tourIndex + 1); }
+  function previousTourStep() { selectTourStep(tourIndex - 1); }
+  function restartTour() { selectTourStep(0); }
+
+  function renderActiveGraph(options = {}) {
+    const graph = activeGraph();
+    if (!graph) throw new Error('No active graph');
+    const svg = window.d3.select('#pr-walkthrough-canvas');
+    if (svg.empty()) throw new Error('Missing #pr-walkthrough-canvas');
+    svg.selectAll('*').remove();
+    svgSelection = svg;
+    const nodesById = nodeMap(graph);
+    const defs = svg.append('defs');
+    defs.append('marker').attr('id', `d3-arrowhead-${graph.id}`).attr('class', 'd3-edge-arrow').attr('viewBox', '0 -6 12 12').attr('refX', 11).attr('refY', 0).attr('markerWidth', 9).attr('markerHeight', 9).attr('orient', 'auto').attr('markerUnits', 'strokeWidth').style('--edge-color', graph.color || '#868584').append('path').attr('d', 'M0,-6L12,0L0,6Z');
+    const root = svg.append('g').attr('class', 'd3-zoom-root');
+    viewportSelection = root.append('g').attr('class', 'd3-viewport');
+    viewportSelection.append('text').attr('class', 'd3-graph-title').attr('x', -420).attr('y', -300).attr('fill', graph.color || '#a43787').text(graph.label || graph.id);
+    const edgeLayer = viewportSelection.append('g').attr('class', 'd3-edges');
+    const nodeLayer = viewportSelection.append('g').attr('class', 'd3-nodes');
+    const edges = edgeLayer.selectAll('.d3-edge').data(graph.edges || []).join('g').attr('class', 'd3-edge').attr('data-edge-id', (edge, index) => edge.id || `${edge.source}-${edge.target}-${index}`).style('--edge-color', graph.color || '#868584');
+    edges.append('path').attr('d', (edge) => pathForEdge(edge, nodesById, graph)).attr('marker-end', `url(#d3-arrowhead-${graph.id})`);
+    edges.append('text').append('textPath').attr('href', function href(_, index) { const path = window.d3.select(edges.nodes()[index]).select('path'); const id = `d3-edge-path-${graph.id}-${index}`; path.attr('id', id); return `#${id}`; }).attr('startOffset', '50%').attr('text-anchor', 'middle').text((edge) => edge.label || '');
+    const nodes = nodeLayer.selectAll('.d3-node').data(graph.nodes || []).join('g').attr('class', (node) => `d3-node${graph.id === 'system-overview' ? ' is-overview-card' : ''}`).attr('data-node-id', (node) => node.id).attr('tabindex', 0).attr('role', 'button').attr('aria-label', (node) => node.title).attr('transform', (node) => `translate(${node.x || 0}, ${node.y || 0})`).style('--node-color', graph.color || '#a43787').on('click keydown', (event, node) => {
+      if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+      selectedNodeId = node.id;
+      const tourPosition = (graph.tour || []).findIndex((step) => step.nodeId === node.id);
+      if (tourPosition >= 0) tourIndex = tourPosition;
+      renderTour(graph);
+      renderDetails(node, graph);
+      applyFilters(graph);
+    });
+    nodes.append('rect').attr('x', (node) => -nodeWidth(node, graph) / 2).attr('y', (node) => -nodeHeight(node, graph) / 2).attr('width', (node) => nodeWidth(node, graph)).attr('height', (node) => nodeHeight(node, graph)).attr('rx', 12);
+    nodes.append('text').attr('class', 'd3-node-kind').attr('x', (node) => -nodeWidth(node, graph) / 2 + 20).attr('y', (node) => -nodeHeight(node, graph) / 2 + 27).text((node) => node.kind || 'point');
+    nodes.append('text').attr('class', 'd3-node-title').attr('x', (node) => -nodeWidth(node, graph) / 2 + 20).attr('y', (node) => -nodeHeight(node, graph) / 2 + 53).text((node) => node.title || node.id).call(wrapText, (node) => nodeWidth(node, graph) - 40, 2);
+    nodes.append('text').attr('class', 'd3-node-summary').attr('x', (node) => -nodeWidth(node, graph) / 2 + 20).attr('y', (node) => -nodeHeight(node, graph) / 2 + 96).text((node) => node.summary || '').call(wrapText, (node) => nodeWidth(node, graph) - 40, (node) => Number(node.summaryLines || (graph.id === 'system-overview' ? 7 : 2)));
+    zoomBehavior = window.d3.zoom().scaleExtent([0.18, 3.5]).on('zoom', (event) => root.attr('transform', event.transform));
+    svg.call(zoomBehavior);
+    document.querySelectorAll('.d3-graph-toggle').forEach((button) => button.setAttribute('aria-pressed', button.dataset.graphId === graph.id ? 'true' : 'false'));
+    selectTourStep(Math.min(tourIndex, Math.max((graph.tour || []).length - 1, 0)), { noFocus: true });
+    if (!options.skipFit) window.setTimeout(fitToView, 40);
+  }
+
+  function switchGraph(graphId) {
+    activeGraphId = graphId;
+    selectedNodeId = null;
+    tourIndex = 0;
+    const search = document.querySelector('.d3-search');
+    if (search) search.value = '';
+    renderActiveGraph();
+  }
+
+  function setupControls() {
+    document.querySelector('[data-d3-action="fit"]')?.addEventListener('click', fitToView);
+    document.querySelector('[data-d3-action="reset"]')?.addEventListener('click', resetZoom);
+    document.querySelector('[data-d3-action="tour-prev"]')?.addEventListener('click', previousTourStep);
+    document.querySelector('[data-d3-action="tour-next"]')?.addEventListener('click', nextTourStep);
+    document.querySelector('[data-d3-action="tour-restart"]')?.addEventListener('click', restartTour);
+    document.querySelectorAll('.d3-graph-toggle').forEach((button) => button.addEventListener('click', () => switchGraph(button.dataset.graphId)));
+    document.querySelector('.d3-search')?.addEventListener('input', () => applyFilters(activeGraph()));
+    document.addEventListener('keydown', (event) => {
+      if (event.target?.matches?.('input, textarea')) { if (event.key === 'Escape') event.target.blur(); else return; }
+      if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'n') nextTourStep();
+      else if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'p') previousTourStep();
+      else if (event.key === '1') switchGraph('system-overview');
+      else if (event.key === '2') switchGraph('data-flow');
+      else if (event.key === '3') switchGraph('code-dependency');
+      else if (event.key === '4') switchGraph('user-action');
+      else if (event.key === '+' || event.key === '=') zoomBy(1.2);
+      else if (event.key === '-') zoomBy(0.82);
+      else if (event.key === '0') resetZoom();
+      else if (event.key.toLowerCase() === 'f') fitToView();
+      else if (event.key === '/') { event.preventDefault(); document.querySelector('.d3-search')?.focus(); }
+      else if (event.key === 'Escape') { selectedNodeId = null; const search = document.querySelector('.d3-search'); if (search) search.value = ''; renderDetails(null, activeGraph()); applyFilters(activeGraph()); }
+    });
+  }
+
+  function renderD3Canvas() {
+    if (!window.d3) { setError('D3 library was not loaded'); return; }
+    currentData = readInlineData();
+    const graphIds = new Set((currentData.graphs || []).map((graph) => graph.id));
+    const missing = REQUIRED_GRAPH_IDS.filter((id) => !graphIds.has(id));
+    if (missing.length) throw new Error(`Missing required graphs: ${missing.join(', ')}`);
+    activeGraphId = activeGraphId || (currentData.graphs || [])[0]?.id;
+    setupControls();
+    renderActiveGraph();
+    document.body.classList.add('d3-canvas-ready');
+    document.body.classList.remove('d3-canvas-error');
+  }
+
+  function loadD3Runtime() {
+    if (attemptedLoad) return;
+    attemptedLoad = true;
+    if (window.d3) { try { renderD3Canvas(); } catch (error) { setError(error); } return; }
+    const script = document.createElement('script');
+    script.src = D3_CDN_URL;
+    script.async = true;
+    script.onload = () => { try { renderD3Canvas(); } catch (error) { setError(error); } };
+    script.onerror = () => setError(`Failed to load pinned D3 CDN script: ${D3_CDN_URL}`);
+    document.head.appendChild(script);
+  }
+
+  window.prWalkthroughD3Render = renderD3Canvas;
+  window.prWalkthroughD3SwitchGraph = switchGraph;
+  window.prWalkthroughD3NextTourStep = nextTourStep;
+  window.prWalkthroughD3PreviousTourStep = previousTourStep;
+  window.prWalkthroughD3FitToView = fitToView;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadD3Runtime, { once: true });
+  else loadD3Runtime();
+})();
+</script>
+          </main>
+        </body>
+        </html>

@@ -1,0 +1,404 @@
+{
+  "meta": {
+    "title": "Keep command menus within editor viewport",
+    "prUrl": "https://github.com/bholmesdev/hubble.md/pull/74",
+    "baseRef": "main",
+    "headRef": "codex/issue-68-slash-menu-viewport",
+    "summary": "Reviewer orientation for PR #74. The slash (/) and format (Cmd+/) command menus now anchor with @floating-ui/dom collision handling via a new shared commandMenuPosition hook, matching the existing LinkPopover. Menus flip/shift to stay inside the editor viewport and stay hidden until measured. No PR-changed specs; no human or agent review comments existed at generation time."
+  },
+  "graphs": [
+    {
+      "id": "system-overview",
+      "label": "System overview",
+      "color": "#c0872a",
+      "summary": "Standalone overview of the editor overlay subsystem: how floating UI is mounted, anchored, and rendered around the document. PR-agnostic.",
+      "nodes": [
+        {
+          "id": "host",
+          "title": "Editor host & viewport",
+          "kind": "component",
+          "x": -380,
+          "y": -150,
+          "width": 360,
+          "height": 190,
+          "summaryLines": 6,
+          "summary": "The editor host renders the Tiptap document inside a single scrollable, position:relative viewport container. Every editor overlay (cursor, popovers, command menus) is mounted as an absolutely-positioned sibling inside that container, so all overlay coordinates are expressed relative to the viewport rather than the page.",
+          "details": [
+            "The viewport is the overflow:auto scroll container; overlays use position:absolute within it.",
+            "Overlays receive a shared viewportRef so they can measure and clamp against the same box.",
+            "Because overlays live inside the scroll container, scrolling and resizing must trigger re-measurement."
+          ]
+        },
+        {
+          "id": "model",
+          "title": "Document model & coordinates",
+          "kind": "component",
+          "x": 20,
+          "y": -150,
+          "width": 360,
+          "height": 190,
+          "summaryLines": 6,
+          "summary": "The rich-text engine owns the document and its on-screen geometry. Given a document position it can return the pixel rectangle of that position via coordsAtPos, and it emits transaction, selection, focus, and blur events. Overlays subscribe to those events to know when their anchor may have moved.",
+          "details": [
+            "coordsAtPos(pos) maps a document offset to viewport-space pixel coordinates.",
+            "Transaction and selectionUpdate events drive when overlays recompute their anchor.",
+            "The model is the single source of truth for where an overlay should point."
+          ]
+        },
+        {
+          "id": "overlays",
+          "title": "Floating overlay layer",
+          "kind": "component",
+          "x": -380,
+          "y": 110,
+          "width": 360,
+          "height": 190,
+          "summaryLines": 6,
+          "summary": "A set of absolutely-positioned panels anchored to a document position rather than the page: the link popover, the virtual cursor, and the command menus. Each one converts a document position into a clamped {x,y} that keeps the panel inside the viewport, and hides itself until that measurement resolves to avoid flashing at stale coordinates.",
+          "details": [
+            "Panels share the same anchoring contract: pick a document position, measure it, clamp it, render.",
+            "Collision handling (flip/shift) keeps a panel from overflowing the viewport edges.",
+            "Hiding until measured prevents a one-frame flash at the previous or origin coordinates."
+          ]
+        },
+        {
+          "id": "palette",
+          "title": "Command palette UI",
+          "kind": "component",
+          "x": 20,
+          "y": 110,
+          "width": 360,
+          "height": 190,
+          "summaryLines": 6,
+          "summary": "The command list itself is a keyboard-navigable palette (cmdk) that renders, filters, and selects command items. It is concerned only with which command is highlighted and what running it does; it relies entirely on the overlay layer for where the panel appears on screen.",
+          "details": [
+            "Arrow keys move the selection; Enter/Tab or click applies the highlighted command.",
+            "Filtering and selection state are independent from positioning concerns.",
+            "Both the slash menu and the format menu reuse this same palette shell."
+          ]
+        }
+      ],
+      "edges": [],
+      "tour": [
+        {
+          "nodeId": "host",
+          "title": "Start at the viewport host",
+          "body": "Orient yourself first: the editor renders inside one scrollable, relatively-positioned viewport, and all overlays are absolutely positioned inside it. Overlay coordinates are viewport-relative."
+        },
+        {
+          "nodeId": "model",
+          "title": "The model owns geometry",
+          "body": "The document engine turns a document position into pixel coordinates with coordsAtPos and emits change events. This is how an overlay learns where to point and when to recompute."
+        },
+        {
+          "nodeId": "overlays",
+          "title": "Overlays anchor to positions",
+          "body": "The floating overlay layer (popover, cursor, command menus) anchors panels to a document position, clamps them inside the viewport, and hides them until measured. This is the shared contract the PR touches."
+        },
+        {
+          "nodeId": "palette",
+          "title": "The palette is just the list",
+          "body": "The command palette handles highlighting and running commands but delegates placement to the overlay layer. Keeping the two concerns separate is what makes a shared positioning helper natural."
+        }
+      ]
+    },
+    {
+      "id": "data-flow",
+      "label": "Data flow graph",
+      "color": "#34895c",
+      "summary": "How an anchor position becomes a clamped, on-screen menu position, and how scroll/resize re-measure it.",
+      "nodes": [
+        {
+          "id": "doc-pos",
+          "title": "Anchor document position",
+          "kind": "input",
+          "x": -420,
+          "y": -40,
+          "summary": "getPos() returns the document offset to anchor to: the slash token's from, or the current selection's from for the format menu.",
+          "details": [
+            "SlashCommandMenu passes getMenuPos = () => token?.from ?? 0.",
+            "FormatCommandMenu passes getMenuPos = () => editor.state.selection.from ?? 0.",
+            "useCommandMenuPosition receives this getPos plus the editor, viewportRef, and floating menu ref."
+          ],
+          "files": [
+            { "path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb" },
+            { "path": "packages/ui/src/editor/FormatCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-736e7df77bf1b5363a4d8fedb3034fb6a4b981b7d0244676777243a06efacc24" }
+          ],
+          "links": [{ "label": "PR #74", "url": "https://github.com/bholmesdev/hubble.md/pull/74" }]
+        },
+        {
+          "id": "coords",
+          "title": "Measured caret rect",
+          "kind": "measure",
+          "x": -110,
+          "y": -130,
+          "summary": "A floating-ui VirtualElement lazily measures the caret rectangle via editor.view.coordsAtPos(pos) each time placement is computed.",
+          "details": [
+            "The virtual reference's getBoundingClientRect() calls coordsAtPos(pos) on demand.",
+            "contextElement is the viewport so floating-ui resolves coordinates against the scroll container.",
+            "Measuring lazily means each recompute uses fresh geometry after edits or scrolls."
+          ],
+          "files": [
+            { "path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0" }
+          ]
+        },
+        {
+          "id": "placement",
+          "title": "Collision-aware placement",
+          "kind": "compute",
+          "x": 210,
+          "y": -40,
+          "summary": "computePosition runs offset(6) + flip + shift bounded to the viewport, producing a clamped {x,y} that keeps the menu on screen near the right or bottom edge.",
+          "details": [
+            "placement is bottom-start with fallbacks top-start, bottom-end, top-end.",
+            "flip and shift use the viewport as boundary with 8px padding.",
+            "This is the behavior issue #68 asked for: no horizontal page scroll or off-screen overflow."
+          ],
+          "files": [
+            { "path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0" }
+          ]
+        },
+        {
+          "id": "render",
+          "title": "Rendered menu position",
+          "kind": "output",
+          "x": 210,
+          "y": 150,
+          "summary": "setPosition stores {x,y}; the menu div applies insetInlineStart/insetBlockStart and stays visibility:hidden until a position resolves, so it never flashes at stale coordinates.",
+          "details": [
+            "Both menus drop the old synchronous positionForSelection/positionForToken helpers.",
+            "Render gates on position !== null via visibility instead of unmounting.",
+            "Initial position is null on open, then filled once floating-ui resolves."
+          ],
+          "files": [
+            { "path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb" },
+            { "path": "packages/ui/src/editor/FormatCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-736e7df77bf1b5363a4d8fedb3034fb6a4b981b7d0244676777243a06efacc24" }
+          ]
+        }
+      ],
+      "edges": [
+        { "source": "doc-pos", "target": "coords", "label": "measured via coordsAtPos" },
+        { "source": "coords", "target": "placement", "label": "feeds reference rect" },
+        { "source": "placement", "target": "render", "label": "resolves to x/y" },
+        { "source": "render", "target": "coords", "label": "scroll/resize re-measures" }
+      ],
+      "tour": [
+        {
+          "nodeId": "doc-pos",
+          "title": "Start at the anchor",
+          "body": "Data flow begins with a document position from getPos(): the slash token start, or the selection start for the format menu. Everything downstream derives from this single offset."
+        },
+        {
+          "nodeId": "coords",
+          "title": "Measure the caret",
+          "body": "A floating-ui virtual element measures that position with coordsAtPos on demand, against the viewport. Lazy measurement is what keeps placement correct after edits and scroll."
+        },
+        {
+          "nodeId": "placement",
+          "title": "Clamp to the viewport",
+          "body": "computePosition applies offset, flip, and shift bounded to the viewport. This is the core fix: menus near the right or bottom edge stay on screen instead of forcing page scroll."
+        },
+        {
+          "nodeId": "render",
+          "title": "Render without flashing",
+          "body": "The resolved {x,y} is stored and applied as inset; the menu stays hidden until measured. The recompute loop (render back to measure) re-runs on viewport scroll and window resize."
+        }
+      ]
+    },
+    {
+      "id": "code-dependency",
+      "label": "Code dependency graph",
+      "color": "#2e5d9e",
+      "summary": "Which changed components depend on the new shared hook, and where the leaf dependency on floating-ui sits.",
+      "nodes": [
+        {
+          "id": "slash",
+          "title": "SlashCommandMenu.tsx",
+          "kind": "entry point",
+          "x": -380,
+          "y": -120,
+          "summary": "The / command menu. Now imports and calls useCommandMenuPosition instead of its own positionForToken, and renders a ref'd div gated by visibility.",
+          "details": [
+            "Adds menuRef and getMenuPos = () => token?.from ?? 0.",
+            "Removes the local positionForToken helper.",
+            "Drop check on position in the render guard; uses visibility instead."
+          ],
+          "files": [
+            { "path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb" }
+          ]
+        },
+        {
+          "id": "format",
+          "title": "FormatCommandMenu.tsx",
+          "kind": "entry point",
+          "x": -380,
+          "y": 120,
+          "summary": "The Cmd+/ format menu. Mirrors the slash menu refactor: calls useCommandMenuPosition, anchors to the selection start, removes its own positionForSelection helper.",
+          "details": [
+            "Adds menuRef and getMenuPos = () => editor.state.selection.from ?? 0.",
+            "Removes the local positionForSelection helper.",
+            "Open state no longer also requires a resolved position to render."
+          ],
+          "files": [
+            { "path": "packages/ui/src/editor/FormatCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-736e7df77bf1b5363a4d8fedb3034fb6a4b981b7d0244676777243a06efacc24" }
+          ]
+        },
+        {
+          "id": "hook",
+          "title": "commandMenuPosition.ts",
+          "kind": "shared module",
+          "x": -20,
+          "y": 0,
+          "summary": "New shared module (the major seam of the PR). Exports useCommandMenuPosition, a hook that wires scroll/resize listeners, and updateCommandMenuPosition, which builds the virtual element and runs floating-ui.",
+          "details": [
+            "Centralizes the anchoring logic both menus previously duplicated.",
+            "useCommandMenuPosition recomputes on mount, viewport scroll, and window resize.",
+            "No PR-changed specs accompany this module; no review comments existed at generation time."
+          ],
+          "files": [
+            { "path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0" }
+          ]
+        },
+        {
+          "id": "floating-ui",
+          "title": "@floating-ui/dom",
+          "kind": "leaf dependency",
+          "x": 320,
+          "y": 0,
+          "summary": "The leaf positioning library. Provides computePosition plus the offset, flip, and shift middleware and the VirtualElement type the hook relies on.",
+          "details": [
+            "Already a dependency used by LinkPopover; this PR reuses the same pattern for menus.",
+            "Pinned at ^1.7.5 in packages/ui/package.json.",
+            "Entry points depend on the hook, which depends on this library; the library depends on nothing in this PR."
+          ]
+        }
+      ],
+      "edges": [
+        { "source": "slash", "target": "hook", "label": "calls useCommandMenuPosition" },
+        { "source": "format", "target": "hook", "label": "calls useCommandMenuPosition" },
+        { "source": "hook", "target": "floating-ui", "label": "depends on" }
+      ],
+      "tour": [
+        {
+          "nodeId": "slash",
+          "title": "Entry point: slash menu",
+          "body": "Start with one consumer. SlashCommandMenu used to compute its own position; now it delegates to the shared hook and just provides an anchor and a ref."
+        },
+        {
+          "nodeId": "format",
+          "title": "Entry point: format menu",
+          "body": "The format menu is the second consumer and changes the same way. Two call sites converging on one helper is the reason the shared module exists."
+        },
+        {
+          "nodeId": "hook",
+          "title": "The shared seam",
+          "body": "commandMenuPosition.ts is the new file and the heart of the PR. Review this once and you understand the positioning behavior for both menus. It is also where to confirm scroll/resize listeners are cleaned up."
+        },
+        {
+          "nodeId": "floating-ui",
+          "title": "Leaf dependency",
+          "body": "The hook depends on @floating-ui/dom, the same library LinkPopover already uses. Nothing depends on the menus here, so this is the bottom of the dependency chain."
+        }
+      ]
+    },
+    {
+      "id": "user-action",
+      "label": "User action graph",
+      "color": "#754dac",
+      "summary": "What the user does to open a menu and how the change keeps it usable near a viewport edge.",
+      "nodes": [
+        {
+          "id": "trigger",
+          "title": "User opens a menu",
+          "kind": "user action",
+          "x": -420,
+          "y": -30,
+          "summary": "The user types / at the start of a block (slash menu) or presses Cmd+/ with the editor focused (format menu).",
+          "details": [
+            "Slash menu opens when findSlashToken detects a / token.",
+            "Format menu toggles on the CmdOrCtrl+/ shortcut.",
+            "Both open with position null, so nothing is shown at a stale spot yet."
+          ],
+          "files": [
+            { "path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb" },
+            { "path": "packages/ui/src/editor/FormatCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-736e7df77bf1b5363a4d8fedb3034fb6a4b981b7d0244676777243a06efacc24" }
+          ]
+        },
+        {
+          "id": "anchor",
+          "title": "Menu anchors at the caret",
+          "kind": "surface",
+          "x": -120,
+          "y": -130,
+          "summary": "The shared hook measures the caret and places the menu just below it (bottom-start, 6px offset). The menu stays hidden until the measurement resolves, so the user never sees a flash.",
+          "details": [
+            "visibility:hidden until position resolves avoids a flash at (0,0) or the prior location.",
+            "Anchoring now matches the hyperlink popover behavior called out in issue #68."
+          ],
+          "files": [
+            { "path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0" }
+          ]
+        },
+        {
+          "id": "edge-case",
+          "title": "Near a viewport edge",
+          "kind": "behavior",
+          "x": 200,
+          "y": -30,
+          "summary": "When the caret is near the right or bottom edge, flip/shift reposition the menu so it stays fully inside the editor viewport instead of overflowing and forcing horizontal page scroll.",
+          "details": [
+            "This is the exact regression issue #68 reported near the right edge.",
+            "shift slides the menu in; flip moves it above the caret when there is no room below.",
+            "Inspect here if you want to confirm the acceptance criteria from #68."
+          ],
+          "files": [
+            { "path": "packages/ui/src/editor/commandMenuPosition.ts", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-ad2aa58b3f9b3727b836ef5560fef50836416c926c3b87ebf0863e159ab26bc0" }
+          ],
+          "links": [{ "label": "Closes issue #68", "url": "https://github.com/bholmesdev/hubble.md/issues/68" }]
+        },
+        {
+          "id": "select",
+          "title": "User picks a command",
+          "kind": "result",
+          "x": 200,
+          "y": 150,
+          "summary": "With the menu reliably on screen, the user navigates with arrows and confirms with Enter/Tab or a click; the command applies and the menu closes.",
+          "details": [
+            "Selection and command execution are unchanged by this PR.",
+            "The fix only ensures the menu is visible and in-bounds while the user chooses."
+          ],
+          "files": [
+            { "path": "packages/ui/src/editor/SlashCommandMenu.tsx", "url": "https://github.com/bholmesdev/hubble.md/pull/74/files#diff-f45d9b35193e4342a05c6316397eded0c60ed7432ed2608f2fbe66ff06d7c9cb" }
+          ]
+        }
+      ],
+      "edges": [
+        { "source": "trigger", "target": "anchor", "label": "opens at caret" },
+        { "source": "anchor", "target": "edge-case", "label": "when near an edge" },
+        { "source": "edge-case", "target": "select", "label": "stays visible, user selects" }
+      ],
+      "tour": [
+        {
+          "nodeId": "trigger",
+          "title": "The user opens a menu",
+          "body": "Begin at the surface: the user types / or presses Cmd+/. Both menus open in an unpositioned state, which sets up the no-flash behavior."
+        },
+        {
+          "nodeId": "anchor",
+          "title": "It anchors at the caret",
+          "body": "The shared hook measures the caret and shows the menu just below it, hidden until measured. This is the moment positioning quality is most visible to the user."
+        },
+        {
+          "nodeId": "edge-case",
+          "title": "The edge case this PR fixes",
+          "body": "Near the right or bottom edge, flip/shift keep the menu inside the viewport instead of pushing the page sideways. This is the user-facing point of the change and the acceptance criteria from issue #68."
+        },
+        {
+          "nodeId": "select",
+          "title": "The user completes the action",
+          "body": "Selection behavior is unchanged; the win is that the menu is reliably visible while the user chooses a command, then it closes as before."
+        }
+      ]
+    }
+  ]
+}
