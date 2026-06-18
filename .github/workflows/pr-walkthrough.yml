@@ -23,6 +23,8 @@ concurrency:
 jobs:
   generate:
     name: Generate walkthrough
+    # Paused for now to reduce token usage.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - name: Resolve PR number
