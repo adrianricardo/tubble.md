@@ -69,7 +69,7 @@ function refreshFilesAfterMissingPath(message: string) {
 	refreshFilesDebounced();
 }
 
-function fileErrorMessage(err: unknown) {
+function handleFileError(err: unknown) {
 	const message = errorMessage(err);
 	refreshFilesAfterMissingPath(message);
 	return message;
@@ -117,7 +117,7 @@ async function syncPinnedNotes() {
 	try {
 		await writePinnedNotes(workspacePath, workspaceStore.get().pinnedNotes);
 	} catch (err) {
-		const message = fileErrorMessage(err);
+		const message = handleFileError(err);
 		toast.error("Failed to update pinned notes", { description: message });
 	}
 }
@@ -297,7 +297,7 @@ export async function savePathContent(
 			};
 		});
 	} catch (err) {
-		const message = fileErrorMessage(err);
+		const message = handleFileError(err);
 		toast.error("Failed to save file", { description: message });
 		viewerStore.set((state) => {
 			if (state.currentPath !== path) return state;
@@ -371,7 +371,7 @@ export async function renameMarkdownFile(path: string, nextName: string) {
 		}
 	} catch (err) {
 		pendingRenames.delete(path);
-		const message = fileErrorMessage(err);
+		const message = handleFileError(err);
 		toast.error("Failed to rename file", { description: message });
 	} finally {
 		window.setTimeout(() => pendingRenames.delete(path), 1000);
@@ -397,7 +397,7 @@ export async function createMarkdownFileInFolder(parentPath: string) {
 		await refreshFiles();
 		return path;
 	} catch (err) {
-		const message = fileErrorMessage(err);
+		const message = handleFileError(err);
 		toast.error("Failed to create file", { description: message });
 		return null;
 	}
@@ -438,7 +438,7 @@ export async function deleteMarkdownFile(path: string) {
 		await syncPinnedNotes();
 		await refreshFiles();
 	} catch (err) {
-		const message = fileErrorMessage(err);
+		const message = handleFileError(err);
 		toast.error("Failed to delete file", { description: message });
 	}
 }
@@ -483,7 +483,7 @@ export async function deleteFolder(path: string) {
 		await syncPinnedNotes();
 		await refreshFiles();
 	} catch (err) {
-		const message = fileErrorMessage(err);
+		const message = handleFileError(err);
 		toast.error("Failed to delete folder", { description: message });
 	}
 }
@@ -532,7 +532,7 @@ export const loadPath = latest(async ({ isStale }, path: string) => {
 		appStore.set((state) => withOpenedDoc(state, path, content));
 	} catch (err) {
 		if (isStale()) return;
-		const message = fileErrorMessage(err);
+		const message = handleFileError(err);
 		toast.error("Failed to open file", { description: message });
 		viewerStore.set((state) => ({
 			...emptyDoc(state.lastOpenedPath),
@@ -558,7 +558,7 @@ export async function togglePinnedNote(path: string) {
 	try {
 		await writePinnedNotes(workspacePath, nextPinnedNotes);
 	} catch (err) {
-		const message = fileErrorMessage(err);
+		const message = handleFileError(err);
 		toast.error("Failed to update pinned notes", { description: message });
 		await loadPinnedNotes(workspacePath);
 	}
