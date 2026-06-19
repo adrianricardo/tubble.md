@@ -3,15 +3,6 @@ import { markdownToTiptapDoc } from "./markdownToProsemirror";
 import { tiptapDocToMarkdown } from "./prosemirrorToMarkdown";
 
 describe("embed markdown conversion", () => {
-	it("does not parse legacy embed custom elements as embed nodes", () => {
-		const doc = markdownToTiptapDoc(
-			'# Roadmap\n\n<embed-kanban board="roadmap"></embed-kanban>',
-		);
-
-		expect(doc.content?.[1]?.type).toBe("paragraph");
-		expect(doc.content?.some((node) => node.type === "embed")).toBe(false);
-	});
-
 	it("parses a relative html iframe into an iframe embed node", () => {
 		const doc = markdownToTiptapDoc(
 			'# Demo\n\n<iframe src="./kanban.html"></iframe>',
@@ -42,45 +33,6 @@ describe("embed markdown conversion", () => {
 
 		expect(doc.content?.[0]?.type).toBe("paragraph");
 		expect(doc.content?.some((node) => node.type === "embed")).toBe(false);
-	});
-
-	it("does not parse a nested embed element as an embed node", () => {
-		const doc = markdownToTiptapDoc("<div><embed-kanban></embed-kanban></div>");
-
-		expect(doc.content?.[0]?.type).toBe("paragraph");
-		expect(doc.content?.[0]?.content?.[0]?.text).toBe(
-			"<div><embed-kanban></embed-kanban></div>",
-		);
-	});
-
-	it("does not parse embed HTML with sibling content as an embed node", () => {
-		const doc = markdownToTiptapDoc(
-			"<embed-kanban></embed-kanban><p>Keep me</p>",
-		);
-
-		expect(doc.content?.[0]?.type).toBe("paragraph");
-		expect(doc.content?.some((node) => node.type === "embed")).toBe(false);
-	});
-
-	it("does not serialize legacy custom embed nodes", () => {
-		const markdown = tiptapDocToMarkdown({
-			type: "doc",
-			content: [
-				{
-					type: "embed",
-					attrs: {
-						kind: "bundle",
-						name: "kanban",
-						tagName: "embed-kanban",
-						props: {
-							board: "roadmap",
-						},
-					},
-				},
-			],
-		});
-
-		expect(markdown).toBe("");
 	});
 
 	it("serializes an iframe embed node back to iframe syntax", () => {

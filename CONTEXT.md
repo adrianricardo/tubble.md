@@ -51,7 +51,7 @@ A binary file referenced by a Markdown File, such as an image. Asset paths in ma
 
 ### Embed
 
-A self-contained, interactive UI placed at a point in a [[Markdown File]]. Hubble supports **Iframe HTML Embed** elements (e.g. `<iframe src="./file-index.html"></iframe>`), which render a workspace-local `.html` file in an opaque sandbox for simple agent-authored mini apps. Desktop injects the Hubble runtime, Tailwind browser, and Alpine before serving iframe HTML; authored HTML does not vendor those dependencies. See ADR-0007.
+A self-contained, interactive UI placed at a point in a [[Markdown File]]. Hubble supports workspace-local iframe HTML embeds for agent-authored mini apps. See ADR-0007.
 
 Embeds reach Workspace data only through a capability-scoped, async **broker**, never directly.
 _Avoid_: widget, plugin, gadget, component.
