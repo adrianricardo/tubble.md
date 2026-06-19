@@ -51,18 +51,10 @@ A binary file referenced by a Markdown File, such as an image. Asset paths in ma
 
 ### Embed
 
-A self-contained, interactive UI placed at a point in a [[Markdown File]]. Hubble currently supports two embed forms:
+A self-contained, interactive UI placed at a point in a [[Markdown File]]. Hubble supports **Iframe HTML Embed** elements (e.g. `<iframe src="./file-index.html"></iframe>`), which render a workspace-local `.html` file in an opaque sandbox for simple agent-authored mini apps. Desktop injects the Hubble runtime, Tailwind browser, and Alpine before serving iframe HTML; authored HTML does not vendor those dependencies. See ADR-0007.
 
-- **Embed Bundle** custom elements (e.g. `<embed-kanban board="roadmap">`) render in-realm, CSS-isolated, for trusted authored components that need editor-integrated UI. See ADR-0005.
-- **Iframe HTML Embed** elements (e.g. `<iframe src="./file-index.html"></iframe>`) render a workspace-local `.html` file in an opaque sandbox for simple agent-authored mini apps. Desktop injects the Hubble runtime, Tailwind browser, and Alpine before serving iframe HTML; authored HTML does not vendor those dependencies. See ADR-0007.
-
-Both forms reach Workspace data only through a capability-scoped, async **broker**, never directly.
+Embeds reach Workspace data only through a capability-scoped, async **broker**, never directly.
 _Avoid_: widget, plugin, gadget, component.
-
-### Embed Bundle
-
-The compiled artifact a viewer renders directly, without building or installing anything. Distinct from an [[Embed]]'s source: source is diffable text synced as files; the Embed Bundle is opaque and synced as an [[Asset]]. A custom element in a [[Markdown File]] resolves to its Embed Bundle by the Embed's name.
-_Avoid_: build, output, dist.
 
 ### Workspace Snapshot
 

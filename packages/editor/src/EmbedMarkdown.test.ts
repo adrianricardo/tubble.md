@@ -3,22 +3,13 @@ import { markdownToTiptapDoc } from "./markdownToProsemirror";
 import { tiptapDocToMarkdown } from "./prosemirrorToMarkdown";
 
 describe("embed markdown conversion", () => {
-	it("parses an embed custom element into an embed node", () => {
+	it("does not parse legacy embed custom elements as embed nodes", () => {
 		const doc = markdownToTiptapDoc(
 			'# Roadmap\n\n<embed-kanban board="roadmap"></embed-kanban>',
 		);
 
-		expect(doc.content?.[1]).toEqual({
-			type: "embed",
-			attrs: {
-				kind: "bundle",
-				name: "kanban",
-				tagName: "embed-kanban",
-				props: {
-					board: "roadmap",
-				},
-			},
-		});
+		expect(doc.content?.[1]?.type).toBe("paragraph");
+		expect(doc.content?.some((node) => node.type === "embed")).toBe(false);
 	});
 
 	it("parses a relative html iframe into an iframe embed node", () => {
@@ -30,9 +21,6 @@ describe("embed markdown conversion", () => {
 			type: "embed",
 			attrs: {
 				kind: "iframe",
-				name: "",
-				tagName: "iframe",
-				props: {},
 				src: "./kanban.html",
 			},
 		});
@@ -74,7 +62,7 @@ describe("embed markdown conversion", () => {
 		expect(doc.content?.some((node) => node.type === "embed")).toBe(false);
 	});
 
-	it("serializes an embed node back to custom element syntax", () => {
+	it("does not serialize legacy custom embed nodes", () => {
 		const markdown = tiptapDocToMarkdown({
 			type: "doc",
 			content: [
@@ -92,7 +80,7 @@ describe("embed markdown conversion", () => {
 			],
 		});
 
-		expect(markdown).toBe('<embed-kanban board="roadmap"></embed-kanban>');
+		expect(markdown).toBe("");
 	});
 
 	it("serializes an iframe embed node back to iframe syntax", () => {
@@ -103,9 +91,6 @@ describe("embed markdown conversion", () => {
 					type: "embed",
 					attrs: {
 						kind: "iframe",
-						name: "",
-						tagName: "iframe",
-						props: {},
 						src: "./kanban.html",
 					},
 				},

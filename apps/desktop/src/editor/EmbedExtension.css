@@ -7,10 +7,6 @@
 	outline-offset: 2px;
 }
 
-.hubble-embed-host {
-	min-block-size: 2rem;
-}
-
 .hubble-iframe-embed {
 	background: var(--card);
 	border: 0;

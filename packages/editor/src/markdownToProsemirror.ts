@@ -164,29 +164,12 @@ function hastToEmbed(root: HastRoot): JSONContent | null {
 			type: "embed",
 			attrs: {
 				kind: "iframe",
-				name: "",
-				tagName,
-				props: {},
 				src,
 			},
 		};
 	}
 
-	if (!isEmbedTag(tagName)) return null;
-	return {
-		type: "embed",
-		attrs: {
-			kind: "bundle",
-			name: tagName.slice("embed-".length),
-			tagName,
-			props: Object.fromEntries(
-				Object.entries(node.properties ?? {}).map(([key, value]) => [
-					key,
-					String(value),
-				]),
-			),
-		},
-	};
+	return null;
 }
 
 const BLOCKED_IFRAME_SCHEME = /^(file:|data:|javascript:|hubble-asset:)/i;
@@ -207,10 +190,6 @@ function isValidIframeEmbedSrc(src: string): boolean {
 		return false;
 	}
 	return LOCAL_IFRAME_SRC.test(src);
-}
-
-function isEmbedTag(tagName: string): boolean {
-	return /^embed-[a-z0-9][a-z0-9-]*$/.test(tagName);
 }
 
 function isHastElement(node: RootContent): node is HastElement {

@@ -23,4 +23,4 @@ The iframe `src` must be a workspace-local relative `.html` path. Desktop resolv
 - Agents do not need an install step or `.hubble/node_modules` before using Alpine, Tailwind browser classes, or `window.hubble`.
 - The Desktop app's bundled runtime dependencies are the portable contract.
 - The broker remains async and capability-scoped. Future write/create file APIs should extend the runtime broker rather than exposing direct filesystem access.
-- Legacy in-realm Embed Bundle code should be removed or re-scoped behind a separate future ADR. New local mini-app work should use iframe HTML embeds.
+- Legacy in-realm Embed Bundle code has been removed from the active implementation. New local mini-app work should use iframe HTML embeds.

@@ -81,25 +81,9 @@ function blockToMarkdown(node: JSONContent): string {
 		}
 
 		case "embed": {
-			if (node.attrs?.kind === "iframe") {
-				const src = String(node.attrs?.src ?? "");
-				if (!isValidIframeEmbedSrc(src)) return "";
-				return `<iframe src="${escapeHtmlAttr(src)}"></iframe>`;
-			}
-
-			const tagName = String(node.attrs?.tagName ?? "");
-			if (!/^embed-[a-z0-9][a-z0-9-]*$/.test(tagName)) return "";
-			const props =
-				node.attrs?.props &&
-				typeof node.attrs.props === "object" &&
-				!Array.isArray(node.attrs.props)
-					? (node.attrs.props as Record<string, unknown>)
-					: {};
-			const attrs = Object.entries(props)
-				.filter(([key]) => /^[a-zA-Z_:][a-zA-Z0-9_:.-]*$/.test(key))
-				.map(([key, value]) => ` ${key}="${escapeHtmlAttr(String(value))}"`)
-				.join("");
-			return `<${tagName}${attrs}></${tagName}>`;
+			const src = String(node.attrs?.src ?? "");
+			if (!isValidIframeEmbedSrc(src)) return "";
+			return `<iframe src="${escapeHtmlAttr(src)}"></iframe>`;
 		}
 
 		default:
