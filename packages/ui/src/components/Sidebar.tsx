@@ -172,6 +172,9 @@ export function Sidebar({
 		draft: string;
 	} | null>(null);
 	const [renameError, setRenameError] = useState<string | null>(null);
+	const [pendingFocusDisplayPath, setPendingFocusDisplayPath] = useState<
+		string | null
+	>(null);
 	const [activeDragLabel, setActiveDragLabel] = useState<string | null>(null);
 	const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
 	const highlightPath = pendingPath ?? currentPath;
@@ -268,6 +271,20 @@ export function Sidebar({
 				: { kind: "folder", folderId: row.id },
 		);
 	}, [focusedIndex, onFocusedItemChange, rows]);
+
+	useEffect(() => {
+		if (!pendingFocusDisplayPath) return;
+		const index = rows.findIndex(
+			(row) =>
+				row.kind === "file" &&
+				normalizeDisplayPath(getDisplayPath(row.file.path)) ===
+					pendingFocusDisplayPath,
+		);
+		if (index < 0) return;
+		setFocusedIndex(index);
+		setPendingFocusDisplayPath(null);
+	}, [getDisplayPath, pendingFocusDisplayPath, rows, setFocusedIndex]);
+
 	const handleDragStart = useCallback((event: DragStartEvent) => {
 		const data = event.active.data.current as DragItemData | undefined;
 		setActiveDragLabel(data?.label ?? null);
@@ -376,23 +393,40 @@ export function Sidebar({
 		[files, getDisplayPath],
 	);
 
-	const commitRename = useCallback(() => {
-		const path = renamingPath;
-		if (!path || !onRenameFile) return;
-		const nextName = renameDraft.trim();
-		if (!nextName) {
+	const commitRename = useCallback(
+		(focusTree = false) => {
+			const path = renamingPath;
+			if (!path || !onRenameFile) return;
+			const nextName = renameDraft.trim();
+			if (!nextName) {
+				resetRename();
+				if (focusTree) requestAnimationFrame(() => navRef.current?.focus());
+				return;
+			}
+			const error = getRenameError(path, nextName);
+			if (error) {
+				setRenameError(error);
+				requestAnimationFrame(() => renameInputRef.current?.focus());
+				return;
+			}
+			if (focusTree) {
+				setPendingFocusDisplayPath(
+					renameTargetDisplayPath(path, nextName, getDisplayPath),
+				);
+				requestAnimationFrame(() => navRef.current?.focus());
+			}
 			resetRename();
-			return;
-		}
-		const error = getRenameError(path, nextName);
-		if (error) {
-			setRenameError(error);
-			requestAnimationFrame(() => renameInputRef.current?.focus());
-			return;
-		}
-		resetRename();
-		onRenameFile(path, nextName);
-	}, [getRenameError, onRenameFile, renameDraft, renamingPath, resetRename]);
+			onRenameFile(path, nextName);
+		},
+		[
+			getRenameError,
+			onRenameFile,
+			renameDraft,
+			renamingPath,
+			resetRename,
+			getDisplayPath,
+		],
+	);
 
 	const tree = (
 		<DndContext
@@ -1412,7 +1446,7 @@ function FileRenameInput({
 	error: string | null;
 	onChange: (value: string) => void;
 	onCancel: () => void;
-	onCommit: () => void;
+	onCommit: (focusTree?: boolean) => void;
 }) {
 	return (
 		<span className="relative flex min-w-0 flex-1 items-center">
@@ -1421,12 +1455,12 @@ function FileRenameInput({
 				aria-invalid={error ? true : undefined}
 				className="min-w-0 flex-1 rounded-none border-0 bg-muted/70 p-0 text-[13px] text-sidebar-foreground outline-none selection:bg-selected/70 selection:text-sidebar-foreground focus:outline-none focus-visible:outline-none focus-visible:ring-0"
 				value={value}
-				onBlur={onCommit}
+				onBlur={() => onCommit()}
 				onChange={(event) => onChange(event.target.value)}
 				onKeyDown={(event) => {
 					if (event.key === "Enter") {
 						event.preventDefault();
-						onCommit();
+						onCommit(true);
 					} else if (event.key === "Escape") {
 						event.preventDefault();
 						onCancel();
