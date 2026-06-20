@@ -27,6 +27,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import MingcuteArrowRightLine from "~icons/mingcute/arrow-right-line";
+import MingcuteCheckLine from "~icons/mingcute/check-line";
+import MingcuteCopy2Line from "~icons/mingcute/copy-2-line";
+import MingcuteDelete2Line from "~icons/mingcute/delete-2-line";
 import MingcutePencilFill from "~icons/mingcute/pencil-fill";
 import { desktopApi } from "../desktopApi";
 import { cn } from "../lib/utils";
@@ -222,6 +226,14 @@ async function copyLinkToClipboard(href: string) {
 	} catch {
 		toast.error("Failed to copy link");
 	}
+}
+
+function linkClipboardText(link: ActiveLink) {
+	return link.kind === "wiki" ? (link.target ?? link.href) : link.href;
+}
+
+function linkPreviewText(href: string) {
+	return href.replace(/^https?:\/\//i, "");
 }
 
 function removeActiveLink(editor: Editor, from: number, to: number) {
@@ -920,6 +932,8 @@ export function LinkPopover({
 		const onFocusRequest = () => {
 			expandNextLinkSessionRef.current = true;
 			dispatchMachineEvent({ type: "EXPAND_REQUESTED" });
+			// SmartLinkExtension fires this right after dispatching a transaction
+			// that may create an empty link. Read the session after that state lands.
 			queueMicrotask(() => {
 				if (!editor) return;
 				const { link } = getLinkSession(editor);
@@ -1185,20 +1199,10 @@ export function LinkPopover({
 				dispatchMachineEvent({ type: "TOGGLE_ACTIONS_REQUESTED" });
 				return;
 			}
-			if (isVisible && keymatch(event, "CmdOrCtrl+Enter")) {
-				event.preventDefault();
-				event.stopPropagation();
-				void visitActiveLink(activeLink);
-				return;
-			}
 			if (isVisible && keymatch(event, "CmdOrCtrl+Shift+C")) {
 				event.preventDefault();
 				event.stopPropagation();
-				void copyLinkToClipboard(
-					activeLink.kind === "wiki"
-						? (activeLink.target ?? activeLink.href)
-						: activeLink.href,
-				);
+				void copyLinkToClipboard(linkClipboardText(activeLink));
 				return;
 			}
 		};
@@ -1223,8 +1227,8 @@ export function LinkPopover({
 	const previewText = activeLink
 		? activeLink.kind === "wiki"
 			? wikiDisplayNameForTarget(activeLinkTarget ?? activeLink.href)
-			: activeLink.href
-		: creationHref;
+			: linkPreviewText(activeLink.href)
+		: linkPreviewText(creationHref);
 	const previewTitle = activeLink
 		? activeLink.kind === "wiki"
 			? (activeLinkTarget ?? activeLink.href)
@@ -1248,10 +1252,8 @@ export function LinkPopover({
 	};
 
 	// ── Render ──────────────────────────────────────────────────────
-	const actionHintClass =
-		"text-[9px] leading-[14px] tracking-[0.12em] text-muted-foreground/85";
 	const actionButtonClass =
-		"h-auto flex-1 rounded-none border-0 px-2 text-foreground shadow-none inset-shadow-none hover:bg-muted";
+		"h-auto flex-1 justify-center gap-1.5 rounded-none border-0 px-2 text-foreground shadow-none inset-shadow-none hover:bg-muted [&_svg]:size-3";
 	const suggestionList =
 		wikiSuggestions.length > 0 ? (
 			<div
@@ -1330,18 +1332,33 @@ export function LinkPopover({
 							variant="ghost"
 							size="sm"
 							title={previewTitle}
-							className="relative h-full min-w-0 flex-1 justify-start rounded-none border-0 py-[5px] ps-2 pe-2 text-left text-[11px] leading-[16px] text-foreground shadow-none inset-shadow-none transition-[padding] duration-[var(--default-transition-duration)] ease-snappy hover:bg-muted group-hover:pe-7"
+							className="group/preview-label relative h-full min-w-0 flex-1 justify-start rounded-none border-0 py-[5px] ps-2 pe-0 text-left text-[11px] leading-[16px] text-foreground shadow-none inset-shadow-none transition-[padding] duration-[var(--default-transition-duration)] ease-snappy hover:bg-muted group-hover/preview-label:pe-8"
 							onClick={() => dispatchMachineEvent({ type: "EXPAND_REQUESTED" })}
 						>
 							<PreviewLabel key={previewText} text={previewText} />
 							<span
 								aria-hidden="true"
-								className="pointer-events-none absolute inset-block-0 end-0 z-10 hidden w-6 bg-card group-hover:block group-hover:bg-muted"
-							/>
-							<MingcutePencilFill
-								aria-hidden="true"
-								className="absolute end-1.5 z-20 h-3 w-3 shrink-0 text-muted-foreground opacity-0 transition-opacity duration-[var(--default-transition-duration)] ease-snappy group-hover:opacity-100"
-							/>
+								className="pointer-events-none absolute inset-block-0 end-0 z-20 flex w-8 items-center justify-center bg-linear-to-l from-card via-card/95 to-transparent text-muted-foreground opacity-0 transition-opacity duration-[var(--default-transition-duration)] ease-snappy group-hover/preview-label:from-muted group-hover/preview-label:via-muted/95 group-hover/preview-label:opacity-100"
+							>
+								<MingcutePencilFill
+									aria-hidden="true"
+									className="h-3 w-3 shrink-0"
+								/>
+							</span>
+						</Button>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							aria-label="Copy link"
+							title="Copy link (Cmd/Ctrl+Shift+C)"
+							className="relative z-20 flex h-full w-7 shrink-0 items-center justify-center border-0 bg-card p-0 text-muted-foreground transition-colors duration-[var(--default-transition-duration)] ease-snappy hover:bg-muted hover:text-foreground"
+							onClick={() => {
+								if (!activeLink) return;
+								void copyLinkToClipboard(linkClipboardText(activeLink));
+							}}
+						>
+							<MingcuteCopy2Line aria-hidden="true" className="size-3" />
 						</Button>
 						<Button
 							type="button"
@@ -1354,7 +1371,14 @@ export function LinkPopover({
 								void visitActiveLink(activeLink);
 							}}
 						>
-							↗
+							{activeLink?.kind === "wiki" ? (
+								<MingcuteArrowRightLine
+									aria-hidden="true"
+									className="size-3.5"
+								/>
+							) : (
+								<span aria-hidden="true">↗</span>
+							)}
 						</Button>
 					</div>
 				</div>
@@ -1385,7 +1409,10 @@ export function LinkPopover({
 								if (!activeLink) return;
 								removeActiveLink(editor, activeLink.from, activeLink.to);
 							}}
+							aria-label="Remove link"
+							title="Remove link"
 						>
+							<MingcuteDelete2Line aria-hidden="true" />
 							<span>Remove</span>
 						</Button>
 						<Separator
@@ -1399,15 +1426,13 @@ export function LinkPopover({
 							className={actionButtonClass}
 							onClick={() => {
 								if (!activeLink) return;
-								void copyLinkToClipboard(
-									activeLink.kind === "wiki"
-										? (activeLink.target ?? activeLink.href)
-										: activeLink.href,
-								);
+								void copyLinkToClipboard(linkClipboardText(activeLink));
 							}}
+							aria-label="Copy link"
+							title="Copy link (Cmd/Ctrl+Shift+C)"
 						>
+							<MingcuteCopy2Line aria-hidden="true" />
 							<span>Copy</span>
-							<span className={actionHintClass}>⌘⇧C</span>
 						</Button>
 						<Separator
 							orientation="vertical"
@@ -1417,16 +1442,15 @@ export function LinkPopover({
 							type="button"
 							variant="default"
 							size="xs"
-							className="h-auto min-w-[72px] rounded-none border-0 px-2 text-primary-foreground shadow-none inset-shadow-none hover:brightness-105"
+							className="h-auto flex-1 justify-center gap-1.5 rounded-none border-0 px-2 text-primary-foreground shadow-none inset-shadow-none hover:brightness-105"
 							onClick={() => {
-								if (!activeLink) return;
-								void visitActiveLink(activeLink);
+								dispatchMachineEvent({ type: "ESCAPE_REQUESTED" });
 							}}
+							aria-label="Done"
+							title="Done"
 						>
-							<span>Visit</span>
-							<span className="text-[9px] leading-[14px] tracking-[0.12em] text-primary-foreground/75">
-								⌘↩
-							</span>
+							<MingcuteCheckLine aria-hidden="true" className="size-3" />
+							<span>Done</span>
 						</Button>
 					</div>
 				</div>

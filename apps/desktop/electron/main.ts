@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { hasMarkdownExtension, withMarkdownExtension } from "@hubble.md/editor";
 import embedTheme from "@hubble.md/runtime/embed-theme.css?raw";
 import hubbleRuntime from "@hubble.md/runtime/global.js?raw";
 import tailwindRuntime from "@tailwindcss/browser?raw";
@@ -20,6 +19,10 @@ import {
 import electronUpdater from "electron-updater";
 import ignore from "ignore";
 import type { DesktopUpdateState } from "../src/desktopApi/types";
+import {
+	hasMarkdownExtension,
+	withMarkdownExtension,
+} from "../src/lib/filePath";
 
 type FileEntry = {
 	path: string;

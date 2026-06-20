@@ -10,10 +10,10 @@
 }
 
 .previewText {
-	mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
+	mask-image: linear-gradient(to right, black calc(100% - 8px), transparent);
 	-webkit-mask-image: linear-gradient(
 		to right,
-		black calc(100% - 20px),
+		black calc(100% - 8px),
 		transparent
 	);
 }

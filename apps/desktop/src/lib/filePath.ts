@@ -1,3 +1,5 @@
+const MARKDOWN_EXTENSION_RE = /\.(md|markdown|mdown)$/i;
+
 export function dirname(filePath: string): string | null {
 	const forwardSlash = filePath.lastIndexOf("/");
 	const backSlash = filePath.lastIndexOf("\\");
@@ -11,6 +13,14 @@ export function extname(filePath: string): string {
 	const name = filePath.split(/[\\/]/).pop() ?? filePath;
 	const dot = name.lastIndexOf(".");
 	return dot > 0 ? name.slice(dot) : "";
+}
+
+export function hasMarkdownExtension(path: string): boolean {
+	return MARKDOWN_EXTENSION_RE.test(path);
+}
+
+export function withMarkdownExtension(path: string): string {
+	return hasMarkdownExtension(path) ? path : `${path}.md`;
 }
 
 export function joinPath(parent: string, name: string): string {
