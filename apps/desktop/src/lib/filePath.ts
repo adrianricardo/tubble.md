@@ -32,6 +32,10 @@ export function hasDocumentExtension(path: string): boolean {
 	return hasMarkdownExtension(path) || hasHtmlExtension(path);
 }
 
+export function isMarkdownAssetFolderName(name: string): boolean {
+	return name.endsWith(".assets");
+}
+
 export function withMarkdownExtension(path: string): string {
 	return hasMarkdownExtension(path) ? path : `${path}.md`;
 }

@@ -26,11 +26,17 @@ import type {
 } from "../src/desktopApi/types";
 import {
 	hasDocumentExtension,
+	isMarkdownAssetFolderName,
 	markdownAssetFolderPath,
 	withMarkdownExtension,
 } from "../src/lib/filePath";
 
 type FileEntry = {
+	path: string;
+	modified_at: number;
+};
+
+type FolderEntry = {
 	path: string;
 	modified_at: number;
 };
@@ -808,7 +814,7 @@ function fileAssetsDir(filePath: string): string {
 
 async function collectDocumentFiles(
 	dir: string,
-	out: FileEntry[],
+	out: { files: FileEntry[]; folders: FolderEntry[] },
 	inheritedRules: IgnoreRule[] = [],
 ) {
 	const rules = await rulesForDir(dir, inheritedRules);
@@ -817,10 +823,16 @@ async function collectDocumentFiles(
 		const entryPath = path.join(dir, entry.name);
 		if (isIgnoredByRules(entryPath, rules)) continue;
 		if (entry.isDirectory()) {
+			if (isMarkdownAssetFolderName(entry.name)) continue;
+			const stat = await fs.stat(entryPath);
+			out.folders.push({
+				path: entryPath,
+				modified_at: Math.floor(stat.mtimeMs / 1000),
+			});
 			await collectDocumentFiles(entryPath, out, rules);
 		} else if (isDocumentPath(entry.name)) {
 			const stat = await fs.stat(entryPath);
-			out.push({
+			out.files.push({
 				path: entryPath,
 				modified_at: Math.floor(stat.mtimeMs / 1000),
 			});
@@ -938,9 +950,12 @@ function registerIpc() {
 			const root = assertGrantedRoot(dirPath);
 			const stat = await fs.stat(root);
 			if (!stat.isDirectory()) throw new Error(`Not a directory: ${dirPath}`);
-			const entries: FileEntry[] = [];
-			await collectDocumentFiles(root, entries);
-			return entries;
+			const listing = {
+				files: [] as FileEntry[],
+				folders: [] as FolderEntry[],
+			};
+			await collectDocumentFiles(root, listing);
+			return listing;
 		},
 	);
 

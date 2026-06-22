@@ -29,6 +29,7 @@ import {
 	cleanFileState,
 	emptyDoc,
 	type FileEntry,
+	type FolderEntry,
 	getBaseline,
 	isInWorkspace,
 	LOADING_DELAY_MS,
@@ -52,16 +53,20 @@ type SidebarMoveItem =
 export async function refreshFiles(path = workspaceStore.get().workspacePath) {
 	if (!path) return;
 	let files: FileEntry[] = [];
+	let folders: FolderEntry[] = [];
 
 	try {
-		files = await desktopApi.listDirectory(path);
+		const listing = await desktopApi.listDirectory(path);
+		files = listing.files;
+		folders = listing.folders;
 	} catch {
 		files = [];
+		folders = [];
 	}
 
 	workspaceStore.set((state) => {
 		if (state.workspacePath !== path) return state;
-		return { ...state, files };
+		return { ...state, files, folders };
 	});
 }
 
