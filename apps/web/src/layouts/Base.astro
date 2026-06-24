@@ -39,6 +39,15 @@ const canonical = new URL(Astro.url.pathname, Astro.site).href;
       rel="stylesheet"
     />
     {concept && <meta name="x-concept" content={concept} />}
+    <script>
+      import { init } from "@plausible-analytics/tracker";
+
+      if (import.meta.env.PROD) {
+        init({
+          domain: new URL(import.meta.env.SITE).hostname,
+        });
+      }
+    </script>
   </head>
   <body>
     <slot />
