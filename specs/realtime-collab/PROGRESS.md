@@ -42,7 +42,7 @@ tests fail or a step was skipped, say so in the task note.
 
 | Stage | Status | Summary |
 |---|---|---|
-| 1. Realtime editing POC | 🔴 Not started | Two humans co-edit one doc live + the `prosemirror-sync` spike |
+| 1. Realtime editing POC | 🟡 In progress | Spike scaffolded; gate provisionally passed (see SPIKE.md). Live two-browser test pending. |
 | 2. Documents as cloud entities | 🔴 Not started | Stable doc IDs, doc CRUD, markdown projection |
 | 3. Team permissions | 🔴 Not started | Users, members, per-doc roles, sharing |
 | 4. Agent collaboration (Model C) | 🔴 Not started | Doc patch API + MCP/CLI, projection, legacy shim |
@@ -51,25 +51,35 @@ tests fail or a step was skipped, say so in the task note.
 
 ---
 
-## Stage 1 — Realtime editing POC 🔴
+## Stage 1 — Realtime editing POC 🟡
 
 Goal: two authenticated humans co-edit one document live, conflict-free, with
 presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
-- [ ] **Spike `@convex-dev/prosemirror-sync`** against the decision gate: doc-size
-      limits, offline behavior, version-snapshot hooks, auth integration, and
-      server-side/programmatic edits. Record findings in the Changelog + a short
-      note here. — *Owner: _ · Started: _ · Landed: _ · PR: _*
-- [ ] Decision gate outcome recorded: **adopt prosemirror-sync** OR **fall back**
-      (Yjs on Cloudflare DO + y-websocket / managed). Note the chosen path. — *_*
-- [ ] Add the collaboration binding to the Tiptap editor (`packages/editor` /
-      `packages/ui`). — *_*
+- [~] **Spike `@convex-dev/prosemirror-sync`** against the decision gate. Findings
+      in **`SPIKE.md`**: server-side agent edits ✅, versioning hooks ✅, auth hooks
+      ✅, Tiptap client ✅; **offline ❌ (not implemented upstream)**; doc-size +
+      live two-browser test ⚠️ unverified (need interactive `convex dev`).
+      Scaffold landed: `convex/convex.config.ts`, `convex/prosemirror.ts` (incl.
+      `agentAppendParagraph` server-edit proof), dep added to `package.json`.
+      — *Owner: Adrian/agent · Started: 2026-06-24 · Landed: _ · PR: spike branch*
+- [~] Decision gate outcome: **provisionally ADOPT prosemirror-sync** (hard gates
+      pass on existing Convex stack). Finalize to `[x]` after the live two-browser
+      + doc-size test. Fallback documented in SPIKE.md if a hard gate fails. — *_*
+- [ ] Run `pnpm install` + `convex dev` (interactive login) to generate the
+      component API so `prosemirror.ts` typechecks. — *_*
+- [ ] Export the editor ProseMirror schema from `packages/editor` and wire the
+      `transform()` body in `agentAppendParagraph`. — *_*
+- [ ] Add the collaboration binding (`useTiptapSync`) to the Tiptap editor
+      (`packages/ui` / `apps/www`). — *_*
 - [ ] Auth-gate the web app enough to identify two distinct users for the POC. — *_*
 - [ ] One shared document renders live for two browsers; concurrent edits merge
       with no conflict file. — *_*
 - [ ] Presence cursors (who's here, where their caret is). — *_*
+- [ ] Confirm agent edit (`agentAppendParagraph` from the Convex dashboard) appears
+      live in both browsers. — *_*
 - [ ] **Exit criteria:** two browsers, simultaneous typing, conflict-free, cursors
-      visible. Demoable.
+      visible, agent edit shows live. Demoable.
 
 ## Stage 2 — Documents as cloud entities 🔴
 
@@ -122,6 +132,13 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-24 — spike — Stage 1 `prosemirror-sync` spike: gate findings recorded in
+  SPIKE.md (server-side agent edits ✅, versioning ✅, auth hooks ✅, Tiptap ✅;
+  offline ❌; doc-size + 2-browser ⚠️ unverified). Provisional decision: ADOPT.
+  Scaffolded `convex.config.ts`, `prosemirror.ts`, dep in `package.json`. Did NOT
+  run `pnpm install`/`convex dev` (interactive) — `prosemirror.ts` won't typecheck
+  until then (expected). Next: `pnpm install` + `convex dev`, then wire schema +
+  `useTiptapSync`.
 - 2026-06-24 — setup — Spec + progress tracker created; fork at
   `adrianricardo/hubble.md` (`origin`), `upstream` → `bholmesdev/hubble.md`.
   Nothing built yet; Stage 1 is next.
