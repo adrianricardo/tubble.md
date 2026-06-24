@@ -48,7 +48,7 @@ tests fail or a step was skipped, say so in the task note.
 | Stage | Status | Summary |
 |---|---|---|
 | 1. Realtime editing POC | 🟢 Done | Merged Stage 1 POC: conflict-free two-browser editing, presence cursors, and live agent edits verified. |
-| 2. Documents as cloud entities | 🟡 In progress | Stable doc IDs started; doc CRUD, markdown projection next |
+| 2. Documents as cloud entities | 🟢 Done | Stable IDs, document CRUD, markdown projection, import/export, and edited metadata merged. |
 | 3. Team permissions | 🔴 Not started | Users, members, per-doc roles, sharing |
 | 4. Agent collaboration (Model C) | 🔴 Not started | Doc patch API + MCP/CLI, projection, legacy shim |
 | 5. Version history & review | 🔴 Not started | Revisions + restore, comments, suggestions |
@@ -128,7 +128,7 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       Adrian/Codex · Started: 2026-06-24 · Landed: 2026-06-24 · PR:
       https://github.com/adrianricardo/hubble.md/pull/1*
 
-## Stage 2 — Documents as cloud entities 🟡
+## Stage 2 — Documents as cloud entities 🟢
 
 - [x] `documents` table with **stable IDs**; path/title become mutable metadata.
       Added Convex `documents` table using Convex `_id` as the stable document ID,
@@ -156,10 +156,11 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       import/export bridges instead of ambient whole-file authority. — *Owner:
       Codex · Started: 2026-06-24 · Landed: 2026-06-24 · PR:
       https://github.com/adrianricardo/hubble.md/pull/5*
-- [~] "Last edited by / at" on documents. The Live Documents sidebar panel now
+- [x] "Last edited by / at" on documents. The Live Documents sidebar panel now
       displays each document's `updatedAt` timestamp and optional `updatedBy`
-      actor from the `documents` table. Unmerged. — *Owner: Codex · Started:
-      2026-06-24*
+      actor from the `documents` table. — *Owner: Codex · Started: 2026-06-24 ·
+      Landed: 2026-06-24 · PR:
+      https://github.com/adrianricardo/hubble.md/pull/6*
 
 ## Stage 3 — Team permissions 🔴
 
@@ -204,6 +205,9 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-24 — Codex — Merged Stage 2 edited metadata PR #6, marked "Last
+  edited by / at" complete, and moved Stage 2 Documents as cloud entities to
+  🟢 Done with PR https://github.com/adrianricardo/hubble.md/pull/6.
 - 2026-06-24 — Codex — Started Stage 2 edited metadata display: Live Documents
   now show last edited time and actor in the web sidebar. Kept the task `[~]`
   until this branch is merged and verified.
