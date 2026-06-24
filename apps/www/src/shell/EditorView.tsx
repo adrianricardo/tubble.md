@@ -48,6 +48,73 @@ export function EditorView({
 	testIdentity,
 }: Props) {
 	const files = useStoreValue(filesStore);
+	const wikiTargets: WikiTarget[] = files.map((file) => ({
+		path: file.path,
+		target: file.path,
+		title: wikiDisplayNameForTarget(file.path),
+	}));
+
+	if (!testIdentity) {
+		return (
+			<FileEditorView
+				path={path}
+				initialMarkdown={initialMarkdown}
+				wikiTargets={wikiTargets}
+			/>
+		);
+	}
+
+	return (
+		<LivePocEditorView
+			workspaceId={workspaceId}
+			path={path}
+			initialMarkdown={initialMarkdown}
+			testIdentity={testIdentity}
+			wikiTargets={wikiTargets}
+		/>
+	);
+}
+
+function FileEditorView({
+	path,
+	initialMarkdown,
+	wikiTargets,
+}: {
+	path: string;
+	initialMarkdown: string;
+	wikiTargets: WikiTarget[];
+}) {
+	return (
+		<SharedEditorView
+			path={path}
+			initialMarkdown={initialMarkdown}
+			wikiTargets={wikiTargets}
+			extensions={[createWebImageExtension()]}
+			onPaste={(editor, event) => handleImagePaste({ editor, event })}
+			onDrop={(editor, event) => handleImageDrop({ editor, event })}
+			onLocalChange={updateEditorContent}
+			onSave={savePathContent}
+			onOpenExternalLink={(href) => {
+				window.open(href, "_blank", "noopener");
+			}}
+			onOpenWikiLink={(target) => void loadPath(target.split("#")[0] ?? target)}
+		/>
+	);
+}
+
+function LivePocEditorView({
+	workspaceId,
+	path,
+	initialMarkdown,
+	testIdentity,
+	wikiTargets,
+}: {
+	workspaceId: string;
+	path: string;
+	initialMarkdown: string;
+	testIdentity: TestIdentity;
+	wikiTargets: WikiTarget[];
+}) {
 	const docId = useMemo(
 		() => `poc:${workspaceId}:${path}`,
 		[workspaceId, path],
@@ -60,23 +127,15 @@ export function EditorView({
 	const createdDocRef = useRef<string | null>(null);
 	const lastCursorHeartbeatRef = useRef(0);
 	const heartbeat = useMutation(api.pocIdentity.heartbeat);
-	const activeUsers = useQuery(
-		api.pocIdentity.listActive,
-		testIdentity ? { docId } : "skip",
-	);
+	const activeUsers = useQuery(api.pocIdentity.listActive, { docId });
 	const sync = useTiptapSync(api.prosemirror, docId, {
 		warnOnUnsyncedClose: false,
 		onSyncError: (error) => {
 			console.error("ProseMirror sync error:", error);
 		},
 	});
-	const wikiTargets: WikiTarget[] = files.map((file) => ({
-		path: file.path,
-		target: file.path,
-		title: wikiDisplayNameForTarget(file.path),
-	}));
 	const remotePresence = useMemo<RemotePresenceCursor[]>(() => {
-		if (!testIdentity || !activeUsers) return [];
+		if (!activeUsers) return [];
 		return activeUsers.flatMap((user) => {
 			if (user.userId === testIdentity.userId) return [];
 			if (user.anchor === undefined || user.head === undefined) return [];
@@ -94,7 +153,6 @@ export function EditorView({
 
 	const publishSelection = useCallback(
 		(selection: { anchor: number; head: number }) => {
-			if (!testIdentity) return;
 			const now = Date.now();
 			if (now - lastCursorHeartbeatRef.current < CURSOR_HEARTBEAT_MIN_MS) {
 				return;

@@ -166,6 +166,11 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-24 — Codex — Reviewed Stage 1 PR diff and scoped the live
+  `useTiptapSync` editor to the `?test=1` POC identity path, preserving normal
+  web file-backed editing outside the spike harness. Verified `pnpm check`,
+  `pnpm --filter @hubble.md/www... --if-present build`, and
+  `pnpm --filter @hubble.md/www typecheck`.
 - 2026-06-24 — Codex — Continued Stage 1 local implementation: added a `?test=1`
   POC collaborator identity gate (`?testUser=...` or prompt), Convex-backed
   `livePocUsers` heartbeat/listing, and a live editor identity bar. Verified
