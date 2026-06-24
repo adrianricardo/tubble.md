@@ -141,12 +141,13 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       `deleteDocument` functions plus a compact Live Documents sidebar panel for
       web create/rename/delete. — *Owner: Codex · Started: 2026-06-24 · Landed:
       2026-06-24 · PR: https://github.com/adrianricardo/hubble.md/pull/3*
-- [~] One-way markdown **projection on read** (doc → markdown). Added
+- [x] One-way markdown **projection on read** (doc → markdown). Added
       `prosemirror.getMarkdownProjection(docId)` to read the authoritative
       ProseMirror document via `prosemirror-sync.getDoc` and return markdown from
       Hubble's existing `tiptapDocToMarkdown` converter. Exposed as a read-only
       mutation because the upstream component requires a mutation-capable context.
-      Unmerged. — *Owner: Codex · Started: 2026-06-24*
+      — *Owner: Codex · Started: 2026-06-24 · Landed: 2026-06-24 · PR:
+      https://github.com/adrianricardo/hubble.md/pull/4*
 - [ ] Migrate the whole-file sync path (`packages/sync`) to an import/export role. — *_*
 - [ ] "Last edited by / at" on documents. — *_*
 
@@ -193,6 +194,9 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-24 — Codex — Merged Stage 2 markdown projection PR #4 and marked the
+  one-way doc-to-markdown projection task complete with PR
+  https://github.com/adrianricardo/hubble.md/pull/4.
 - 2026-06-24 — Codex — Started Stage 2 markdown projection: added a read-only
   `getMarkdownProjection(docId)` Convex mutation that projects the authoritative
   ProseMirror document to markdown with Hubble's existing converter. Kept the
