@@ -136,7 +136,10 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       timestamp, and workspace indexes. — *Owner: Codex · Started: 2026-06-24 ·
       Landed: 2026-06-24 · PR:
       https://github.com/adrianricardo/hubble.md/pull/2*
-- [ ] Document CRUD (list/create/rename/delete) in the web app. — *_*
+- [~] Document CRUD (list/create/rename/delete) in the web app. Added Convex
+      `listDocumentsByWorkspace`, `createDocument`, `renameDocument`, and
+      `deleteDocument` functions plus a compact Live Documents sidebar panel for
+      web create/rename/delete. Unmerged. — *Owner: Codex · Started: 2026-06-24*
 - [ ] One-way markdown **projection on read** (doc → markdown). — *_*
 - [ ] Migrate the whole-file sync path (`packages/sync`) to an import/export role. — *_*
 - [ ] "Last edited by / at" on documents. — *_*
@@ -184,6 +187,9 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-24 — Codex — Started Stage 2 Document CRUD: added Convex document
+  list/create/rename/delete functions and a web sidebar Live Documents panel.
+  Kept the task `[~]` until this branch is merged and verified.
 - 2026-06-24 — Codex — Merged Stage 2 documents-table PR #2 and marked the
   stable-ID `documents` table task complete with PR
   https://github.com/adrianricardo/hubble.md/pull/2.

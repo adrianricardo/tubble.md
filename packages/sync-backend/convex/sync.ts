@@ -88,6 +88,121 @@ export const listWorkspaces = query({
 	},
 });
 
+// --- Live Documents (Stage 2 realtime-collab) ---
+
+async function assertNoActiveDocumentPath(
+	ctx: MutationCtx,
+	workspaceId: Id<"workspaces">,
+	path: string,
+	ignoreDocumentId?: Id<"documents">,
+) {
+	const matches = await ctx.db
+		.query("documents")
+		.withIndex("by_workspace_path", (q) =>
+			q.eq("workspaceId", workspaceId).eq("path", path),
+		)
+		.collect();
+	const conflict = matches.find(
+		(document) =>
+			document.deletedAt === undefined && document._id !== ignoreDocumentId,
+	);
+	if (conflict) {
+		throw new Error(`Live Document path already exists: ${path}`);
+	}
+}
+
+export const listDocumentsByWorkspace = query({
+	args: {
+		workspaceId: v.id("workspaces"),
+		includeDeleted: v.optional(v.boolean()),
+	},
+	handler: async (ctx, { workspaceId, includeDeleted }) => {
+		const documents = await ctx.db
+			.query("documents")
+			.withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+			.collect();
+		return includeDeleted
+			? documents
+			: documents.filter((document) => document.deletedAt === undefined);
+	},
+});
+
+export const createDocument = mutation({
+	args: {
+		workspaceId: v.id("workspaces"),
+		title: v.string(),
+		path: v.optional(v.string()),
+		actor: v.optional(v.string()),
+	},
+	handler: async (ctx, { workspaceId, title, path, actor }) => {
+		const normalizedTitle = title.trim();
+		if (!normalizedTitle) throw new Error("Document title is required");
+		const normalizedPath = path?.trim() || undefined;
+		if (normalizedPath) {
+			await assertNoActiveDocumentPath(ctx, workspaceId, normalizedPath);
+		}
+		const now = Date.now();
+		return ctx.db.insert("documents", {
+			workspaceId,
+			title: normalizedTitle,
+			path: normalizedPath,
+			createdAt: now,
+			createdBy: actor,
+			updatedAt: now,
+			updatedBy: actor,
+		});
+	},
+});
+
+export const renameDocument = mutation({
+	args: {
+		documentId: v.id("documents"),
+		title: v.string(),
+		path: v.optional(v.string()),
+		actor: v.optional(v.string()),
+	},
+	handler: async (ctx, { documentId, title, path, actor }) => {
+		const existing = await ctx.db.get(documentId);
+		if (!existing || existing.deletedAt !== undefined) {
+			throw new Error("Live Document not found");
+		}
+		const normalizedTitle = title.trim();
+		if (!normalizedTitle) throw new Error("Document title is required");
+		const normalizedPath = path?.trim() || undefined;
+		if (normalizedPath) {
+			await assertNoActiveDocumentPath(
+				ctx,
+				existing.workspaceId,
+				normalizedPath,
+				documentId,
+			);
+		}
+		await ctx.db.patch(documentId, {
+			title: normalizedTitle,
+			path: normalizedPath,
+			updatedAt: Date.now(),
+			updatedBy: actor,
+		});
+	},
+});
+
+export const deleteDocument = mutation({
+	args: {
+		documentId: v.id("documents"),
+		actor: v.optional(v.string()),
+	},
+	handler: async (ctx, { documentId, actor }) => {
+		const existing = await ctx.db.get(documentId);
+		if (!existing || existing.deletedAt !== undefined) return;
+		const now = Date.now();
+		await ctx.db.patch(documentId, {
+			deletedAt: now,
+			updatedAt: now,
+			updatedBy: actor,
+		});
+	},
+});
+
 export const getFilesByWorkspace = query({
 	args: {
 		workspaceId: v.id("workspaces"),
