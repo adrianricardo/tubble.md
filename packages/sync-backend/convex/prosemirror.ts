@@ -4,7 +4,7 @@
 // component is registered in convex.config.ts.
 
 import { ProsemirrorSync } from "@convex-dev/prosemirror-sync";
-import { getHubbleEditorSchema } from "@hubble.md/editor";
+import { getHubbleEditorSchema, tiptapDocToMarkdown } from "@hubble.md/editor";
 import { Transform } from "@tiptap/pm/transform";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
@@ -23,6 +23,22 @@ export const {
 	submitSteps,
 } = prosemirrorSync.syncApi({
 	// checkRead / checkWrite hooks go here in Stage 3.
+});
+
+// Read-only markdown projection from the cloud-authoritative ProseMirror doc.
+// This is a mutation because prosemirror-sync's `getDoc` API requires a
+// mutation-capable Convex context, but this handler does not write.
+export const getMarkdownProjection = mutation({
+	args: { docId: v.string() },
+	handler: async (ctx, { docId }) => {
+		const schema = getHubbleEditorSchema();
+		const { doc, version } = await prosemirrorSync.getDoc(ctx, docId, schema);
+		return {
+			docId,
+			version,
+			markdown: tiptapDocToMarkdown(doc.toJSON()),
+		};
+	},
 });
 
 // --- Agent edit path (Model C) -------------------------------------------
