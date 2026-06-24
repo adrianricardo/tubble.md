@@ -38,6 +38,27 @@ export type SyncResult = {
 	assetsDeleted: number;
 };
 
+export type LiveDocumentImportInput = {
+	workspaceId: string;
+	title: string;
+	markdown: string;
+	path?: string;
+	actor?: string;
+};
+
+export type LiveDocumentImportResult = {
+	documentId: string;
+	syncId: string;
+	version: number;
+};
+
+export type LiveDocumentExportResult = {
+	documentId: string;
+	syncId: string;
+	version: number;
+	markdown: string;
+};
+
 export type RemoteFile = {
 	_id: string;
 	path: string;

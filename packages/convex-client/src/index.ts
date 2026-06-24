@@ -27,6 +27,17 @@ export function createConvexBackend(url: string): SyncBackend {
 		async createWorkspace(name) {
 			return client.mutation(api.sync.createWorkspace, { name });
 		},
+		async importLiveDocument(args) {
+			return client.mutation(api.prosemirror.importMarkdownDocument, {
+				...args,
+				workspaceId: args.workspaceId as Id<"workspaces">,
+			});
+		},
+		async exportLiveDocumentMarkdown(documentId) {
+			return client.mutation(api.prosemirror.exportMarkdownDocument, {
+				documentId: documentId as Id<"documents">,
+			});
+		},
 		async getFiles(workspaceId, opts) {
 			const files = await client.query(api.sync.getFilesByWorkspace, {
 				workspaceId: workspaceId as Id<"workspaces">,

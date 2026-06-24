@@ -4,13 +4,38 @@
 // component is registered in convex.config.ts.
 
 import { ProsemirrorSync } from "@convex-dev/prosemirror-sync";
-import { getHubbleEditorSchema, tiptapDocToMarkdown } from "@hubble.md/editor";
+import {
+	getHubbleEditorSchema,
+	markdownToTiptapDoc,
+	tiptapDocToMarkdown,
+} from "@hubble.md/editor";
 import { Transform } from "@tiptap/pm/transform";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
-import { mutation } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { type MutationCtx, mutation } from "./_generated/server";
 
 const prosemirrorSync = new ProsemirrorSync(components.prosemirrorSync);
+
+function syncIdForLiveDocument(documentId: Id<"documents">): string {
+	return `live:${documentId}`;
+}
+
+async function assertNoActiveDocumentPath(
+	ctx: MutationCtx,
+	workspaceId: Id<"workspaces">,
+	path: string,
+) {
+	const matches = await ctx.db
+		.query("documents")
+		.withIndex("by_workspace_path", (q) =>
+			q.eq("workspaceId", workspaceId).eq("path", path),
+		)
+		.collect();
+	if (matches.some((document) => document.deletedAt === undefined)) {
+		throw new Error(`Live Document path already exists: ${path}`);
+	}
+}
 
 // Realtime sync endpoints consumed by the Tiptap client via `useTiptapSync`.
 // TODO(stage-3): gate these behind document permission checks (owner/editor/
@@ -35,6 +60,66 @@ export const getMarkdownProjection = mutation({
 		const { doc, version } = await prosemirrorSync.getDoc(ctx, docId, schema);
 		return {
 			docId,
+			version,
+			markdown: tiptapDocToMarkdown(doc.toJSON()),
+		};
+	},
+});
+
+export const importMarkdownDocument = mutation({
+	args: {
+		workspaceId: v.id("workspaces"),
+		title: v.string(),
+		markdown: v.string(),
+		path: v.optional(v.string()),
+		actor: v.optional(v.string()),
+	},
+	handler: async (ctx, { workspaceId, title, markdown, path, actor }) => {
+		const normalizedTitle = title.trim();
+		if (!normalizedTitle) throw new Error("Document title is required");
+		const normalizedPath = path?.trim() || undefined;
+		if (normalizedPath) {
+			await assertNoActiveDocumentPath(ctx, workspaceId, normalizedPath);
+		}
+
+		const now = Date.now();
+		const documentId = await ctx.db.insert("documents", {
+			workspaceId,
+			title: normalizedTitle,
+			path: normalizedPath,
+			createdAt: now,
+			createdBy: actor,
+			updatedAt: now,
+			updatedBy: actor,
+		});
+		const schema = getHubbleEditorSchema();
+		await prosemirrorSync.create(
+			ctx,
+			syncIdForLiveDocument(documentId),
+			markdownToTiptapDoc(markdown),
+		);
+		const { version } = await prosemirrorSync.getDoc(
+			ctx,
+			syncIdForLiveDocument(documentId),
+			schema,
+		);
+		return { documentId, syncId: syncIdForLiveDocument(documentId), version };
+	},
+});
+
+export const exportMarkdownDocument = mutation({
+	args: { documentId: v.id("documents") },
+	handler: async (ctx, { documentId }) => {
+		const document = await ctx.db.get(documentId);
+		if (!document || document.deletedAt !== undefined) {
+			throw new Error("Live Document not found");
+		}
+		const syncId = syncIdForLiveDocument(documentId);
+		const schema = getHubbleEditorSchema();
+		const { doc, version } = await prosemirrorSync.getDoc(ctx, syncId, schema);
+		return {
+			documentId,
+			syncId,
 			version,
 			markdown: tiptapDocToMarkdown(doc.toJSON()),
 		};

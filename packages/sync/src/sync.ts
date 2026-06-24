@@ -11,6 +11,8 @@ import type { FileSystem, InitFileSystem } from "./fs.js";
 import type {
 	CloudSyncConfig,
 	FileState,
+	LiveDocumentExportResult,
+	LiveDocumentImportResult,
 	RemoteAsset,
 	SyncResult,
 	WorkspaceConfig,
@@ -43,6 +45,53 @@ export async function init(
 	};
 	await writeSyncState(fs, opts.workspacePath, { lastSyncedAt: 0, files: {} });
 	return writeCloudSyncConfig(fs, opts.workspacePath, cloudSync);
+}
+
+export async function importLiveDocumentFromMarkdown(
+	backend: SyncBackend,
+	fs: FileSystem,
+	workspacePath: string,
+	input: {
+		path: string;
+		title?: string;
+		actor?: string;
+	},
+): Promise<LiveDocumentImportResult> {
+	const config = await readConfig(fs, workspacePath);
+	if (!config.cloudSync) {
+		throw new Error(
+			`No Cloud Sync config in ${workspacePath}. Run \`hubble cloud connect\` first.`,
+		);
+	}
+	const markdown = await fs.readFile(`${workspacePath}/${input.path}`);
+	return backend.importLiveDocument({
+		workspaceId: config.cloudSync.workspaceId,
+		title: input.title ?? titleFromPath(input.path),
+		path: input.path,
+		markdown,
+		actor: input.actor ?? config.cloudSync.deviceId,
+	});
+}
+
+export async function exportLiveDocumentToMarkdown(
+	backend: SyncBackend,
+	fs: FileSystem,
+	workspacePath: string,
+	input: {
+		documentId: string;
+		path: string;
+	},
+): Promise<LiveDocumentExportResult> {
+	const config = await readConfig(fs, workspacePath);
+	if (!config.cloudSync) {
+		throw new Error(
+			`No Cloud Sync config in ${workspacePath}. Run \`hubble cloud connect\` first.`,
+		);
+	}
+	const exported = await backend.exportLiveDocumentMarkdown(input.documentId);
+	await ensureParentDir(fs, workspacePath, input.path);
+	await fs.writeFile(`${workspacePath}/${input.path}`, exported.markdown);
+	return exported;
 }
 
 /** Run a full sync: push local changes, pull remote changes, detect conflicts. */
@@ -334,4 +383,18 @@ function toConflictName(filePath: string): string {
 	const dot = filePath.lastIndexOf(".");
 	if (dot === -1) return `${filePath}.conflict-${ts}`;
 	return `${filePath.slice(0, dot)}.conflict-${ts}${filePath.slice(dot)}`;
+}
+
+function titleFromPath(path: string): string {
+	const fileName = path.split("/").pop() ?? path;
+	return fileName.replace(/\.md$/i, "") || "Untitled";
+}
+
+async function ensureParentDir(
+	fs: FileSystem,
+	workspacePath: string,
+	path: string,
+) {
+	const slash = path.lastIndexOf("/");
+	if (slash > 0) await fs.ensureDir(`${workspacePath}/${path.slice(0, slash)}`);
 }

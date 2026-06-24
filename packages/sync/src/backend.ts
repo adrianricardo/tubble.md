@@ -1,9 +1,22 @@
-import type { RemoteAsset, RemoteFile } from "./types.js";
+import type {
+	LiveDocumentExportResult,
+	LiveDocumentImportInput,
+	LiveDocumentImportResult,
+	RemoteAsset,
+	RemoteFile,
+} from "./types.js";
 
 /** Backend-agnostic interface for sync operations. */
 export interface SyncBackend {
 	getWorkspace(name: string): Promise<string | null>;
 	createWorkspace(name: string): Promise<string>;
+
+	importLiveDocument(
+		args: LiveDocumentImportInput,
+	): Promise<LiveDocumentImportResult>;
+	exportLiveDocumentMarkdown(
+		documentId: string,
+	): Promise<LiveDocumentExportResult>;
 
 	getFiles(
 		workspaceId: string,
