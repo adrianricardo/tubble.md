@@ -48,7 +48,7 @@ tests fail or a step was skipped, say so in the task note.
 | Stage | Status | Summary |
 |---|---|---|
 | 1. Realtime editing POC | 🟡 In progress | Spike scaffolded; gate provisionally passed (see SPIKE.md). POC identity gate added locally; live two-browser test pending. |
-| 2. Documents as cloud entities | 🔴 Not started | Stable doc IDs, doc CRUD, markdown projection |
+| 2. Documents as cloud entities | 🟡 In progress | Stable doc table + web CRUD implemented locally; markdown projection pending |
 | 3. Team permissions | 🔴 Not started | Users, members, per-doc roles, sharing |
 | 4. Agent collaboration (Model C) | 🔴 Not started | Doc patch API + MCP/CLI, projection, legacy shim |
 | 5. Version history & review | 🔴 Not started | Revisions + restore, comments, suggestions |
@@ -115,10 +115,19 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       `realtime-poc.md`; demoable from local Convex + web dev servers. Keep `[~]`
       until merged. — *Owner: Adrian/Codex · Started: 2026-06-24*
 
-## Stage 2 — Documents as cloud entities 🔴
+## Stage 2 — Documents as cloud entities 🟡
 
-- [ ] `documents` table with **stable IDs**; path/title become mutable metadata. — *_*
-- [ ] Document CRUD (list/create/rename/delete) in the web app. — *_*
+- [~] `documents` table with **stable IDs**; path/title become mutable metadata.
+      Implemented locally in Convex schema with mutable title/path metadata and
+      audit fields; verified `convex codegen`, `pnpm check`, and
+      `pnpm build:desktop`. Unmerged. — *Owner: Codex · Started: 2026-06-24*
+- [~] Document CRUD (list/create/rename/delete) in the web app. Implemented
+      locally with Convex document queries/mutations, stable `/d/:documentId`
+      routes, a Live Documents sidebar section, and document-mode editor loading.
+      Verified `convex codegen`, `@hubble.md/www` typecheck/build, `pnpm check`,
+      `pnpm build:desktop`, and Vite served `?test=1`; interactive browser smoke
+      was skipped because no Browser tool/Playwright dependency was available.
+      Unmerged. — *Owner: Codex · Started: 2026-06-24*
 - [ ] One-way markdown **projection on read** (doc → markdown). — *_*
 - [ ] Migrate the whole-file sync path (`packages/sync`) to an import/export role. — *_*
 - [ ] "Last edited by / at" on documents. — *_*
@@ -166,6 +175,17 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-24 — Codex — Continued Stage 2 cloud document entities: added Convex
+  document CRUD functions, stable web document routes, a Live Documents sidebar
+  section for list/create/rename/delete, and document-mode editor loading using a
+  stable ProseMirror sync ID. Verified `convex codegen`, `@hubble.md/www`
+  typecheck/build, `pnpm check`, `pnpm build:desktop`, and Vite serving `?test=1`;
+  interactive browser smoke was skipped because no Browser tool/Playwright
+  dependency was available.
+- 2026-06-24 — Codex — Started Stage 2 cloud document entities: added a Convex
+  `documents` table with stable `_id`, mutable title/path metadata, audit fields,
+  and workspace indexes. Verified `convex codegen`, `pnpm check`, and
+  `pnpm build:desktop`.
 - 2026-06-24 — Codex — Continued Stage 1 local implementation: added a `?test=1`
   POC collaborator identity gate (`?testUser=...` or prompt), Convex-backed
   `livePocUsers` heartbeat/listing, and a live editor identity bar. Verified

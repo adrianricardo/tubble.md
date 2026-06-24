@@ -28,6 +28,7 @@ type Props = {
 	workspaceId: string;
 	path: string;
 	initialMarkdown: string;
+	syncDocumentId?: string;
 	testIdentity: TestIdentity | null;
 };
 
@@ -41,16 +42,19 @@ const REMOTE_CURSOR_COLORS = [
 	"#0891b2",
 ];
 
+const noopChange = () => {};
+
 export function EditorView({
 	workspaceId,
 	path,
 	initialMarkdown,
+	syncDocumentId,
 	testIdentity,
 }: Props) {
 	const files = useStoreValue(filesStore);
 	const docId = useMemo(
-		() => `poc:${workspaceId}:${path}`,
-		[workspaceId, path],
+		() => syncDocumentId ?? `poc:${workspaceId}:${path}`,
+		[syncDocumentId, workspaceId, path],
 	);
 	const convexWorkspaceId = workspaceId as Id<"workspaces">;
 	const initialBody = useMemo(
@@ -150,8 +154,8 @@ export function EditorView({
 			onDrop={(editor, event) => handleImageDrop({ editor, event })}
 			onSelectionChange={publishSelection}
 			persistChanges={false}
-			onLocalChange={updateEditorContent}
-			onSave={savePathContent}
+			onLocalChange={syncDocumentId ? noopChange : updateEditorContent}
+			onSave={syncDocumentId ? noopChange : savePathContent}
 			onOpenExternalLink={(href) => {
 				window.open(href, "_blank", "noopener");
 			}}

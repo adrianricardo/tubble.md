@@ -35,8 +35,10 @@ type Props = {
 	url: string;
 	workspaceId: string;
 	filePath: string | null;
+	documentId: string | null;
 	testIdentity: TestIdentity | null;
 	onSelectFile: (path: string) => void;
+	onSelectDocument: (documentId: string) => void;
 	onSwitch: (id: string) => void;
 	onWorkspaceLoaded: (workspaceId: string) => void;
 	onDisconnect: () => void;
@@ -46,8 +48,10 @@ export function AppShell({
 	url,
 	workspaceId,
 	filePath,
+	documentId,
 	testIdentity,
 	onSelectFile,
+	onSelectDocument,
 	onSwitch,
 	onWorkspaceLoaded,
 	onDisconnect,
@@ -70,12 +74,16 @@ export function AppShell({
 
 	useEffect(() => {
 		if (workspace.snapshot?.id !== workspaceId) return;
+		if (documentId) {
+			clearCurrentPath();
+			return;
+		}
 		if (filePath) {
 			if (viewerStore.get().currentPath !== filePath) void loadPath(filePath);
 			return;
 		}
 		clearCurrentPath();
-	}, [filePath, workspace.snapshot?.id, workspaceId]);
+	}, [documentId, filePath, workspace.snapshot?.id, workspaceId]);
 
 	useEffect(() => {
 		return () => {
@@ -191,7 +199,9 @@ export function AppShell({
 						url={url}
 						workspaceId={workspace.snapshot.id}
 						workspaceName={workspace.snapshot.name}
+						selectedDocumentId={documentId}
 						onSelectFile={onSelectFile}
+						onSelectDocument={onSelectDocument}
 						onSwitch={onSwitch}
 						onDisconnect={onDisconnect}
 					/>
@@ -249,7 +259,14 @@ export function AppShell({
 						)}
 					</form>
 				)}
-				{viewer.currentPath && (
+				{documentId && (
+					<LiveDocumentView
+						workspaceId={workspace.snapshot.id}
+						documentId={documentId}
+						testIdentity={testIdentity}
+					/>
+				)}
+				{!documentId && viewer.currentPath && (
 					<div className="flex h-full min-h-0 flex-col">
 						{testIdentity && (
 							<LivePocIdentityBar
@@ -280,13 +297,14 @@ export function AppShell({
 						/>
 					</div>
 				)}
-				{!viewer.currentPath && viewer.status === "loading" && (
+				{!documentId && !viewer.currentPath && viewer.status === "loading" && (
 					<p className="p-6 text-sm text-muted-foreground">Loading…</p>
 				)}
-				{!viewer.currentPath && viewer.status === "error" && (
+				{!documentId && !viewer.currentPath && viewer.status === "error" && (
 					<p className="p-6 text-sm text-destructive">{viewer.error}</p>
 				)}
-				{!viewer.currentPath &&
+				{!documentId &&
+					!viewer.currentPath &&
 					viewer.status !== "loading" &&
 					viewer.status !== "error" &&
 					workspace.filesLoaded && (
@@ -301,6 +319,60 @@ export function AppShell({
 	);
 }
 
+function LiveDocumentView({
+	workspaceId,
+	documentId,
+	testIdentity,
+}: {
+	workspaceId: string;
+	documentId: string;
+	testIdentity: TestIdentity | null;
+}) {
+	const document = useQuery(api.documents.get, {
+		documentId: documentId as Id<"documents">,
+	});
+	// Live Documents must not follow mutable path/title metadata; the Convex
+	// document ID is the stable collaboration authority.
+	const syncDocId = `document:${documentId}`;
+
+	if (document === undefined) {
+		return (
+			<div className="flex h-full items-center justify-center [padding:1.5rem]">
+				<p className="text-sm text-muted-foreground">Loading document…</p>
+			</div>
+		);
+	}
+
+	if (document === null) {
+		return (
+			<div className="flex h-full items-center justify-center [padding:1.5rem]">
+				<p className="text-sm text-muted-foreground">Document not found.</p>
+			</div>
+		);
+	}
+
+	const path = document.path ?? withMarkdownExtension(document.title);
+
+	return (
+		<div className="flex h-full min-h-0 flex-col">
+			{testIdentity && (
+				<LivePocIdentityBar
+					workspaceId={workspaceId}
+					docId={syncDocId}
+					identity={testIdentity}
+				/>
+			)}
+			<EditorView
+				workspaceId={workspaceId}
+				path={path}
+				initialMarkdown=""
+				syncDocumentId={syncDocId}
+				testIdentity={testIdentity}
+			/>
+		</div>
+	);
+}
+
 function normalizeNotePath(name: string): string {
 	const trimmed = name.trim();
 	if (!trimmed) return "";
@@ -310,15 +382,17 @@ function normalizeNotePath(name: string): string {
 function LivePocIdentityBar({
 	workspaceId,
 	path,
+	docId: providedDocId,
 	identity,
 }: {
 	workspaceId: string;
-	path: string;
+	path?: string;
+	docId?: string;
 	identity: TestIdentity;
 }) {
 	const docId = useMemo(
-		() => `poc:${workspaceId}:${path}`,
-		[workspaceId, path],
+		() => providedDocId ?? `poc:${workspaceId}:${path ?? ""}`,
+		[providedDocId, workspaceId, path],
 	);
 	const convexWorkspaceId = workspaceId as Id<"workspaces">;
 	const heartbeat = useMutation(api.pocIdentity.heartbeat);

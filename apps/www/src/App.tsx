@@ -136,6 +136,19 @@ function AppRoutes() {
 					/>
 				}
 			/>
+			<Route
+				path="/w/:workspaceId/d/:documentId"
+				element={
+					<WorkspaceRoute
+						connection={connection}
+						filePath={null}
+						onConnected={handleConnected}
+						onTestIdentitySelected={handleTestIdentitySelected}
+						onWorkspaceLoaded={handleWorkspaceLoaded}
+						onDisconnect={handleDisconnect}
+					/>
+				}
+			/>
 			<Route path="*" element={<Navigate to="/" replace />} />
 		</Routes>
 	);
@@ -204,6 +217,7 @@ function WorkspaceRoute({
 	const params = useParams();
 	const navigate = useNavigate();
 	const workspaceId = params.workspaceId;
+	const documentId = params.documentId ?? null;
 	const routeFilePath =
 		filePath === undefined ? (params["*"] ?? null) : filePath;
 
@@ -222,9 +236,13 @@ function WorkspaceRoute({
 			url={connection.url}
 			workspaceId={workspaceId}
 			filePath={routeFilePath}
+			documentId={documentId}
 			testIdentity={connection.testIdentity}
 			onSelectFile={(path) => {
 				navigate(workspaceFileRoute(workspaceId, path));
+			}}
+			onSelectDocument={(id) => {
+				navigate(workspaceDocumentRoute(workspaceId, id));
 			}}
 			onSwitch={(id) => {
 				navigate(workspaceRoute(id));
@@ -244,6 +262,13 @@ function workspaceFileRoute(workspaceId: string, path: string): string {
 		.split("/")
 		.map(encodeURIComponent)
 		.join("/")}`;
+}
+
+function workspaceDocumentRoute(
+	workspaceId: string,
+	documentId: string,
+): string {
+	return `${workspaceRoute(workspaceId)}/d/${encodeURIComponent(documentId)}`;
 }
 
 function getWorkspaceIdFromPath(pathname: string): string | null {

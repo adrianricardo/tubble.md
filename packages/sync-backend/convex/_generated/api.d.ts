@@ -9,6 +9,7 @@
  */
 
 import type * as crons from "../crons.js";
+import type * as documents from "../documents.js";
 import type * as orphanAssets from "../orphanAssets.js";
 import type * as pocIdentity from "../pocIdentity.js";
 import type * as prosemirror from "../prosemirror.js";
@@ -22,6 +23,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   crons: typeof crons;
+  documents: typeof documents;
   orphanAssets: typeof orphanAssets;
   pocIdentity: typeof pocIdentity;
   prosemirror: typeof prosemirror;
