@@ -17,6 +17,11 @@ export {
 } from "./editor/EditorView";
 export { FormattingStatusBar } from "./editor/FormattingStatusBar";
 export { LinkCreationGhostExtension } from "./editor/LinkCreationGhostExtension";
+export {
+	type RemotePresenceCursor,
+	RemotePresenceExtension,
+	remotePresenceKey,
+} from "./editor/RemotePresenceExtension";
 export { SmartLinkExtension } from "./editor/SmartLinkExtension";
 export { VirtualCursor } from "./editor/VirtualCursor";
 export type { VirtualCursorMode } from "./editor/virtualCursorMode";

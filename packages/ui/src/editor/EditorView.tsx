@@ -1,23 +1,17 @@
 import {
 	combineMarkdownFrontMatter,
-	HeadingExtension,
-	LinkExtension,
-	listExtensions,
-	MarkdownRolloverExtension,
+	createHubbleEditorExtensions,
 	markdownToTiptapDoc,
 	parseMarkdownFrontMatter,
-	StrikethroughShortcutExtension,
 	tiptapDocToMarkdown,
 } from "@hubble.md/editor";
-import type { Editor } from "@tiptap/core";
-import { TaskItem } from "@tiptap/extension-list";
+import type { Content, Editor } from "@tiptap/core";
 import {
 	EditorContent,
 	type EditorOptions,
 	type JSONContent,
 	useEditor,
 } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CODE_BLOCK_COPY_EVENT, HubbleCodeBlock } from "./CodeBlockExtension";
 import { LinkClickExtension } from "./LinkClickExtension";
@@ -33,6 +27,11 @@ import {
 } from "./FilePropertiesPanel";
 import { FormatCommandMenu } from "./FormatCommandMenu";
 import { FormattingStatusBar } from "./FormattingStatusBar";
+import {
+	type RemotePresenceCursor,
+	RemotePresenceExtension,
+	remotePresenceKey,
+} from "./RemotePresenceExtension";
 import type { VirtualCursorMode } from "./virtualCursorMode";
 
 const DEFAULT_SAVE_DEBOUNCE_MS = 120;
@@ -42,11 +41,15 @@ export type { WikiTarget };
 export type EditorViewProps = {
 	path: string;
 	initialMarkdown: string;
+	initialContent?: Content;
 	wikiTargets?: WikiTarget[];
+	remotePresence?: RemotePresenceCursor[];
 	extensions?: EditorOptions["extensions"];
 	editorProps?: EditorOptions["editorProps"];
 	onPaste?: (editor: Editor, event: ClipboardEvent) => boolean;
 	onDrop?: (editor: Editor, event: DragEvent) => boolean;
+	onSelectionChange?: (selection: { anchor: number; head: number }) => void;
+	persistChanges?: boolean;
 	saveDebounceMs?: number;
 	onLocalChange: (path: string, markdown: string) => void;
 	onSave: (path: string, markdown: string) => void | Promise<void>;
@@ -59,11 +62,15 @@ export type EditorViewProps = {
 export function EditorView({
 	path,
 	initialMarkdown,
+	initialContent,
 	wikiTargets = [],
+	remotePresence = [],
 	extensions = [],
 	editorProps,
 	onPaste,
 	onDrop,
+	onSelectionChange,
+	persistChanges = true,
 	saveDebounceMs = DEFAULT_SAVE_DEBOUNCE_MS,
 	onLocalChange,
 	onSave,
@@ -118,6 +125,7 @@ export function EditorView({
 	);
 
 	const scheduleSave = useCallback(() => {
+		if (!persistChanges) return;
 		const savePath = pathRef.current;
 		if (saveTimerRef.current !== null) {
 			window.clearTimeout(saveTimerRef.current);
@@ -125,24 +133,18 @@ export function EditorView({
 		saveTimerRef.current = window.setTimeout(() => {
 			void onSave(savePath, latestMarkdownRef.current);
 		}, saveDebounceMs);
-	}, [onSave, saveDebounceMs]);
+	}, [onSave, persistChanges, saveDebounceMs]);
 
 	const editor = useEditor({
 		extensions: [
-			StarterKit.configure({ codeBlock: false, listItem: false }),
-			HubbleCodeBlock,
-			LinkExtension,
+			...createHubbleEditorExtensions({ codeBlock: HubbleCodeBlock }),
 			SmartLinkExtension,
 			LinkClickExtension.configure({ onOpenExternalLink, onOpenWikiLink }),
 			LinkCreationGhostExtension,
-			HeadingExtension,
-			MarkdownRolloverExtension,
-			StrikethroughShortcutExtension,
-			...listExtensions,
+			RemotePresenceExtension,
 			...extensions,
-			TaskItem.configure({ nested: true }),
 		],
-		content: initialDoc,
+		content: initialContent ?? initialDoc,
 		onUpdate: ({ editor: current }) => {
 			const doc = current.getJSON() as JSONContent;
 			if (hasUploadImage(doc)) return;
@@ -155,6 +157,10 @@ export function EditorView({
 			latestMarkdownRef.current = markdown;
 			onLocalChange(pathRef.current, markdown);
 			scheduleSave();
+		},
+		onSelectionUpdate: ({ editor: current }) => {
+			const { anchor, head } = current.state.selection;
+			onSelectionChange?.({ anchor, head });
 		},
 		editorProps: {
 			...editorProps,
@@ -177,6 +183,13 @@ export function EditorView({
 		},
 	});
 	editorRef.current = editor;
+
+	useEffect(() => {
+		if (!editor) return;
+		editor.view.dispatch(
+			editor.state.tr.setMeta(remotePresenceKey, remotePresence),
+		);
+	}, [editor, remotePresence]);
 
 	useEffect(() => {
 		if (!editor || !editorViewportEl) return;
@@ -212,13 +225,14 @@ export function EditorView({
 
 	useEffect(() => {
 		return () => {
+			if (!persistChanges) return;
 			if (saveTimerRef.current !== null) {
 				window.clearTimeout(saveTimerRef.current);
 				saveTimerRef.current = null;
 				void onSave(path, latestMarkdownRef.current);
 			}
 		};
-	}, [path, onSave]);
+	}, [path, onSave, persistChanges]);
 
 	useEffect(() => {
 		if (!onMessage) return;

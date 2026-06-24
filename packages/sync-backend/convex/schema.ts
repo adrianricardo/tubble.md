@@ -31,4 +31,16 @@ export default defineSchema({
 	})
 		.index("by_workspace", ["workspaceId", "updatedAt"])
 		.index("by_workspace_path", ["workspaceId", "path"]),
+
+	livePocUsers: defineTable({
+		workspaceId: v.id("workspaces"),
+		docId: v.string(),
+		userId: v.string(),
+		name: v.string(),
+		anchor: v.optional(v.number()),
+		head: v.optional(v.number()),
+		updatedAt: v.number(),
+	})
+		.index("by_doc", ["docId", "updatedAt"])
+		.index("by_doc_user", ["docId", "userId"]),
 });

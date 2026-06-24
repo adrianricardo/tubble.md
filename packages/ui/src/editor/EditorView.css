@@ -34,6 +34,43 @@
 	font-size: var(--font-size-content);
 }
 
+[data-hubble-editor] .pm-remote-selection {
+	background: color-mix(
+		in oklab,
+		var(--remote-presence-color) 22%,
+		transparent
+	);
+}
+
+[data-hubble-editor] .pm-remote-caret {
+	position: relative;
+	display: inline-block;
+	inline-size: 0;
+	block-size: 1em;
+	border-inline-start: 2px solid var(--remote-presence-color);
+	pointer-events: none;
+	vertical-align: text-top;
+}
+
+[data-hubble-editor] .pm-remote-caret-label {
+	position: absolute;
+	inset-block-start: -1.45rem;
+	inset-inline-start: -1px;
+	z-index: 2;
+	max-inline-size: 8rem;
+	overflow: hidden;
+	border-radius: 0.2rem;
+	background: var(--remote-presence-color);
+	color: white;
+	font-size: 0.6875rem;
+	font-weight: 600;
+	line-height: 1;
+	padding-block: 0.25rem;
+	padding-inline: 0.35rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 [data-hubble-editor]
 	.ProseMirror
 	:is(h1, h2, h3, h4, h5, h6, p, ul, ol, blockquote, pre, table) {

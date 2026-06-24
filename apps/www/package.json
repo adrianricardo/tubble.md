@@ -20,6 +20,7 @@
 		"typecheck": "tsc -b --noEmit"
 	},
 	"dependencies": {
+		"@convex-dev/prosemirror-sync": "^0.2.4",
 		"@hubble.md/convex-client": "workspace:*",
 		"@hubble.md/editor": "workspace:*",
 		"@hubble.md/sync": "workspace:*",

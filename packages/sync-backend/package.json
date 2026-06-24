@@ -26,10 +26,16 @@
 		"dev": "convex dev"
 	},
 	"dependencies": {
+		"@convex-dev/prosemirror-sync": "^0.2.4",
+		"@hubble.md/editor": "workspace:*",
+		"@tiptap/pm": "^3.3.0",
 		"convex": "^1.21.0",
 		"remark-gfm": "^4.0.1",
 		"remark-parse": "^11.0.0",
 		"unified": "^11.0.5",
 		"unist-util-visit": "^5.1.0"
+	},
+	"devDependencies": {
+		"typescript": "~5.8.3"
 	}
 }

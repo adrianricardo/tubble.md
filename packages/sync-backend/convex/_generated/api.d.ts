@@ -10,6 +10,8 @@
 
 import type * as crons from "../crons.js";
 import type * as orphanAssets from "../orphanAssets.js";
+import type * as pocIdentity from "../pocIdentity.js";
+import type * as prosemirror from "../prosemirror.js";
 import type * as sync from "../sync.js";
 
 import type {
@@ -21,6 +23,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   orphanAssets: typeof orphanAssets;
+  pocIdentity: typeof pocIdentity;
+  prosemirror: typeof prosemirror;
   sync: typeof sync;
 }>;
 
@@ -50,4 +54,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  prosemirrorSync: import("@convex-dev/prosemirror-sync/_generated/component.js").ComponentApi<"prosemirrorSync">;
+};

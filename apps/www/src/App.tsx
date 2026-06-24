@@ -14,15 +14,24 @@ import { OpenWorkspaceScreen } from "./screens/OpenWorkspaceScreen";
 import { AppShell } from "./shell/AppShell";
 import { workspaceStore } from "./store/state";
 
+export type TestIdentity = {
+	userId: string;
+	name: string;
+};
+
 type Connection = {
 	url: string;
 	workspaceId: string | null;
+	testIdentity: TestIdentity | null;
 };
+
+const TEST_IDENTITY_STORAGE_KEY = "hubble.testIdentity";
 
 function initialConnection(): Connection | null {
 	const testConnection = readTestBootstrap();
 	if (testConnection) return testConnection;
-	return readConnection();
+	const storedConnection = readConnection();
+	return storedConnection ? { ...storedConnection, testIdentity: null } : null;
 }
 
 // Agent test bootstrap: navigating to /?test=1 skips the connect + workspace
@@ -40,7 +49,7 @@ function readTestBootstrap(): Connection | null {
 		);
 		return null;
 	}
-	return { url, workspaceId };
+	return { url, workspaceId, testIdentity: readTestIdentity(params) };
 }
 
 export default function App() {
@@ -68,12 +77,20 @@ function AppRoutes() {
 		setConnection({
 			url,
 			workspaceId: getWorkspaceIdFromPath(location.pathname),
+			testIdentity: null,
 		});
 	};
 
 	const handleWorkspaceLoaded = (workspaceId: string) => {
 		setConnection((current) =>
 			current ? { ...current, workspaceId } : current,
+		);
+	};
+
+	const handleTestIdentitySelected = (identity: TestIdentity) => {
+		writeTestIdentity(identity);
+		setConnection((current) =>
+			current ? { ...current, testIdentity: identity } : current,
 		);
 	};
 
@@ -89,6 +106,7 @@ function AppRoutes() {
 							handleWorkspaceLoaded(workspaceId);
 							navigate(workspaceRoute(workspaceId));
 						}}
+						onTestIdentitySelected={handleTestIdentitySelected}
 						onDisconnect={handleDisconnect}
 					/>
 				}
@@ -100,6 +118,7 @@ function AppRoutes() {
 						connection={connection}
 						filePath={null}
 						onConnected={handleConnected}
+						onTestIdentitySelected={handleTestIdentitySelected}
 						onWorkspaceLoaded={handleWorkspaceLoaded}
 						onDisconnect={handleDisconnect}
 					/>
@@ -111,6 +130,7 @@ function AppRoutes() {
 					<WorkspaceRoute
 						connection={connection}
 						onConnected={handleConnected}
+						onTestIdentitySelected={handleTestIdentitySelected}
 						onWorkspaceLoaded={handleWorkspaceLoaded}
 						onDisconnect={handleDisconnect}
 					/>
@@ -125,15 +145,21 @@ function HomeRoute({
 	connection,
 	onConnected,
 	onSelected,
+	onTestIdentitySelected,
 	onDisconnect,
 }: {
 	connection: Connection | null;
 	onConnected: (url: string) => void;
 	onSelected: (workspaceId: string) => void;
+	onTestIdentitySelected: (identity: TestIdentity) => void;
 	onDisconnect: () => void;
 }) {
 	if (!connection) {
 		return <ConnectScreen onConnected={onConnected} />;
+	}
+
+	if (connection.workspaceId && !connection.testIdentity && isTestBootstrap()) {
+		return <TestIdentityGate onSelected={onTestIdentitySelected} />;
 	}
 
 	if (connection.workspaceId) {
@@ -164,12 +190,14 @@ function WorkspaceRoute({
 	connection,
 	filePath,
 	onConnected,
+	onTestIdentitySelected,
 	onWorkspaceLoaded,
 	onDisconnect,
 }: {
 	connection: Connection | null;
 	filePath?: string | null;
 	onConnected: (url: string) => void;
+	onTestIdentitySelected: (identity: TestIdentity) => void;
 	onWorkspaceLoaded: (workspaceId: string) => void;
 	onDisconnect: () => void;
 }) {
@@ -185,11 +213,16 @@ function WorkspaceRoute({
 		return <ConnectScreen onConnected={onConnected} />;
 	}
 
+	if (!connection.testIdentity && isTestBootstrap()) {
+		return <TestIdentityGate onSelected={onTestIdentitySelected} />;
+	}
+
 	return (
 		<AppShell
 			url={connection.url}
 			workspaceId={workspaceId}
 			filePath={routeFilePath}
+			testIdentity={connection.testIdentity}
 			onSelectFile={(path) => {
 				navigate(workspaceFileRoute(workspaceId, path));
 			}}
@@ -216,4 +249,95 @@ function workspaceFileRoute(workspaceId: string, path: string): string {
 function getWorkspaceIdFromPath(pathname: string): string | null {
 	const match = /^\/w\/([^/]+)/.exec(pathname);
 	return match ? decodeURIComponent(match[1]) : null;
+}
+
+function isTestBootstrap(): boolean {
+	return new URLSearchParams(window.location.search).get("test") === "1";
+}
+
+function readTestIdentity(params: URLSearchParams): TestIdentity | null {
+	const queryName = params.get("testUser")?.trim();
+	if (queryName) {
+		const identity = identityFromName(queryName);
+		writeTestIdentity(identity);
+		return identity;
+	}
+
+	const raw = window.sessionStorage.getItem(TEST_IDENTITY_STORAGE_KEY);
+	if (!raw) return null;
+
+	try {
+		const value = JSON.parse(raw) as Partial<TestIdentity>;
+		if (!value.userId || !value.name) return null;
+		return { userId: value.userId, name: value.name };
+	} catch {
+		return null;
+	}
+}
+
+function writeTestIdentity(identity: TestIdentity): void {
+	window.sessionStorage.setItem(
+		TEST_IDENTITY_STORAGE_KEY,
+		JSON.stringify(identity),
+	);
+}
+
+function identityFromName(name: string): TestIdentity {
+	return {
+		userId: `poc:${slugify(name)}`,
+		name,
+	};
+}
+
+function slugify(value: string): string {
+	return (
+		value
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-|-$/g, "") || "user"
+	);
+}
+
+function TestIdentityGate({
+	onSelected,
+}: {
+	onSelected: (identity: TestIdentity) => void;
+}) {
+	const [name, setName] = useState("");
+
+	return (
+		<main className="flex h-dvh items-center justify-center bg-background text-foreground [padding-block:1.5rem] [padding-inline:1.5rem]">
+			<form
+				onSubmit={(event) => {
+					event.preventDefault();
+					const trimmed = name.trim();
+					if (!trimmed) return;
+					onSelected(identityFromName(trimmed));
+				}}
+				className="w-full max-w-sm rounded-sm border border-border bg-card [padding-block:1rem] [padding-inline:1rem]"
+			>
+				<label
+					htmlFor="test-identity"
+					className="block text-sm font-medium text-foreground"
+				>
+					Test collaborator
+				</label>
+				<input
+					id="test-identity"
+					type="text"
+					required
+					value={name}
+					onChange={(event) => setName(event.target.value)}
+					placeholder="Ada"
+					className="mt-3 w-full rounded-sm border border-border bg-background text-sm outline-none focus:border-ring [padding-block:0.5rem] [padding-inline:0.625rem]"
+				/>
+				<button
+					type="submit"
+					className="mt-3 w-full rounded-sm bg-primary text-sm font-medium text-primary-foreground [padding-block:0.5rem] [padding-inline:0.75rem]"
+				>
+					Continue
+				</button>
+			</form>
+		</main>
+	);
 }

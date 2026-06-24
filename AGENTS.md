@@ -8,6 +8,19 @@ When asked why you made a decision, answer why. Don't take it as a challenge to 
 
 Comments aren't evil. Use doc comments on complex functions, or inline comments where the "why" behind code isn't immediately clear by the implementation. Continue omitting comments for other cases, by your best judgment.
 
+## Realtime collaboration fork
+
+This fork is evolving Hubble into a team Google-Docs replacement (realtime
+multiplayer editing, cloud version history, permissions, AI agents as live
+collaborators). If you are working on that effort:
+
+- **Read first:** `specs/realtime-collab/PRODUCT.md` (what/why) and
+  `specs/realtime-collab/TECH.md` (architecture + decisions).
+- **Track progress in** `specs/realtime-collab/PROGRESS.md` — it is the source of
+  truth for stage/task status. Read it before starting, update task status when
+  you start and finish, and append a dated Changelog line **in the same commit**
+  as your code. The file's header explains the exact protocol.
+
 ## Agent skills
 
 ### Issue tracker

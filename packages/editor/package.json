@@ -36,6 +36,7 @@
 		"@tiptap/core": "^3.4.3",
 		"@tiptap/extension-list": "^3.4.2",
 		"@tiptap/pm": "^3.3.0",
+		"@tiptap/starter-kit": "^3.4.3",
 		"hast-util-from-html": "^2.0.3",
 		"remark-gfm": "^4.0.1",
 		"remark-parse": "^11.0.0",

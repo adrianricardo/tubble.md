@@ -42,6 +42,10 @@ export { tiptapDocToMarkdown } from "./prosemirrorToMarkdown";
 export { StoredMarksDecorationExtension } from "./StoredMarksDecorationExtension";
 export { StrikethroughShortcutExtension } from "./StrikethroughShortcutExtension";
 export {
+	createHubbleEditorExtensions,
+	getHubbleEditorSchema,
+} from "./schema";
+export {
 	isSelectionAtStartOfNode,
 	nearestSharedParentOfType,
 	parentsOfType,

@@ -5,6 +5,7 @@ Glossary for shared terms across the project. Implementation details belong in c
 ## Flagged ambiguities
 
 - **A Workspace is defined by its configuration, not by the cloud.** Don't conflate "is this a Workspace?" (does the folder have a `.hubble/` configuration) with "is it synced?" ([[Cloud Sync]] enabled). A desktop Workspace can be local-only and gain Cloud Sync later. *(Note: not yet true in code — `init()` requires a Convex backend to mint a `workspaceId`. This is the subject of an active spec; see the deferred-cloud-sync handoff.)*
+- **Live Documents do not redefine all Workspace editing.** A [[Live Document]] is cloud-authoritative, but local-only [[Workspace]] editing, [[Plain Folder]] editing, and [[Loose File]] editing remain file-authoritative.
 - **"Open folder" (desktop runtime) vs "Workspace."** The desktop editor operates on any open folder path and reads/writes the filesystem directly; that folder may be a [[Workspace Folder]] or a [[Plain Folder]]. Say "open folder" for the runtime notion, "Workspace" for the configured logical entity.
 - **"Open file" can mean OS selection or editor navigation.** In desktop shell language, opening a file may mean choosing a Loose File from the operating system. In [[HTML App]] API language, opening a file means navigating the editor to a [[Markdown File]] inside the current [[Workspace]].
 
@@ -43,6 +44,12 @@ The optional capability that binds a [[Workspace]] to a Convex deployment, enabl
 ### Markdown File
 
 A markdown document on the local filesystem or in a Workspace.
+
+### Live Document
+
+A synced, realtime-editable document whose authoritative state is the cloud ProseMirror/OT document, not a markdown file on disk. A Live Document may project to markdown for reading, export, import, backups, and legacy tooling, but that markdown projection is not the normal write authority.
+
+Live Documents are distinct from ordinary [[Markdown File]] editing. Local-only [[Workspace]] editing, [[Plain Folder]] editing, and [[Loose File]] editing remain file-authoritative.
 
 ### HTML App
 
