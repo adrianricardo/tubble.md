@@ -47,7 +47,7 @@ tests fail or a step was skipped, say so in the task note.
 
 | Stage | Status | Summary |
 |---|---|---|
-| 1. Realtime editing POC | 🟡 In progress | Spike scaffolded; gate provisionally passed (see SPIKE.md). POC identity gate added locally; live two-browser test pending. |
+| 1. Realtime editing POC | 🟢 Done | Merged Stage 1 POC: conflict-free two-browser editing, presence cursors, and live agent edits verified. |
 | 2. Documents as cloud entities | 🔴 Not started | Stable doc IDs, doc CRUD, markdown projection |
 | 3. Team permissions | 🔴 Not started | Users, members, per-doc roles, sharing |
 | 4. Agent collaboration (Model C) | 🔴 Not started | Doc patch API + MCP/CLI, projection, legacy shim |
@@ -56,64 +56,77 @@ tests fail or a step was skipped, say so in the task note.
 
 ---
 
-## Stage 1 — Realtime editing POC 🟡
+## Stage 1 — Realtime editing POC 🟢
 
 Goal: two authenticated humans co-edit one document live, conflict-free, with
 presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
-- [~] **Spike `@convex-dev/prosemirror-sync`** against the decision gate. Findings
+- [x] **Spike `@convex-dev/prosemirror-sync`** against the decision gate. Findings
       in **`SPIKE.md`**: server-side agent edits ✅, versioning hooks ✅, auth hooks
-      ✅, Tiptap client ✅; **offline ❌ (not implemented upstream)**; doc-size +
-      live two-browser test ⚠️ unverified (need interactive `convex dev`).
+      ✅, Tiptap client ✅; **offline ❌ (not implemented upstream)**.
+      Live two-browser editing, presence, and server-side agent edits were
+      verified locally before merge.
       Scaffold landed: `convex/convex.config.ts`, `convex/prosemirror.ts` (incl.
       `agentAppendParagraph` server-edit proof), dep added to `package.json`.
-      — *Owner: Adrian/agent · Started: 2026-06-24 · Landed: _ · PR: spike branch*
-- [~] Decision gate outcome: **provisionally ADOPT prosemirror-sync** (hard gates
-      pass on existing Convex stack). Finalize to `[x]` after the live two-browser
-      + doc-size test. Fallback documented in SPIKE.md if a hard gate fails. — *_*
-- [~] Run `pnpm install` + `convex dev` (interactive login) to generate the
+      — *Owner: Adrian/agent · Started: 2026-06-24 · Landed: 2026-06-24 · PR:
+      https://github.com/adrianricardo/hubble.md/pull/1*
+- [x] Decision gate outcome: **ADOPT prosemirror-sync** for the next stages
+      (hard gates pass on existing Convex stack). Fallback documented in SPIKE.md
+      if a later hard requirement fails. — *Owner: Adrian/Codex · Started:
+      2026-06-24 · Landed: 2026-06-24 · PR:
+      https://github.com/adrianricardo/hubble.md/pull/1*
+- [x] Run `pnpm install` + `convex dev` (interactive login) to generate the
       component API so `prosemirror.ts` typechecks. Local anonymous deployment
-      generated; `convex dev --once --typecheck enable` passes. Unmerged. —
-      *Owner: Codex · Started: 2026-06-24*
-- [~] Export the editor ProseMirror schema from `packages/editor` and wire the
+      generated; `convex dev --once --typecheck enable` passes. — *Owner:
+      Codex · Started: 2026-06-24 · Landed: 2026-06-24 · PR:
+      https://github.com/adrianricardo/hubble.md/pull/1*
+- [x] Export the editor ProseMirror schema from `packages/editor` and wire the
       `transform()` body in `agentAppendParagraph`. Implemented locally with
       shared schema helper; `agentAppendParagraph` now calls
-      `prosemirrorSync.transform`. Unmerged. — *Owner: Codex · Started: 2026-06-24*
-- [~] Add the collaboration binding (`useTiptapSync`) to the Tiptap editor
+      `prosemirrorSync.transform`. — *Owner: Codex · Started: 2026-06-24 ·
+      Landed: 2026-06-24 · PR:
+      https://github.com/adrianricardo/hubble.md/pull/1*
+- [x] Add the collaboration binding (`useTiptapSync`) to the Tiptap editor
       (`packages/ui` / `apps/www`). Implemented locally for web POC docs behind
-      `ConvexProvider`; live two-browser test pending. Unmerged. —
-      *Owner: Codex · Started: 2026-06-24*
-- [~] Auth-gate the web app enough to identify two distinct users for the POC.
+      `ConvexProvider` and scoped to the `?test=1` POC identity path. — *Owner:
+      Codex · Started: 2026-06-24 · Landed: 2026-06-24 · PR:
+      https://github.com/adrianricardo/hubble.md/pull/1*
+- [x] Auth-gate the web app enough to identify two distinct users for the POC.
       Implemented locally as a browser-scoped test identity gate for `?test=1`
       (`?testUser=Ada` or in-app prompt) plus a Convex `livePocUsers` heartbeat
       so two browser sessions can identify themselves on one POC doc. This is
       intentionally not the Stage 3 production auth provider. Verified `pnpm
       check`, `@hubble.md/www` typecheck/build, `pnpm build:desktop`, and
       `convex dev --once --typecheck enable`; in-app browser smoke was blocked by
-      browser runtime startup failure. Unmerged. — *Owner: Codex · Started:
-      2026-06-24*
-- [~] One shared document renders live for two browsers; concurrent edits merge
+      browser runtime startup failure. — *Owner: Codex · Started: 2026-06-24 ·
+      Landed: 2026-06-24 · PR:
+      https://github.com/adrianricardo/hubble.md/pull/1*
+- [x] One shared document renders live for two browsers; concurrent edits merge
       with no conflict file. Locally verified by human test on `realtime-poc.md`
-      with two browser identities; no conflict banner/file appeared. Unmerged. —
-      *Owner: Adrian/Codex · Started: 2026-06-24*
-- [~] Presence cursors (who's here, where their caret is). Implemented locally as
+      with two browser identities; no conflict banner/file appeared. — *Owner:
+      Adrian/Codex · Started: 2026-06-24 · Landed: 2026-06-24 · PR:
+      https://github.com/adrianricardo/hubble.md/pull/1*
+- [x] Presence cursors (who's here, where their caret is). Implemented locally as
       a Convex-backed POC cursor layer: `livePocUsers` now stores optional
       ProseMirror `anchor/head`, the web editor publishes throttled selection
       heartbeats, and `packages/ui` renders remote cursor/selection
       decorations. Locally human-verified in two browsers. Verified `pnpm
       check`, UI/www typechecks, `@hubble.md/www` build, and `pnpm
       build:desktop`; Convex one-shot typecheck was skipped because the local
-      backend was already running on port 3210. Unmerged. — *Owner: Codex ·
-      Started: 2026-06-24*
-- [~] Confirm agent edit (`agentAppendParagraph` from the Convex dashboard) appears
+      backend was already running on port 3210. — *Owner: Codex · Started:
+      2026-06-24 · Landed: 2026-06-24 · PR:
+      https://github.com/adrianricardo/hubble.md/pull/1*
+- [x] Confirm agent edit (`agentAppendParagraph` from the Convex dashboard) appears
       live in both browsers. Locally verified via Convex CLI against
       `poc:jd72rs2kfn4gj8yeavk2m05ccs899r3t:realtime-poc.md`; both browser
-      sessions updated live. Unmerged. — *Owner: Adrian/Codex · Started:
-      2026-06-24*
-- [~] **Exit criteria:** two browsers, simultaneous typing, conflict-free, cursors
+      sessions updated live. — *Owner: Adrian/Codex · Started: 2026-06-24 ·
+      Landed: 2026-06-24 · PR:
+      https://github.com/adrianricardo/hubble.md/pull/1*
+- [x] **Exit criteria:** two browsers, simultaneous typing, conflict-free, cursors
       visible, agent edit shows live. Locally human-verified on
-      `realtime-poc.md`; demoable from local Convex + web dev servers. Keep `[~]`
-      until merged. — *Owner: Adrian/Codex · Started: 2026-06-24*
+      `realtime-poc.md`; demoable from local Convex + web dev servers. — *Owner:
+      Adrian/Codex · Started: 2026-06-24 · Landed: 2026-06-24 · PR:
+      https://github.com/adrianricardo/hubble.md/pull/1*
 
 ## Stage 2 — Documents as cloud entities 🔴
 
@@ -166,6 +179,9 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-24 — Codex — Merged Stage 1 PR #1 and marked Realtime editing POC
+  complete: all Stage 1 tasks now record Landed `2026-06-24` and PR
+  https://github.com/adrianricardo/hubble.md/pull/1.
 - 2026-06-24 — Codex — Reviewed Stage 1 PR diff and scoped the live
   `useTiptapSync` editor to the `?test=1` POC identity path, preserving normal
   web file-backed editing outside the spike harness. Verified `pnpm check`,
