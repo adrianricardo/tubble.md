@@ -90,6 +90,26 @@ export default defineSchema({
 		crdtMeta: v.optional(v.any()),
 	}).index("by_document", ["documentId", "createdAt"]),
 
+	commentThreads: defineTable({
+		documentId: v.id("documents"),
+		anchor: v.any(),
+		createdBy: v.optional(v.string()),
+		createdAt: v.number(),
+		resolvedAt: v.optional(v.number()),
+		resolvedBy: v.optional(v.string()),
+	})
+		.index("by_document", ["documentId", "createdAt"])
+		.index("by_document_resolved", ["documentId", "resolvedAt"]),
+
+	comments: defineTable({
+		documentId: v.id("documents"),
+		threadId: v.id("commentThreads"),
+		author: v.optional(v.string()),
+		body: v.string(),
+		createdAt: v.number(),
+		updatedAt: v.optional(v.number()),
+	}).index("by_thread", ["threadId", "createdAt"]),
+
 	assets: defineTable({
 		workspaceId: v.id("workspaces"),
 		path: v.string(),

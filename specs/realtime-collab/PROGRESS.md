@@ -264,7 +264,12 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       updates document attribution. Browse/restore UI remains pending. Verified
       `convex codegen`, `pnpm check`, and `pnpm build:desktop`. Unmerged. —
       *Owner: Codex · Started: 2026-06-25*
-- [ ] Comments + threads anchored to text, @mentions, resolve. — *_*
+- [~] Comments + threads anchored to text, @mentions, resolve. Backend
+      substrate implemented locally with `commentThreads` and `comments` tables,
+      anchored thread creation, replies, listing, and resolve mutation with
+      actor attribution. @mention parsing/notifications and UI remain pending.
+      Verified `convex codegen`, `pnpm check`, and `pnpm build:desktop`.
+      Unmerged. — *Owner: Codex · Started: 2026-06-25*
 - [ ] Track-changes / suggestion review UI. — *_*
 - [ ] Activity feed + notifications. — *_*
 
@@ -282,6 +287,11 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-25 — Codex — Continued Stage 5 review workflow: added backend
+  comment thread support with anchored `commentThreads`, `comments`, create,
+  reply, list, and resolve APIs with actor attribution. @mention parsing,
+  notifications, and UI remain pending. Verified `convex codegen`,
+  `pnpm check`, and `pnpm build:desktop`.
 - 2026-06-25 — Codex — Continued Stage 5 version history: added backend
   `documents.restoreRevision`, restoring a selected revision as a new live
   change after first materializing the current document as "Before restore".

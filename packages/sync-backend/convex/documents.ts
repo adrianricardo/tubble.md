@@ -472,6 +472,96 @@ export const restoreRevision = mutation({
 	},
 });
 
+export const listCommentThreads = query({
+	args: { documentId: v.id("documents") },
+	handler: async (ctx, { documentId }) => {
+		await requireDocumentRead(ctx, documentId);
+		const threads = await ctx.db
+			.query("commentThreads")
+			.withIndex("by_document", (q) => q.eq("documentId", documentId))
+			.collect();
+		return Promise.all(
+			threads
+				.sort((a, b) => b.createdAt - a.createdAt)
+				.map(async (thread) => ({
+					...thread,
+					comments: await ctx.db
+						.query("comments")
+						.withIndex("by_thread", (q) => q.eq("threadId", thread._id))
+						.collect(),
+				})),
+		);
+	},
+});
+
+export const createCommentThread = mutation({
+	args: {
+		documentId: v.id("documents"),
+		anchor: v.any(),
+		body: v.string(),
+		actor: v.optional(v.string()),
+	},
+	handler: async (ctx, { documentId, anchor, body, actor }) => {
+		await requireDocumentRead(ctx, documentId);
+		const trimmed = body.trim();
+		if (!trimmed) throw new Error("Comment body is required");
+		const author = await currentActorName(ctx, actor);
+		const now = Date.now();
+		const threadId = await ctx.db.insert("commentThreads", {
+			documentId,
+			anchor,
+			createdBy: author,
+			createdAt: now,
+		});
+		await ctx.db.insert("comments", {
+			documentId,
+			threadId,
+			author,
+			body: trimmed,
+			createdAt: now,
+		});
+		return threadId;
+	},
+});
+
+export const replyToCommentThread = mutation({
+	args: {
+		threadId: v.id("commentThreads"),
+		body: v.string(),
+		actor: v.optional(v.string()),
+	},
+	handler: async (ctx, { threadId, body, actor }) => {
+		const thread = await ctx.db.get(threadId);
+		if (!thread) throw new Error("Comment thread not found");
+		await requireDocumentRead(ctx, thread.documentId);
+		const trimmed = body.trim();
+		if (!trimmed) throw new Error("Comment body is required");
+		return ctx.db.insert("comments", {
+			documentId: thread.documentId,
+			threadId,
+			author: await currentActorName(ctx, actor),
+			body: trimmed,
+			createdAt: Date.now(),
+		});
+	},
+});
+
+export const resolveCommentThread = mutation({
+	args: {
+		threadId: v.id("commentThreads"),
+		actor: v.optional(v.string()),
+	},
+	handler: async (ctx, { threadId, actor }) => {
+		const thread = await ctx.db.get(threadId);
+		if (!thread || thread.resolvedAt !== undefined) return;
+		await requireDocumentWrite(ctx, thread.documentId);
+		await ctx.db.patch(threadId, {
+			resolvedAt: Date.now(),
+			resolvedBy: await currentActorName(ctx, actor),
+		});
+	},
+});
+
 export const listWithMarkdown = query({
 	args: { workspaceId: v.id("workspaces") },
 	handler: async (ctx, { workspaceId }) => {
