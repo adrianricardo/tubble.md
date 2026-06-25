@@ -23,6 +23,7 @@ import {
 	requireDocumentRead,
 	requireDocumentWrite,
 	requireWorkspaceMember,
+	workspaceRole,
 } from "./permissions";
 
 const prosemirrorSync = new ProsemirrorSync(components.prosemirrorSync);
@@ -1009,6 +1010,52 @@ export const listWithMarkdown = query({
 				};
 			}),
 		);
+	},
+});
+
+export const listSharedWithMe = query({
+	args: {},
+	handler: async (ctx) => {
+		const userId = await getAuthUserId(ctx);
+		if (!userId) return [];
+
+		// Fetch all direct user-share rows for this user via the new by_user index.
+		// Link-scope shares (workspace / public) have userId = undefined and are
+		// excluded automatically by the index equality match.
+		const shares = await ctx.db
+			.query("docShares")
+			.withIndex("by_user", (q) => q.eq("userId", userId))
+			.collect();
+
+		const results = [];
+		for (const share of shares) {
+			const document = await ctx.db.get(share.documentId);
+			// Filter out non-existent or trashed documents, consistent with listWithMarkdown.
+			if (!document || document.deletedAt !== undefined) continue;
+
+			// Only include documents from workspaces the user is NOT a member of.
+			// Workspace members already receive these documents through listWithMarkdown;
+			// returning them here too would cause double-listing in the Shared-with-me area.
+			const wsRole = await workspaceRole(ctx, document.workspaceId);
+			if (wsRole !== null) continue;
+
+			const projection = await projectMarkdown(ctx, document._id);
+			const role = await documentRole(ctx, document._id);
+			// documentRole resolves the share row we already know exists, so null
+			// would be a data-integrity anomaly; skip to be safe.
+			if (role === null) continue;
+
+			results.push({
+				...document,
+				markdown: projection.markdown,
+				version: projection.version,
+				role,
+				canWrite: canWriteRole(role),
+			});
+		}
+
+		// Return newest-first, matching listWithMarkdown's sort order.
+		return results.sort((a, b) => b.updatedAt - a.updatedAt);
 	},
 });
 

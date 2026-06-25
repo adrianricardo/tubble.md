@@ -563,6 +563,17 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-25 — Sonnet (orchestrated) — Stage 6 fast-follow: added the
+  `docShares.by_user` index (`schema.ts`) and the `documents.listSharedWithMe`
+  query, returning the same projection shape as `listWithMarkdown`
+  (markdown/version/role/canWrite/folderId via `...document`), filtered to docs
+  shared directly with the auth user in workspaces they are **not** a member of
+  (skips any workspace where `workspaceRole !== null` to avoid double-listing with
+  `listWithMarkdown`; drops trashed docs). Unblocks the synced-folder
+  `Shared with me/` area (SYNCED-FOLDER.md §1 gap 3 / §8). Reviewed for internal
+  consistency against `listWithMarkdown`; `convex codegen` is deployment-gated and
+  was **not** run. Unmerged.
+
 - 2026-06-25 — Opus (orchestrated) — Stage 6 foundation push. Settled three
   decisions (`STAGE6-BUILD-DECISIONS.md`): both offline flavors, **no Yjs fork**;
   **designated synced-folder** on-disk model; always-on **only when a cloud

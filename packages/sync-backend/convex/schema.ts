@@ -75,7 +75,8 @@ export default defineSchema({
 	})
 		.index("by_document", ["documentId"])
 		.index("by_document_user", ["documentId", "userId"])
-		.index("by_document_link", ["documentId", "linkScope"]),
+		.index("by_document_link", ["documentId", "linkScope"])
+		.index("by_user", ["userId"]),
 
 	documentSuggestions: defineTable({
 		documentId: v.id("documents"),
