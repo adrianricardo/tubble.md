@@ -277,7 +277,12 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       inline track-changes rendering. Verified `@hubble.md/www` typecheck/build,
       `pnpm check`, and `pnpm build:desktop`. Unmerged. — *Owner: Codex ·
       Started: 2026-06-25*
-- [ ] Activity feed + notifications. — *_*
+- [~] Activity feed + notifications. Backend activity feed implemented locally
+      with `activityEvents`, `documents.listActivity`, and event logging for
+      document patches, restores, comment threads/replies/resolution, and
+      suggestion propose/accept/reject. Notification delivery remains pending.
+      Verified `convex codegen`, `pnpm check`, and `pnpm build:desktop`.
+      Unmerged. — *Owner: Codex · Started: 2026-06-25*
 
 ## Stage 6 — Docs-parity polish 🔴
 
@@ -293,6 +298,11 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-25 — Codex — Continued Stage 5 activity feed: added
+  `activityEvents`, a `documents.listActivity` query, and activity logging for
+  document patches, restores, comments, and suggestion lifecycle events.
+  Notification delivery remains pending. Verified `convex codegen`,
+  `pnpm check`, and `pnpm build:desktop`.
 - 2026-06-25 — Codex — Continued Stage 5 review workflow: added an initial
   suggestion review UI in the Live Document header, showing pending suggestions
   in a modal with accept/reject actions backed by the suggestion APIs. Full

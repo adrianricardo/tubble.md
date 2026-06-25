@@ -117,6 +117,29 @@ async function ensureCurrentUserOwnerShare(
 	});
 }
 
+async function logActivity(
+	ctx: MutationCtx,
+	args: {
+		documentId: Id<"documents">;
+		type: string;
+		message: string;
+		actor?: string;
+		metadata?: unknown;
+	},
+) {
+	const document = await ctx.db.get(args.documentId);
+	if (!document) return;
+	await ctx.db.insert("activityEvents", {
+		workspaceId: document.workspaceId,
+		documentId: args.documentId,
+		type: args.type,
+		actor: args.actor,
+		message: args.message,
+		createdAt: Date.now(),
+		metadata: args.metadata,
+	});
+}
+
 async function replaceLiveDocumentMarkdown(
 	ctx: MutationCtx,
 	documentId: string,
@@ -291,6 +314,13 @@ async function applyPatchToDocument(
 		updatedBy: args.actor?.trim() || "Agent",
 		updatedAt: now,
 	});
+	await logActivity(ctx, {
+		documentId: args.documentId,
+		type: "document.patch",
+		actor: args.actor?.trim() || "Agent",
+		message: "Applied a document patch",
+		metadata: { baseRevision: args.baseRevision, intent: args.intent.kind },
+	});
 	const projection = await projectMarkdown(ctx, args.documentId);
 	return {
 		documentId: args.documentId,
@@ -420,6 +450,18 @@ export const listRevisions = query({
 	},
 });
 
+export const listActivity = query({
+	args: { documentId: v.id("documents") },
+	handler: async (ctx, { documentId }) => {
+		await requireDocumentRead(ctx, documentId);
+		const events = await ctx.db
+			.query("activityEvents")
+			.withIndex("by_document", (q) => q.eq("documentId", documentId))
+			.collect();
+		return events.sort((a, b) => b.createdAt - a.createdAt);
+	},
+});
+
 export const materializeRevision = mutation({
 	args: {
 		documentId: v.id("documents"),
@@ -460,6 +502,13 @@ export const restoreRevision = mutation({
 		await ctx.db.patch(revision.documentId, {
 			updatedBy: actor?.trim() || "Restore",
 			updatedAt: now,
+		});
+		await logActivity(ctx, {
+			documentId: revision.documentId,
+			type: "document.restore",
+			actor: actor?.trim() || "Restore",
+			message: "Restored a revision",
+			metadata: { revisionId },
 		});
 		const projection = await projectMarkdown(ctx, revision.documentId);
 		return {
@@ -520,6 +569,13 @@ export const createCommentThread = mutation({
 			body: trimmed,
 			createdAt: now,
 		});
+		await logActivity(ctx, {
+			documentId,
+			type: "comment.thread",
+			actor: author,
+			message: "Started a comment thread",
+			metadata: { threadId },
+		});
 		return threadId;
 	},
 });
@@ -536,13 +592,21 @@ export const replyToCommentThread = mutation({
 		await requireDocumentRead(ctx, thread.documentId);
 		const trimmed = body.trim();
 		if (!trimmed) throw new Error("Comment body is required");
-		return ctx.db.insert("comments", {
+		const commentId = await ctx.db.insert("comments", {
 			documentId: thread.documentId,
 			threadId,
 			author: await currentActorName(ctx, actor),
 			body: trimmed,
 			createdAt: Date.now(),
 		});
+		await logActivity(ctx, {
+			documentId: thread.documentId,
+			type: "comment.reply",
+			actor: await currentActorName(ctx, actor),
+			message: "Replied to a comment thread",
+			metadata: { threadId, commentId },
+		});
+		return commentId;
 	},
 });
 
@@ -558,6 +622,13 @@ export const resolveCommentThread = mutation({
 		await ctx.db.patch(threadId, {
 			resolvedAt: Date.now(),
 			resolvedBy: await currentActorName(ctx, actor),
+		});
+		await logActivity(ctx, {
+			documentId: thread.documentId,
+			type: "comment.resolve",
+			actor: await currentActorName(ctx, actor),
+			message: "Resolved a comment thread",
+			metadata: { threadId },
 		});
 	},
 });
@@ -629,7 +700,7 @@ export const proposeSuggestion = mutation({
 	},
 	handler: async (ctx, { documentId, baseRevision, intent, actor }) => {
 		await requireDocumentRead(ctx, documentId);
-		return ctx.db.insert("documentSuggestions", {
+		const suggestionId = await ctx.db.insert("documentSuggestions", {
 			documentId,
 			baseRevision,
 			intent,
@@ -637,6 +708,14 @@ export const proposeSuggestion = mutation({
 			status: "pending",
 			createdAt: Date.now(),
 		});
+		await logActivity(ctx, {
+			documentId,
+			type: "suggestion.propose",
+			actor: actor?.trim() || "Agent",
+			message: "Proposed a document change",
+			metadata: { suggestionId, intent: intent.kind },
+		});
+		return suggestionId;
 	},
 });
 
@@ -657,6 +736,13 @@ export const acceptSuggestion = mutation({
 			status: "accepted",
 			resolvedAt: Date.now(),
 		});
+		await logActivity(ctx, {
+			documentId: suggestion.documentId,
+			type: "suggestion.accept",
+			actor: suggestion.actor,
+			message: "Accepted a suggested change",
+			metadata: { suggestionId },
+		});
 		return result;
 	},
 });
@@ -670,6 +756,13 @@ export const rejectSuggestion = mutation({
 		await ctx.db.patch(suggestionId, {
 			status: "rejected",
 			resolvedAt: Date.now(),
+		});
+		await logActivity(ctx, {
+			documentId: suggestion.documentId,
+			type: "suggestion.reject",
+			actor: await currentActorName(ctx),
+			message: "Rejected a suggested change",
+			metadata: { suggestionId },
 		});
 	},
 });

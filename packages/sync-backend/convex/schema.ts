@@ -110,6 +110,18 @@ export default defineSchema({
 		updatedAt: v.optional(v.number()),
 	}).index("by_thread", ["threadId", "createdAt"]),
 
+	activityEvents: defineTable({
+		workspaceId: v.id("workspaces"),
+		documentId: v.optional(v.id("documents")),
+		type: v.string(),
+		actor: v.optional(v.string()),
+		message: v.string(),
+		createdAt: v.number(),
+		metadata: v.optional(v.any()),
+	})
+		.index("by_workspace", ["workspaceId", "createdAt"])
+		.index("by_document", ["documentId", "createdAt"]),
+
 	assets: defineTable({
 		workspaceId: v.id("workspaces"),
 		path: v.string(),
