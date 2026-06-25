@@ -39,6 +39,8 @@ type CliArgs = {
 	replaceMarkdown?: string;
 	afterHeading?: string;
 	patchMarkdown?: string;
+	file?: string;
+	watch: boolean;
 	actor?: string;
 	deploymentUrl?: string;
 	extraArgs: string[];
@@ -190,6 +192,9 @@ async function runDocumentCommand(workspacePath: string, parsed: CliArgs) {
 		case "patch":
 			await runDocumentPatch(cloudSync.deploymentUrl, parsed);
 			return;
+		case "shim":
+			await runDocumentShim(workspacePath, cloudSync.deploymentUrl, parsed);
+			return;
 		default:
 			printDocumentHelp();
 			process.exitCode = 1;
@@ -261,6 +266,71 @@ function documentPatchIntent(parsed: CliArgs) {
 		};
 	}
 	return null;
+}
+
+async function runDocumentShim(
+	workspacePath: string,
+	deploymentUrl: string,
+	parsed: CliArgs,
+) {
+	if (!parsed.workspaceId) {
+		console.error("Missing required --id documentId.");
+		process.exitCode = 1;
+		return;
+	}
+	if (!parsed.file) {
+		console.error("Missing required --file staging.md.");
+		process.exitCode = 1;
+		return;
+	}
+	const stagingPath = resolve(workspacePath, parsed.file);
+	const applyStagingFile = async () => {
+		const markdown = await fs.readFile(stagingPath);
+		const client = new ConvexHttpClient(deploymentUrl);
+		const document = await client.query(api.documents.getForAgent, {
+			documentId: parsed.workspaceId as Id<"documents">,
+		});
+		if (!document) throw new Error(`Document not found: ${parsed.workspaceId}`);
+		await client.mutation(api.documents.applyPatch, {
+			documentId: parsed.workspaceId as Id<"documents">,
+			baseRevision: document.revision,
+			intent: {
+				kind: "replace-document",
+				markdown,
+			},
+			actor: parsed.actor ?? "file-shim",
+		});
+		console.log(
+			`shim applied ${stagingPath} to ${parsed.workspaceId} at revision ${document.revision}`,
+		);
+	};
+
+	await applyStagingFile();
+	if (!parsed.watch) return;
+
+	console.log(`Watching staging file: ${stagingPath}`);
+	let timer: ReturnType<typeof setTimeout> | null = null;
+	const watcher = chokidar.watch(stagingPath, { ignoreInitial: true });
+	watcher.on("change", () => {
+		if (timer) clearTimeout(timer);
+		timer = setTimeout(() => {
+			void applyStagingFile().catch((err) => {
+				console.error("shim apply failed:", err);
+			});
+		}, 250);
+	});
+	const shutdown = async (signal: string) => {
+		console.log(`Stopping Hubble document shim (${signal})`);
+		if (timer) clearTimeout(timer);
+		await watcher.close();
+		process.exit(0);
+	};
+	process.on("SIGINT", () => {
+		void shutdown("SIGINT");
+	});
+	process.on("SIGTERM", () => {
+		void shutdown("SIGTERM");
+	});
 }
 
 async function runWatch(workspacePath: string) {
@@ -514,6 +584,8 @@ function parseCliArgs(argv: string[]) {
 				replace: { type: "string" },
 				"after-heading": { type: "string" },
 				markdown: { type: "string" },
+				file: { type: "string" },
+				watch: { type: "boolean" },
 				actor: { type: "string" },
 			},
 		});
@@ -528,6 +600,8 @@ function parseCliArgs(argv: string[]) {
 			replaceMarkdown: values.replace,
 			afterHeading: values["after-heading"],
 			patchMarkdown: values.markdown,
+			file: values.file,
+			watch: values.watch ?? false,
 			actor: values.actor,
 			deploymentUrl: values.url,
 			extraArgs,
@@ -668,6 +742,9 @@ function printDocumentHelp() {
 	console.log(
 		"  hubble [--cwd path] cloud document patch --id documentId --base-revision n (--replace markdown|--append markdown|--after-heading heading --markdown markdown) [--actor name]",
 	);
+	console.log(
+		"  hubble [--cwd path] cloud document shim --id documentId --file staging.md [--watch] [--actor name]",
+	);
 	console.log("");
 	console.log(
 		"Reads or patches Live Documents through the agent document API.",
@@ -701,6 +778,9 @@ function printUsage() {
 	console.error("  hubble [--cwd path] cloud document get --id documentId");
 	console.error(
 		"  hubble [--cwd path] cloud document patch --id documentId --base-revision n (--replace markdown|--append markdown|--after-heading heading --markdown markdown)",
+	);
+	console.error(
+		"  hubble [--cwd path] cloud document shim --id documentId --file staging.md [--watch]",
 	);
 	console.error("  hubble [--cwd path] cloud watch");
 	console.error("  hubble [--cwd path] cloud disconnect");

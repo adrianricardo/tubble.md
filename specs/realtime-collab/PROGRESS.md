@@ -232,7 +232,13 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       `hubble cloud project`. Verified `@hubble.md/sync` build,
       `@hubble.md/cli` build, `pnpm check`, and `pnpm build:desktop`.
       Unmerged. — *Owner: Codex · Started: 2026-06-25*
-- [ ] Legacy file-only **shim**: staging file → `applyPatch(markdown-patch)`. — *_*
+- [~] Legacy file-only **shim**: staging file → `applyPatch(markdown-patch)`.
+      Implemented locally as `hubble cloud document shim --id <documentId>
+      --file <staging.md> [--watch]`, which reads a staging markdown file,
+      fetches the current live revision, and applies a replace-document patch
+      through `documents.applyPatch` with `file-shim` attribution by default.
+      Verified `@hubble.md/cli` typecheck/build, `pnpm check`, and
+      `pnpm build:desktop`. Unmerged. — *Owner: Codex · Started: 2026-06-25*
 - [ ] Suggestion mode (agent proposes, human accepts). — *_*
 
 ## Stage 5 — Version history & review 🔴
@@ -258,6 +264,12 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-25 — Codex — Continued Stage 4 agent collaboration: added a legacy
+  file-only shim command, `hubble cloud document shim --id <documentId> --file
+  <staging.md> [--watch]`, that converts staging-file writes into
+  `documents.applyPatch` replace-document calls against the current live
+  revision with `file-shim` attribution. Verified `@hubble.md/cli`
+  typecheck/build, `pnpm check`, and `pnpm build:desktop`.
 - 2026-06-25 — Codex — Continued Stage 4 agent collaboration: added a
   read-only markdown projection writer that materializes Live Documents under
   `.hubble/projections/live-documents` for agent reads, plus `hubble cloud
