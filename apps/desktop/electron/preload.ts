@@ -74,6 +74,12 @@ const desktopApi = {
 	setMenuState: (state) => ipcRenderer.invoke("desktop:set-menu-state", state),
 	setBackgroundActive: (active) =>
 		ipcRenderer.invoke("desktop:set-background-active", active),
+	connectLiveSync: (input) =>
+		ipcRenderer.invoke("desktop:live-sync:connect", input),
+	disconnectLiveSync: () => ipcRenderer.invoke("desktop:live-sync:disconnect"),
+	getLiveSyncStatus: () => ipcRenderer.invoke("desktop:live-sync:status"),
+	reconcileLiveDocument: (input) =>
+		ipcRenderer.invoke("desktop:live-sync:reconcile", input),
 	getUpdateState: () => ipcRenderer.invoke("desktop:get-update-state"),
 	getFullScreen: () => ipcRenderer.invoke("desktop:get-fullscreen"),
 	checkForUpdates: () => ipcRenderer.invoke("desktop:check-for-updates"),

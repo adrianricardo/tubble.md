@@ -1,3 +1,7 @@
+import type { ReconcileOutcome } from "@hubble.md/sync";
+
+export type { ReconcileOutcome };
+
 export type FileEntry = {
 	path: string;
 	modified_at: number;
@@ -58,6 +62,34 @@ export type DesktopUpdateState = {
 
 export type DesktopPlatform = NodeJS.Platform;
 
+export type LiveSyncStatusState = "idle" | "connected" | "syncing" | "error";
+
+export type LiveSyncStatus = {
+	state: LiveSyncStatusState;
+	connected: boolean;
+	workspacePath: string | null;
+	workspaceId: string | null;
+	/** In-flight reconcile operations (manual-trigger only in Phase 2). */
+	pending: number;
+	lastReconciledAt: number | null;
+	lastError: string | null;
+};
+
+export type LiveSyncConnectInput = {
+	workspacePath: string;
+	deploymentUrl: string;
+	workspaceId: string;
+};
+
+export type LiveSyncReconcileInput = {
+	documentId: string;
+	/** Absolute path to the editable projection file on disk. */
+	projectionPath: string;
+	actor?: string;
+	/** Relative path stored in base-cache metadata (fallback). */
+	path?: string;
+};
+
 export type WorkspaceConfig = {
 	version: 1;
 	pinnedNotes: string[];
@@ -112,6 +144,18 @@ export type DesktopApi = {
 	 * the same flag from the main process.
 	 */
 	setBackgroundActive(active: boolean): Promise<void>;
+	/**
+	 * Connect the main-process live-sync engine to a cloud workspace. Engages
+	 * always-on background mode (Decision C). Phase 2: no workspace-wide watcher
+	 * yet — reconcile is manual via {@link DesktopApi.reconcileLiveDocument}.
+	 */
+	connectLiveSync(input: LiveSyncConnectInput): Promise<LiveSyncStatus>;
+	disconnectLiveSync(): Promise<LiveSyncStatus>;
+	getLiveSyncStatus(): Promise<LiveSyncStatus>;
+	/** Manual "reconcile this doc now" trigger; returns the reconcile outcome. */
+	reconcileLiveDocument(
+		input: LiveSyncReconcileInput,
+	): Promise<ReconcileOutcome>;
 	getUpdateState(): Promise<DesktopUpdateState>;
 	getFullScreen(): Promise<boolean>;
 	checkForUpdates(): Promise<void>;

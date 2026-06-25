@@ -24,6 +24,8 @@ import { z } from "zod/v4";
 import type {
 	DesktopUpdateState,
 	DirectoryListing,
+	LiveSyncConnectInput,
+	LiveSyncReconcileInput,
 	WorkspaceConfig,
 } from "../src/desktopApi/types";
 import {
@@ -32,6 +34,7 @@ import {
 	markdownAssetFolderPath,
 	withMarkdownExtension,
 } from "../src/lib/filePath";
+import { LiveSyncService } from "./liveSync";
 import { createAppTray } from "./tray";
 import {
 	loadZoomFactor,
@@ -126,6 +129,9 @@ const watchers = new Map<string, FSWatcher>();
 let tray: Tray | null = null;
 let isQuitting = false;
 let backgroundActive = false;
+// Main-process Live Document reconcile engine (Phase 2). Manual-trigger only:
+// no workspace-wide watcher yet (Phase 3).
+const liveSync = new LiveSyncService();
 const grantedFiles = new Set<string>();
 const grantedRoots = new Set<string>();
 let grantsLoaded = false;
@@ -1366,6 +1372,42 @@ function registerIpc() {
 	ipcMain.handle("desktop:set-background-active", (_event, active: boolean) => {
 		setBackgroundActive(active === true);
 	});
+
+	ipcMain.handle(
+		"desktop:live-sync:connect",
+		(_event, input: LiveSyncConnectInput) => {
+			const workspacePath = assertGrantedRoot(input.workspacePath);
+			const status = liveSync.connect({
+				workspacePath,
+				deploymentUrl: input.deploymentUrl,
+				workspaceId: input.workspaceId,
+			});
+			// Connecting a cloud workspace engages always-on mode (Decision C).
+			setBackgroundActive(true);
+			return status;
+		},
+	);
+
+	ipcMain.handle("desktop:live-sync:disconnect", () => {
+		const status = liveSync.disconnect();
+		setBackgroundActive(false);
+		return status;
+	});
+
+	ipcMain.handle("desktop:live-sync:status", () => liveSync.getStatus());
+
+	ipcMain.handle(
+		"desktop:live-sync:reconcile",
+		async (_event, input: LiveSyncReconcileInput) => {
+			const projectionPath = assertGranted(input.projectionPath);
+			return liveSync.reconcile({
+				documentId: input.documentId,
+				projectionPath,
+				actor: input.actor,
+				path: input.path,
+			});
+		},
+	);
 }
 
 protocol.registerSchemesAsPrivileged([
