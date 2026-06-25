@@ -130,7 +130,7 @@ async function replaceLiveDocumentMarkdown(
 }
 
 async function projectMarkdown(
-	ctx: QueryCtx,
+	ctx: MutationCtx | QueryCtx,
 	documentId: string,
 ): Promise<{ markdown: string; version: number | null }> {
 	const schema = getHubbleEditorSchema();
@@ -158,6 +158,61 @@ async function projectMarkdown(
 		markdown: tiptapDocToMarkdown(transform.doc.toJSON()),
 		version: latest.version,
 	};
+}
+
+function appendMarkdown(currentMarkdown: string, markdown: string): string {
+	const base = currentMarkdown.trimEnd();
+	const addition = markdown.trim();
+	if (!base) return addition;
+	if (!addition) return base;
+	return `${base}\n\n${addition}`;
+}
+
+function insertMarkdownAfterHeading(
+	currentMarkdown: string,
+	heading: string,
+	markdown: string,
+): string {
+	const lines = currentMarkdown.split(/\r?\n/);
+	const target = heading.trim().toLowerCase();
+	const index = lines.findIndex((line) => {
+		const match = /^(#{1,6})\s+(.+)$/.exec(line);
+		return match?.[2]?.trim().toLowerCase() === target;
+	});
+	if (index === -1) {
+		throw new Error(`Heading not found: ${heading}`);
+	}
+	const addition = markdown.trim();
+	if (!addition) return currentMarkdown;
+	return [
+		...lines.slice(0, index + 1),
+		"",
+		addition,
+		...lines.slice(index + 1),
+	].join("\n");
+}
+
+async function transformLiveDocumentMarkdown(
+	ctx: MutationCtx,
+	documentId: Id<"documents">,
+	nextMarkdown: string,
+	clientId: string,
+) {
+	const schema = getHubbleEditorSchema();
+	const id = syncDocumentId(documentId);
+	const nextDoc = schema.nodeFromJSON(markdownToTiptapDoc(nextMarkdown));
+	await prosemirrorSync.transform(
+		ctx,
+		id,
+		schema,
+		(doc) => {
+			if (doc.eq(nextDoc)) return null;
+			const tr = new Transform(doc);
+			tr.replaceWith(0, doc.content.size, nextDoc.content);
+			return tr;
+		},
+		{ clientId },
+	);
 }
 
 function markdownOutline(markdown: string) {
@@ -272,6 +327,70 @@ export const listWithMarkdown = query({
 				};
 			}),
 		);
+	},
+});
+
+export const applyPatch = mutation({
+	args: {
+		documentId: v.id("documents"),
+		baseRevision: v.number(),
+		intent: v.union(
+			v.object({
+				kind: v.literal("replace-document"),
+				markdown: v.string(),
+			}),
+			v.object({
+				kind: v.literal("append-markdown"),
+				markdown: v.string(),
+			}),
+			v.object({
+				kind: v.literal("insert-after-heading"),
+				heading: v.string(),
+				markdown: v.string(),
+			}),
+		),
+		actor: v.optional(v.string()),
+	},
+	handler: async (ctx, { documentId, baseRevision, intent, actor }) => {
+		await requireDocumentWrite(ctx, documentId);
+		const document = await ctx.db.get(documentId);
+		if (!document || document.deletedAt !== undefined) {
+			throw new Error("Document not found");
+		}
+
+		const current = await projectMarkdown(ctx, documentId);
+		const currentRevision = current.version ?? 0;
+		if (currentRevision !== baseRevision) {
+			throw new Error(
+				`Stale base revision: expected ${currentRevision}, got ${baseRevision}`,
+			);
+		}
+
+		const nextMarkdown =
+			intent.kind === "replace-document"
+				? intent.markdown
+				: intent.kind === "append-markdown"
+					? appendMarkdown(current.markdown, intent.markdown)
+					: insertMarkdownAfterHeading(
+							current.markdown,
+							intent.heading,
+							intent.markdown,
+						);
+
+		await transformLiveDocumentMarkdown(ctx, documentId, nextMarkdown, "agent");
+		const now = Date.now();
+		await ctx.db.patch(documentId, {
+			updatedBy: actor?.trim() || "Agent",
+			updatedAt: now,
+		});
+		const projection = await projectMarkdown(ctx, documentId);
+		return {
+			documentId,
+			revision: projection.version ?? currentRevision,
+			markdown: projection.markdown,
+			outline: markdownOutline(projection.markdown),
+			updatedAt: now,
+		};
 	},
 });
 

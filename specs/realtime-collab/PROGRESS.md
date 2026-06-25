@@ -209,8 +209,15 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       document metadata, and a heading outline with level/text/line/slug.
       Verified `convex codegen`, `pnpm check`, and `pnpm build:desktop`.
       Unmerged. — *Owner: Codex · Started: 2026-06-25*
-- [ ] `applyPatch(id, baseRevision, intent)` → steps → CRDT txn, **attributed to the
-      agent**, streamed; rebase/reject if `baseRevision` is stale. — *_*
+- [~] `applyPatch(id, baseRevision, intent)` → steps → CRDT txn, **attributed to the
+      agent**, streamed; rebase/reject if `baseRevision` is stale. Implemented
+      locally as `documents.applyPatch` with stale-revision rejection and
+      `replace-document`, `append-markdown`, and `insert-after-heading` intents.
+      The mutation converts markdown through the existing editor schema and
+      writes through `prosemirrorSync.transform`, updating document attribution
+      as `Agent` or the supplied actor. Verified `convex codegen`,
+      `pnpm check`, and `pnpm build:desktop`. Unmerged. — *Owner: Codex ·
+      Started: 2026-06-25*
 - [ ] MCP server + `hubble` CLI surface for the patch API. — *_*
 - [ ] Read-only markdown projection writer on disk. — *_*
 - [ ] Legacy file-only **shim**: staging file → `applyPatch(markdown-patch)`. — *_*
@@ -239,6 +246,12 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-25 — Codex — Continued Stage 4 agent collaboration: added
+  `documents.applyPatch` with stale base-revision rejection and initial
+  markdown intents (`replace-document`, `append-markdown`,
+  `insert-after-heading`) that convert through the Hubble editor schema and
+  stream via `prosemirrorSync.transform` with agent attribution. Verified
+  `convex codegen`, `pnpm check`, and `pnpm build:desktop`.
 - 2026-06-25 — Codex — Started Stage 4 agent collaboration: added
   `documents.getForAgent` to return a permission-checked live document read
   packet with revision, markdown projection, metadata, and heading outline for
