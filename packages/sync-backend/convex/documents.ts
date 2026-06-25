@@ -402,6 +402,24 @@ export const list = query({
 	},
 });
 
+export const listTrash = query({
+	args: { workspaceId: v.id("workspaces") },
+	handler: async (ctx, { workspaceId }) => {
+		await requireWorkspaceMember(ctx, workspaceId);
+		const documents = await ctx.db
+			.query("documents")
+			.withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+			.collect();
+		const trashed = documents
+			.filter((document) => document.deletedAt !== undefined)
+			.sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
+		const roles = await Promise.all(
+			trashed.map((document) => documentRole(ctx, document._id)),
+		);
+		return trashed.filter((_, index) => roles[index] !== null);
+	},
+});
+
 export const get = query({
 	args: { documentId: v.id("documents") },
 	handler: async (ctx, { documentId }) => {
@@ -1056,6 +1074,31 @@ export const remove = mutation({
 			deletedAt: now,
 			updatedBy: resolvedActor,
 			updatedAt: now,
+		});
+	},
+});
+
+export const restoreRemoved = mutation({
+	args: {
+		documentId: v.id("documents"),
+		actor: v.optional(v.string()),
+	},
+	handler: async (ctx, { documentId, actor }) => {
+		const document = await ctx.db.get(documentId);
+		if (!document || document.deletedAt === undefined) return;
+		await requireWorkspaceMember(ctx, document.workspaceId);
+		const now = Date.now();
+		const resolvedActor = await currentActorName(ctx, actor);
+		await ctx.db.patch(documentId, {
+			deletedAt: undefined,
+			updatedBy: resolvedActor,
+			updatedAt: now,
+		});
+		await logActivity(ctx, {
+			documentId,
+			type: "document.restoreFromTrash",
+			actor: resolvedActor,
+			message: "Restored a document from trash",
 		});
 	},
 });

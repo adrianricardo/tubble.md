@@ -305,7 +305,12 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       and `pnpm build:desktop`. Unmerged. — *Owner: Codex · Started:
       2026-06-25*
 - [ ] Offline edit + merge on reconnect. — *_*
-- [ ] Audit log, trash + restore, admin/role management. — *_*
+- [~] Audit log, trash + restore, admin/role management. Trash/restore backend
+      started locally with `documents.listTrash`, `documents.restoreRemoved`,
+      `folders.listTrash`, and `folders.restoreRemoved`. Activity events
+      already provide an audit-log substrate; admin/role management UI remains
+      pending. Verified `convex codegen`, `pnpm check`, and
+      `pnpm build:desktop`. Unmerged. — *Owner: Codex · Started: 2026-06-25*
 
 ---
 
@@ -313,6 +318,11 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-25 — Codex — Continued Stage 6 docs-parity polish: added trash
+  list/restore backend APIs for Live Documents and folders, building on existing
+  soft-delete fields. Activity events provide the audit-log substrate;
+  admin/role management UI remains pending. Verified `convex codegen`,
+  `pnpm check`, and `pnpm build:desktop`.
 - 2026-06-25 — Codex — Continued Stage 6 docs-parity polish: added targeted
   markdown Live Document export via `hubble cloud document export --id
   <documentId> [--format md] [--out file]`, building on the existing
