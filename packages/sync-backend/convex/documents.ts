@@ -347,6 +347,31 @@ export const setUserShare = mutation({
 	},
 });
 
+export const setUserShareByEmail = mutation({
+	args: {
+		documentId: v.id("documents"),
+		email: v.string(),
+		role: v.union(
+			v.literal("owner"),
+			v.literal("editor"),
+			v.literal("commenter"),
+			v.literal("viewer"),
+		),
+	},
+	handler: async (ctx, { documentId, email, role }) => {
+		await requireDocumentOwner(ctx, documentId);
+		const normalizedEmail = email.trim().toLowerCase();
+		if (!normalizedEmail) throw new Error("Email is required");
+		const users = await ctx.db.query("users").collect();
+		const user = users.find(
+			(candidate) => candidate.email?.toLowerCase() === normalizedEmail,
+		);
+		if (!user) throw new Error(`No Hubble user found for ${normalizedEmail}`);
+		await ensureDocumentShare(ctx, { documentId, userId: user._id, role });
+		return user._id;
+	},
+});
+
 export const removeUserShare = mutation({
 	args: {
 		documentId: v.id("documents"),

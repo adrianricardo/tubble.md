@@ -193,7 +193,13 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       including upload/download URL generation. Verified `convex codegen`;
       `pnpm check`, and `pnpm build:desktop`. Unmerged. — *Owner: Codex ·
       Started: 2026-06-25*
-- [ ] Share dialog UI. — *_*
+- [~] Share dialog UI. Implemented locally from the Live Documents row: owners
+      can open a modal, invite an existing Hubble user by email with a role,
+      remove direct user shares, and set/clear public-link access as
+      viewer/commenter/editor. Verified `convex codegen`, `pnpm check`, and
+      `@hubble.md/www` typecheck/build, and `pnpm build:desktop`; browser smoke
+      skipped because Browser plugin discovery exposed no browser-control tool.
+      Unmerged. — *Owner: Codex · Started: 2026-06-25*
 
 ## Stage 4 — Agent collaboration layer (Model C) 🔴
 
@@ -229,6 +235,13 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-25 — Codex — Continued Stage 3 team permissions: added the Live
+  Document share dialog with invite-by-email role assignment, direct share
+  removal, and public link access controls for viewer/commenter/editor roles.
+  Added the supporting `setUserShareByEmail` backend mutation. Verified
+  `convex codegen`, `pnpm check`, `@hubble.md/www` typecheck/build, and
+  `pnpm build:desktop`; browser smoke skipped because Browser plugin discovery
+  exposed no browser-control tool.
 - 2026-06-25 — Codex — Continued Stage 3 team permissions: added shared
   workspace/document permission helpers, filtered Live Document reads by role,
   made share APIs owner-only, blocked non-editors from document mutations and
