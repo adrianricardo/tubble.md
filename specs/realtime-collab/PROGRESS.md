@@ -528,10 +528,28 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
         single-instance lock is respected. No sync/watcher yet. Tray appearance +
         close/hide/quit behavior are **human-verification-pending** (can't run
         Electron headlessly).
-- [ ] Offline edit + merge on reconnect — two flavors (Decision 6): in-editor (CRDT
-      local buffer/replay; Yjs/`y-indexeddb` fallback if prosemirror-sync offline is
-      insufficient) and external-file (watcher queues edits, flushes on reconnect via
-      the reconcile path). — *_*
+  - [~] **Phase 2** (host reconcile engine in main, manual trigger) — `[WIP]`,
+        interrupted by a session limit. Begins hosting `@hubble.md/sync`'s
+        `reconcileProjectionFile` in the Electron main process
+        (`apps/desktop/electron/liveSync.ts`) with an IPC surface
+        (`preload.ts`, `src/desktopApi/types.ts`) and the convex/`@hubble.md/sync`
+        deps. **Compiles** (`pnpm build:desktop` green) but the manual-trigger
+        reconcile path is **not yet wired/verified end-to-end**. Checkpointed at
+        commit `d3c46d9`. Resume: finish the IPC trigger + a renderer call, then
+        verify a manual reconcile round-trips. Phases 3–5 (synced-folder watcher,
+        reconcile routing, backstop + offline queue) follow per `SYNCED-FOLDER.md`.
+- [~] Offline edit + merge on reconnect — two flavors (Decision 6): in-editor (CRDT
+      local buffer/replay) and external-file (watcher queues edits, flushes on
+      reconnect via the reconcile path). Decision: **no Yjs fork** — keep
+      prosemirror-sync + a thin durable layer (see `OFFLINE-DECISION.md`).
+      In-editor flavor `[WIP]` (interrupted by session limit): IndexedDB step
+      buffer + extension persist unsynced ProseMirror steps and replay after a
+      reload-while-offline (`apps/www/src/shell/durableOfflineBuffer.ts`,
+      `DurableOfflineExtension.ts`, wired in `EditorView.tsx`). **Compiles**
+      (`pnpm typecheck` green) but offline-reload replay is **not yet
+      behavior-verified** (needs a human browser pass). Checkpointed at commit
+      `d5355c7`. External-file queue flavor is part of desktop Phase 5, not started.
+      — *Owner: Opus · Started: 2026-06-25*
 - [~] Audit log, trash + restore, admin/role management. Trash/restore backend
       started locally with `documents.listTrash`, `documents.restoreRemoved`,
       `folders.listTrash`, and `folders.restoreRemoved`. Activity events
@@ -544,6 +562,20 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 ## Changelog
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
+
+- 2026-06-25 — Opus (orchestrated) — Stage 6 foundation push. Settled three
+  decisions (`STAGE6-BUILD-DECISIONS.md`): both offline flavors, **no Yjs fork**;
+  **designated synced-folder** on-disk model; always-on **only when a cloud
+  workspace is connected**. Design docs landed: `OFFLINE-DECISION.md`,
+  `DESKTOP-ALWAYS-ON.md`, `SYNCED-FOLDER.md`. Code landed: desktop reconciler
+  extraction Phase 0 (`c0d6ddf`) and tray/lifecycle Phase 1 (`83ee35a`).
+  Checkpointed two `[WIP]` (compiles, behavior-unverified, interrupted by a
+  session limit): in-editor durable offline (`d5355c7`) and desktop Phase 2
+  host-reconcile (`d3c46d9`). **Next pickup:** finish Phase 2 IPC trigger, then
+  Phase 3 synced-folder watcher per `SYNCED-FOLDER.md`; verify the offline-reload
+  replay in a browser. One backend fast-follow noted: `Shared with me/` needs
+  `documents.listSharedWithMe` + a `by_user` index on `docShares` (v1 ships
+  workspace-folders-only).
 
 - 2026-06-25 — Opus — Desktop always-on Phase 1: added tray + always-on
   lifecycle (Decision C). New `apps/desktop/electron/tray.ts`; `main.ts` gains an
