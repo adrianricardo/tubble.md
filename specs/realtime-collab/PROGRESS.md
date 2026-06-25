@@ -291,7 +291,12 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       and document move mutation. Shared-drive semantics and UI remain pending.
       Verified `convex codegen`, `pnpm check`, and `pnpm build:desktop`.
       Unmerged. — *Owner: Codex · Started: 2026-06-25*
-- [ ] Cross-document search. — *_*
+- [~] Cross-document search. Backend search query implemented locally as
+      `documents.search`, scanning readable Live Documents in a workspace across
+      title/path/projected markdown and returning snippets with document
+      metadata. Search indexing and UI remain pending. Verified
+      `convex codegen`, `pnpm check`, and `pnpm build:desktop`. Unmerged. —
+      *Owner: Codex · Started: 2026-06-25*
 - [ ] Export (md/PDF/docx) + import. — *_*
 - [ ] Offline edit + merge on reconnect. — *_*
 - [ ] Audit log, trash + restore, admin/role management. — *_*
@@ -302,6 +307,11 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-25 — Codex — Continued Stage 6 docs-parity polish: added
+  permission-filtered backend cross-document search over Live Document
+  title/path/projected markdown with snippets and metadata. Search indexing and
+  UI remain pending. Verified `convex codegen`, `pnpm check`, and
+  `pnpm build:desktop`.
 - 2026-06-25 — Codex — Started Stage 6 docs-parity polish: added folder data
   modeling with optional `documents.folderId`, a `folders` table, and backend
   folder list/create/rename/delete plus document move APIs. Shared-drive

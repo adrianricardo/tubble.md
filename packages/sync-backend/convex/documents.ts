@@ -375,6 +375,15 @@ function markdownOutline(markdown: string) {
 		.filter((heading) => heading !== null);
 }
 
+function searchSnippet(markdown: string, query: string): string {
+	const lower = markdown.toLowerCase();
+	const index = lower.indexOf(query.toLowerCase());
+	if (index === -1) return markdown.slice(0, 160);
+	const start = Math.max(0, index - 80);
+	const end = Math.min(markdown.length, index + query.length + 80);
+	return markdown.slice(start, end).trim();
+}
+
 export const list = query({
 	args: { workspaceId: v.id("workspaces") },
 	handler: async (ctx, { workspaceId }) => {
@@ -660,6 +669,42 @@ export const listWithMarkdown = query({
 				};
 			}),
 		);
+	},
+});
+
+export const search = query({
+	args: {
+		workspaceId: v.id("workspaces"),
+		query: v.string(),
+		limit: v.optional(v.number()),
+	},
+	handler: async (ctx, { workspaceId, query, limit }) => {
+		await requireWorkspaceMember(ctx, workspaceId);
+		const needle = query.trim().toLowerCase();
+		if (!needle) return [];
+		const documents = await ctx.db
+			.query("documents")
+			.withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+			.collect();
+		const results = [];
+		for (const document of documents) {
+			if (document.deletedAt !== undefined) continue;
+			if ((await documentRole(ctx, document._id)) === null) continue;
+			const projection = await projectMarkdown(ctx, document._id);
+			const haystack = `${document.title}\n${document.path ?? ""}\n${projection.markdown}`;
+			if (!haystack.toLowerCase().includes(needle)) continue;
+			results.push({
+				documentId: document._id,
+				title: document.title,
+				path: document.path,
+				updatedAt: document.updatedAt,
+				updatedBy: document.updatedBy,
+				revision: projection.version ?? 0,
+				snippet: searchSnippet(projection.markdown, query.trim()),
+			});
+			if (results.length >= (limit ?? 20)) break;
+		}
+		return results;
 	},
 });
 
