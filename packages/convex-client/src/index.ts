@@ -27,6 +27,24 @@ export function createConvexBackend(url: string): SyncBackend {
 		async createWorkspace(name) {
 			return client.mutation(api.sync.createWorkspace, { name });
 		},
+		async listWorkspaces() {
+			const workspaces = await client.query(api.sync.listWorkspaces, {});
+			return workspaces.map((workspace) => ({
+				_id: workspace._id,
+				name: workspace.name,
+			}));
+		},
+		async getFolders(workspaceId) {
+			const folders = await client.query(api.folders.list, {
+				workspaceId: workspaceId as Id<"workspaces">,
+			});
+			return folders.map((folder) => ({
+				_id: folder._id,
+				name: folder.name,
+				parentId: folder.parentId ?? null,
+				workspaceId: folder.workspaceId,
+			}));
+		},
 		async getFiles(workspaceId, opts) {
 			const files = await client.query(api.sync.getFilesByWorkspace, {
 				workspaceId: workspaceId as Id<"workspaces">,
@@ -56,6 +74,7 @@ export function createConvexBackend(url: string): SyncBackend {
 			return documents.map((document) => ({
 				_id: document._id,
 				path: document.path ?? null,
+				folderId: document.folderId ?? null,
 				title: document.title,
 				markdown: document.markdown,
 				version: document.version,

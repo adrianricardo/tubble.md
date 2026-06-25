@@ -7,7 +7,12 @@ import {
 	writeCloudSyncConfig,
 	writeSyncState,
 } from "./config.js";
-import type { FileSystem, InitFileSystem } from "./fs.js";
+import { contentHash, type FileSystem, type InitFileSystem } from "./fs.js";
+import { writeReconcileBase } from "./reconcile.js";
+import {
+	type SyncedFolderIndex,
+	saveSyncedFolderIndex,
+} from "./syncedFolderIndex.js";
 import type {
 	CloudSyncConfig,
 	FileState,
@@ -392,6 +397,110 @@ export async function writeLiveDocumentProjections(
 	return result;
 }
 
+export type MaterializeSyncedFolderResult = {
+	syncRoot: string;
+	/** Absolute paths of every materialized `.md` file. */
+	written: string[];
+	/** The reverse index written to `.hubble/index/synced-folder.json`. */
+	index: SyncedFolderIndex;
+};
+
+/**
+ * Materialize the user's cloud Live-Document membership into the on-disk synced
+ * folder: one top folder per workspace, the workspace's folder tree nested via
+ * `parentId`, and each Live Document at `<title>.md` placed by `folderId`.
+ *
+ * Sibling of {@link writeLiveDocumentProjections} (the legacy flat agent tree),
+ * kept separate so the user-facing mirror and the agent projection stay
+ * independent (SYNCED-FOLDER §3). It:
+ *  - computes the nested on-disk path from `(workspace, folder tree, title)` —
+ *    **not** `document.path`, which stays mutable metadata;
+ *  - writes the markdown file and applies the read-only chmod by role;
+ *  - refreshes the reconcile **base cache** via {@link writeReconcileBase} with
+ *    `syncRoot` as the workspace path, so it lands exactly where
+ *    `reconcileProjectionFile` (`liveDocumentBaseCacheRoot(syncRoot)`) expects;
+ *  - writes the **reverse index** (`absPath → documentId`) used by the watcher.
+ *
+ * `Shared with me/` materialization is deferred (SYNCED-FOLDER §1 gap 3).
+ */
+export async function materializeSyncedFolder(
+	backend: Pick<
+		SyncBackend,
+		"listWorkspaces" | "getFolders" | "getLiveDocuments"
+	>,
+	fs: Pick<FileSystem, "ensureDir" | "writeFile" | "setReadOnly">,
+	opts: { syncRoot: string },
+): Promise<MaterializeSyncedFolderResult> {
+	const { syncRoot } = opts;
+	const written: string[] = [];
+	const index: SyncedFolderIndex = {};
+
+	const workspaces = await backend.listWorkspaces();
+	const usedWorkspaceNames = new Set<string>();
+
+	for (const workspace of workspaces) {
+		const workspaceName = uniqueName(
+			usedWorkspaceNames,
+			sanitizeSegment(workspace.name),
+		);
+
+		const folders = await backend.getFolders(workspace._id);
+		const folderRelPaths = buildFolderRelPaths(folders);
+
+		const documents = await backend.getLiveDocuments(workspace._id);
+		// Track sibling-title collisions per directory → ` (2)` suffix.
+		const usedNamesByDir = new Map<string, Set<string>>();
+
+		for (const document of documents) {
+			const folderRel =
+				document.folderId !== null
+					? (folderRelPaths.get(document.folderId) ?? "")
+					: "";
+			const dirRel = joinRel(workspaceName, folderRel);
+			const dirAbs = `${syncRoot}/${dirRel}`;
+
+			const used = usedNamesByDir.get(dirRel) ?? new Set<string>();
+			usedNamesByDir.set(dirRel, used);
+			const fileName = uniqueName(
+				used,
+				`${sanitizeSegment(document.title)}.md`,
+			);
+
+			const relPath = `${dirRel}/${fileName}`;
+			const absPath = `${syncRoot}/${relPath}`;
+
+			await fs.ensureDir(dirAbs);
+			// Clear any prior read-only flag so the write succeeds, then re-apply.
+			if (fs.setReadOnly) await fs.setReadOnly(absPath, false).catch(() => {});
+			await fs.writeFile(absPath, document.markdown);
+			if (fs.setReadOnly)
+				await fs.setReadOnly(absPath, document.canWrite === false);
+
+			// Reconcile base cache, rooted at the sync root so it sits exactly where
+			// reconcileProjectionFile(workspacePath: syncRoot) reads it.
+			await writeReconcileBase(fs, syncRoot, document._id, {
+				markdown: document.markdown,
+				revision: document.version ?? 0,
+				path: relPath,
+			});
+
+			index[absPath] = {
+				documentId: document._id,
+				workspaceId: workspace._id,
+				folderId: document.folderId,
+				inode: null,
+				hash: await contentHash(document.markdown),
+				role: document.role ?? null,
+			};
+			written.push(absPath);
+		}
+	}
+
+	await saveSyncedFolderIndex(fs, syncRoot, index);
+
+	return { syncRoot, written, index };
+}
+
 /** Import local markdown files into cloud-authoritative Live Documents. */
 export async function importLiveDocuments(
 	backend: SyncBackend,
@@ -473,4 +582,74 @@ function titleFromPath(path: string): string {
 
 function normalizeRelativePath(path: string): string {
 	return path.split("\\").join("/");
+}
+
+/**
+ * Make a workspace/folder/title safe to use as a single filesystem path
+ * segment: strip path separators and reserved characters, collapse whitespace,
+ * and fall back to "Untitled" when nothing is left.
+ */
+function sanitizeSegment(name: string): string {
+	const cleaned = name
+		.replace(/[/\\:*?"<>|]/g, " ")
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: strip control chars
+		.replace(/[\u0000-\u001f]/g, " ")
+		.replace(/\s+/g, " ")
+		.trim()
+		.replace(/[. ]+$/, "");
+	return cleaned || "Untitled";
+}
+
+/** Build `folderId → relative directory path` by walking `parentId`. */
+function buildFolderRelPaths(
+	folders: { _id: string; name: string; parentId: string | null }[],
+): Map<string, string> {
+	const byId = new Map(folders.map((folder) => [folder._id, folder]));
+	const cache = new Map<string, string>();
+
+	function resolve(id: string, seen: Set<string>): string {
+		const cached = cache.get(id);
+		if (cached !== undefined) return cached;
+		const folder = byId.get(id);
+		if (!folder || seen.has(id)) return "";
+		seen.add(id);
+		const segment = sanitizeSegment(folder.name);
+		const parentPath =
+			folder.parentId !== null && folder.parentId !== undefined
+				? resolve(folder.parentId, seen)
+				: "";
+		const path = parentPath ? `${parentPath}/${segment}` : segment;
+		cache.set(id, path);
+		return path;
+	}
+
+	for (const folder of folders) resolve(folder._id, new Set());
+	return cache;
+}
+
+/** Join two relative path fragments, dropping an empty tail. */
+function joinRel(head: string, tail: string): string {
+	return tail ? `${head}/${tail}` : head;
+}
+
+/**
+ * Reserve `name` within `used`, disambiguating sibling collisions with a
+ * ` (2)`, ` (3)`, … suffix inserted before the extension.
+ */
+function uniqueName(used: Set<string>, name: string): string {
+	if (!used.has(name)) {
+		used.add(name);
+		return name;
+	}
+	const dot = name.lastIndexOf(".");
+	const stem = dot === -1 ? name : name.slice(0, dot);
+	const ext = dot === -1 ? "" : name.slice(dot);
+	let n = 2;
+	let candidate = `${stem} (${n})${ext}`;
+	while (used.has(candidate)) {
+		n += 1;
+		candidate = `${stem} (${n})${ext}`;
+	}
+	used.add(candidate);
+	return candidate;
 }

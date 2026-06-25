@@ -1,8 +1,10 @@
 export type {
 	AgentDocument,
 	DocumentPatchResult,
+	Folder,
 	ReplaceRangeIntent,
 	SyncBackend,
+	Workspace,
 } from "./backend.js";
 export {
 	isInitialized,
@@ -36,14 +38,29 @@ export {
 	toLocalEditName,
 	writeReconcileBase,
 } from "./reconcile.js";
+export type { MaterializeSyncedFolderResult } from "./sync.js";
 export {
 	exportLiveDocuments,
 	importLiveDocuments,
 	init,
+	materializeSyncedFolder,
 	status,
 	sync,
 	writeLiveDocumentProjections,
 } from "./sync.js";
+export type {
+	SyncedFolderIndex,
+	SyncedFolderIndexDiff,
+	SyncedFolderIndexEntry,
+	SyncedFolderRole,
+} from "./syncedFolderIndex.js";
+export {
+	diffSyncedFolderIndex,
+	loadSyncedFolderIndex,
+	rekeySyncedFolderEntry,
+	saveSyncedFolderIndex,
+	syncedFolderIndexPath,
+} from "./syncedFolderIndex.js";
 export type {
 	CloudSyncConfig,
 	FileState,

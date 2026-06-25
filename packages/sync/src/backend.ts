@@ -5,6 +5,20 @@ import type {
 	RemoteFile,
 } from "./types.js";
 
+/** A workspace the signed-in user can see (from `sync.listWorkspaces`). */
+export type Workspace = {
+	_id: string;
+	name: string;
+};
+
+/** A folder within a workspace (from `folders.list`), nested via `parentId`. */
+export type Folder = {
+	_id: string;
+	name: string;
+	parentId: string | null;
+	workspaceId: string;
+};
+
 /** A Live Document as seen by an agent/reconcile client. */
 export type AgentDocument = {
 	documentId: string;
@@ -35,6 +49,10 @@ export type DocumentPatchResult = {
 export interface SyncBackend {
 	getWorkspace(name: string): Promise<string | null>;
 	createWorkspace(name: string): Promise<string>;
+	/** Workspaces the signed-in user belongs to (drives the synced-folder mirror). */
+	listWorkspaces(): Promise<Workspace[]>;
+	/** Folder tree for a workspace; nested via `parentId`. */
+	getFolders(workspaceId: string): Promise<Folder[]>;
 
 	getFiles(
 		workspaceId: string,

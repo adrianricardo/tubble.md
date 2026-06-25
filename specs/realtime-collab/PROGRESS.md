@@ -548,6 +548,28 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
         round-trip and tray behavior remain **human-gated** (can't run Electron
         headlessly). Stays `[~]` until merged. Phases 3–5 follow per
         `SYNCED-FOLDER.md`. — *Owner: Sonnet (orchestrated) · 2026-06-25*
+  - [~] **Phase 3a** (synced-folder packages core, no desktop) — landed in the
+        working tree. Threaded `LiveDocumentProjection.folderId` through
+        `@hubble.md/convex-client` `getLiveDocuments`; added
+        `SyncBackend.listWorkspaces`/`getFolders` (over existing
+        `api.sync.listWorkspaces` / `api.folders.list`); new
+        `packages/sync/src/syncedFolderIndex.ts` (`.hubble/index/synced-folder.json`
+        load/save/`diff`/re-key, `absPath→{documentId,workspaceId,folderId,inode,
+        hash,role}`); new `materializeSyncedFolder(backend, fs, { syncRoot })` in
+        `sync.ts` that builds the nested `workspace → folderTree(parentId) →
+        sanitize(title).md` mirror (NOT `document.path`), writes reconcile base
+        caches at `liveDocumentBaseCacheRoot(syncRoot)` so `reconcileProjectionFile`
+        finds them, writes the reverse index, applies role-based read-only chmod,
+        and ` (2)`-suffixes sibling-title collisions. 7 new unit tests
+        (`syncedFolder.test.ts`), `pnpm --filter @hubble.md/sync test` 21/21,
+        `pnpm typecheck` clean across all 6 TS packages. **Deferred to follow-ups:**
+        `Shared with me/` materialization (backend `listSharedWithMe` + `by_user`
+        index already exist; just needs a `convex-client` thread); `inode` capture
+        (needs FS `stat` — Phase 3b stats real files); base-cache `canWrite`/`role`
+        carry-through (read-only still enforced by 0444 chmod + server-side
+        `getDocumentForAgent` re-check); incremental removal of files that left the
+        cloud set (Phase 3b watcher uses `diffSyncedFolderIndex`). —
+        *Owner: Opus (orchestrated) · 2026-06-25*
 - [~] Offline edit + merge on reconnect — two flavors (Decision 6): in-editor (CRDT
       local buffer/replay) and external-file (watcher queues edits, flushes on
       reconnect via the reconcile path). Decision: **no Yjs fork** — keep
@@ -572,6 +594,18 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 ## Changelog
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
+
+- 2026-06-25 — Opus (orchestrated) — Synced-folder Phase 3a (packages core):
+  threaded `folderId` through the `LiveDocumentProjection` + `convex-client`
+  mapper; added `SyncBackend.listWorkspaces`/`getFolders`; new `syncedFolderIndex`
+  module (`.hubble/index/synced-folder.json` load/save/diff/re-key); new
+  `materializeSyncedFolder(backend, fs, { syncRoot })` building the nested
+  workspace→folder→title mirror with reconcile base caches at
+  `liveDocumentBaseCacheRoot(syncRoot)`, the reverse index, role-based read-only
+  chmod, and ` (2)` collision suffixing. 7 new unit tests, sync vitest 21/21,
+  `pnpm typecheck` clean. No desktop/backend files touched. Deferred:
+  `Shared with me/` materialize, inode capture (Phase 3b), base-cache role carry,
+  incremental removal (Phase 3b). Unmerged.
 
 - 2026-06-25 — Sonnet (orchestrated) — Desktop Phase 2 finished: added
   `LiveSyncService` unit tests (`apps/desktop/electron/liveSync.test.ts`, 7 tests

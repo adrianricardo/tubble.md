@@ -41,6 +41,7 @@ export type SyncResult = {
 export type LiveDocumentProjection = {
 	_id: string;
 	path: string | null;
+	folderId: string | null;
 	title: string;
 	markdown: string;
 	version: number | null;
