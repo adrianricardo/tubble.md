@@ -160,6 +160,28 @@ async function projectMarkdown(
 	};
 }
 
+function markdownOutline(markdown: string) {
+	return markdown
+		.split(/\r?\n/)
+		.map((line, index) => {
+			const match = /^(#{1,6})\s+(.+)$/.exec(line);
+			if (!match) return null;
+			const text = match[2]?.trim();
+			if (!text) return null;
+			return {
+				level: match[1]?.length ?? 1,
+				text,
+				line: index + 1,
+				slug: text
+					.toLowerCase()
+					.replace(/[^a-z0-9\s-]/g, "")
+					.trim()
+					.replace(/\s+/g, "-"),
+			};
+		})
+		.filter((heading) => heading !== null);
+}
+
 export const list = query({
 	args: { workspaceId: v.id("workspaces") },
 	handler: async (ctx, { workspaceId }) => {
@@ -199,6 +221,26 @@ export const getWithMarkdown = query({
 			...document,
 			markdown: projection.markdown,
 			version: projection.version,
+		};
+	},
+});
+
+export const getForAgent = query({
+	args: { documentId: v.id("documents") },
+	handler: async (ctx, { documentId }) => {
+		await requireDocumentRead(ctx, documentId);
+		const document = await ctx.db.get(documentId);
+		if (!document || document.deletedAt !== undefined) return null;
+		const projection = await projectMarkdown(ctx, documentId);
+		return {
+			documentId,
+			revision: projection.version ?? 0,
+			markdown: projection.markdown,
+			outline: markdownOutline(projection.markdown),
+			title: document.title,
+			path: document.path,
+			updatedAt: document.updatedAt,
+			updatedBy: document.updatedBy,
 		};
 	},
 });

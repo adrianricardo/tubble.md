@@ -50,7 +50,7 @@ tests fail or a step was skipped, say so in the task note.
 | 1. Realtime editing POC | 🟡 In progress | Spike scaffolded; gate provisionally passed (see SPIKE.md). POC identity gate added locally; live two-browser test pending. |
 | 2. Documents as cloud entities | 🟡 In progress | Stable doc table, web CRUD, and read projection implemented locally; sync import/export pending |
 | 3. Team permissions | 🟡 In progress | Convex Auth password provider wired locally; memberships, shares, and enforcement pending |
-| 4. Agent collaboration (Model C) | 🔴 Not started | Doc patch API + MCP/CLI, projection, legacy shim |
+| 4. Agent collaboration (Model C) | 🟡 In progress | Agent read API started; patch API + MCP/CLI, projection, legacy shim pending |
 | 5. Version history & review | 🔴 Not started | Revisions + restore, comments, suggestions |
 | 6. Docs-parity polish | 🔴 Not started | Folders, search, export/import, offline, admin |
 
@@ -201,10 +201,14 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       skipped because Browser plugin discovery exposed no browser-control tool.
       Unmerged. — *Owner: Codex · Started: 2026-06-25*
 
-## Stage 4 — Agent collaboration layer (Model C) 🔴
+## Stage 4 — Agent collaboration layer (Model C) 🟡
 
-- [ ] `getDocument(id) → { revision, markdown, outline }` (outline enables targeted,
-      token-efficient edits). — *_*
+- [~] `getDocument(id) → { revision, markdown, outline }` (outline enables targeted,
+      token-efficient edits). Implemented locally as `documents.getForAgent`,
+      returning the live markdown projection, ProseMirror version as revision,
+      document metadata, and a heading outline with level/text/line/slug.
+      Verified `convex codegen`, `pnpm check`, and `pnpm build:desktop`.
+      Unmerged. — *Owner: Codex · Started: 2026-06-25*
 - [ ] `applyPatch(id, baseRevision, intent)` → steps → CRDT txn, **attributed to the
       agent**, streamed; rebase/reject if `baseRevision` is stale. — *_*
 - [ ] MCP server + `hubble` CLI surface for the patch API. — *_*
@@ -235,6 +239,11 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-25 — Codex — Started Stage 4 agent collaboration: added
+  `documents.getForAgent` to return a permission-checked live document read
+  packet with revision, markdown projection, metadata, and heading outline for
+  targeted agent edits. Verified `convex codegen`, `pnpm check`, and
+  `pnpm build:desktop`.
 - 2026-06-25 — Codex — Continued Stage 3 team permissions: added the Live
   Document share dialog with invite-by-email role assignment, direct share
   removal, and public link access controls for viewer/commenter/editor roles.
