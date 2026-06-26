@@ -25,12 +25,12 @@ import type {
  * logic can be unit-tested against a fake `SyncBackend` + in-memory FS.
  */
 export type LiveSyncServiceOptions = {
-	createBackend?: (url: string) => SyncBackend;
+	createBackend?: (url: string, authToken?: string) => SyncBackend;
 	fs?: FileSystem;
 };
 
 export class LiveSyncService {
-	#createBackend: (url: string) => SyncBackend;
+	#createBackend: (url: string, authToken?: string) => SyncBackend;
 	#fs: FileSystem;
 	#connection: LiveSyncConnectInput | null = null;
 	#backend: SyncBackend | null = null;
@@ -50,7 +50,10 @@ export class LiveSyncService {
 
 	connect(connection: LiveSyncConnectInput): LiveSyncStatus {
 		this.#connection = connection;
-		this.#backend = this.#createBackend(connection.deploymentUrl);
+		this.#backend = this.#createBackend(
+			connection.deploymentUrl,
+			connection.authToken,
+		);
 		this.#state = "connected";
 		this.#lastError = null;
 		return this.getStatus();

@@ -9,21 +9,24 @@ import {
 	materializeSyncedFolder,
 	reconcileProjectionFile,
 	rekeySyncedFolderEntry,
-	saveSyncedFolderIndex,
 	type SyncBackend,
 	type SyncedFolderIndex,
 	type SyncedFolderIndexEntry,
+	saveSyncedFolderIndex,
 	toLocalEditName,
 	writeReconcileBase,
 } from "@hubble.md/sync";
 import { createNodeFileSystem } from "@hubble.md/sync/node";
-import type { SyncedFolderEvent, SyncedFolderStatus } from "../src/desktopApi/types";
+import type {
+	SyncedFolderEvent,
+	SyncedFolderStatus,
+} from "../src/desktopApi/types";
 import {
 	acquireSingleWriterLock,
 	classifySyncedFolderChange,
 	flushExpiredUnlinks,
-	heartbeatSingleWriterLock,
 	type HeldUnlink,
+	heartbeatSingleWriterLock,
 	OWNER_LOCK_STALE_MS,
 	type RawWatcherEvent,
 	releaseSingleWriterLock,
@@ -34,7 +37,7 @@ import {
 export type WatcherHandle = { close(): Promise<void> | void };
 
 export type SyncedFolderServiceOptions = {
-	createBackend?: (url: string) => SyncBackend;
+	createBackend?: (url: string, authToken?: string) => SyncBackend;
 	fs?: FileSystem;
 	/** Push a `desktop:live-sync:event` to the renderer. */
 	emit?: (event: SyncedFolderEvent) => void;
@@ -58,6 +61,7 @@ export type SyncedFolderServiceOptions = {
 export type ConnectFolderInput = {
 	syncRoot: string;
 	deploymentUrl: string;
+	authToken: string;
 	deviceId?: string;
 };
 
@@ -90,7 +94,7 @@ const TRASH_DIR_REL = ".hubble/trash";
  * classification, and routing are unit-tested with no chokidar or Electron.
  */
 export class SyncedFolderService {
-	#createBackend: (url: string) => SyncBackend;
+	#createBackend: (url: string, authToken?: string) => SyncBackend;
 	#fs: FileSystem;
 	#emit: (event: SyncedFolderEvent) => void;
 	#now: () => number;
@@ -125,7 +129,8 @@ export class SyncedFolderService {
 		this.#emit = options.emit ?? (() => {});
 		this.#now = options.now ?? (() => Date.now());
 		this.#deviceId = options.deviceId ?? "desktop-unknown";
-		this.#pid = options.pid ?? (typeof process !== "undefined" ? process.pid : 0);
+		this.#pid =
+			options.pid ?? (typeof process !== "undefined" ? process.pid : 0);
 		this.#statInode =
 			options.statInode ??
 			((absPath) => {
@@ -175,7 +180,11 @@ export class SyncedFolderService {
 	 * (§6 case 4 detect-and-refuse).
 	 */
 	async connect(input: ConnectFolderInput): Promise<SyncedFolderStatus> {
-		const { syncRoot, deploymentUrl } = input;
+		if (this.connected) {
+			await this.disconnect();
+		}
+
+		const { syncRoot, deploymentUrl, authToken } = input;
 		const deviceId = input.deviceId ?? this.#deviceId;
 		this.#deviceId = deviceId;
 
@@ -191,7 +200,7 @@ export class SyncedFolderService {
 			throw new Error(this.#lastError);
 		}
 
-		this.#backend = this.#createBackend(deploymentUrl);
+		this.#backend = this.#createBackend(deploymentUrl, authToken);
 		this.#syncRoot = syncRoot;
 		this.#lastError = null;
 

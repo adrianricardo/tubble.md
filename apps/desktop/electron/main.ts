@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import hubbleRuntime from "@hubble.md/runtime/global.js?raw";
 import htmlAppTheme from "@hubble.md/runtime/html-app-theme.css?raw";
-import tailwindRuntime from "@tailwindcss/browser?raw";
 import { contentHash } from "@hubble.md/sync";
+import tailwindRuntime from "@tailwindcss/browser?raw";
 import alpineRuntime from "alpinejs/dist/cdn.min.js?raw";
 import chokidar, { type FSWatcher } from "chokidar";
 import {
@@ -1425,6 +1425,7 @@ function registerIpc() {
 				workspacePath,
 				deploymentUrl: input.deploymentUrl,
 				workspaceId: input.workspaceId,
+				authToken: input.authToken,
 			});
 			// Connecting a cloud workspace engages always-on mode (Decision C).
 			setBackgroundActive(true);
@@ -1460,6 +1461,7 @@ function registerIpc() {
 			const status = await syncedFolder.connect({
 				syncRoot,
 				deploymentUrl: input.deploymentUrl,
+				authToken: input.authToken,
 				deviceId: input.deviceId,
 			});
 			// Connecting the synced folder engages always-on mode (Decision C).

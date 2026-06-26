@@ -121,7 +121,7 @@ function joinWorkspacePath(dir: string, path: string): string {
 
 function normalizeWorkspacePath(path: string): string | null {
 	const parts: string[] = [];
-	for (const part of path.replaceAll("\\", "/").split("/")) {
+	for (const part of path.replace(/\\/g, "/").split("/")) {
 		if (!part || part === ".") continue;
 		if (part === "..") {
 			if (parts.length === 0) return null;

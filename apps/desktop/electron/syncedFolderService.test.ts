@@ -26,6 +26,12 @@ vi.mock("@hubble.md/convex-client", () => ({
 
 const SYNC_ROOT = "/Hubble";
 const NOW = 1_700_000_000_000;
+const AUTH_TOKEN = "test-auth-token";
+const CONNECT_INPUT = {
+	syncRoot: SYNC_ROOT,
+	deploymentUrl: "https://fake.convex.cloud",
+	authToken: AUTH_TOKEN,
+} as const;
 
 /** In-memory FileSystem whose backing map is exposed for assertions. */
 type MemoryFs = FileSystem & { __files: Map<string, string> };
@@ -61,9 +67,15 @@ function memoryFs(initial: Record<string, string> = {}): MemoryFs {
 }
 
 type Calls = {
+	backend: Array<{ url: string; authToken?: string }>;
 	rename: Array<{ documentId: string; title: string; path?: string }>;
 	move: Array<{ documentId: string; folderId: string | null }>;
-	import: Array<{ workspaceId: string; path: string; title: string; markdown: string }>;
+	import: Array<{
+		workspaceId: string;
+		path: string;
+		title: string;
+		markdown: string;
+	}>;
 	patch: Array<{ documentId: string }>;
 	remove: Array<{ documentId: string }>;
 };
@@ -172,7 +184,10 @@ function makeService(
 	const fs = memoryFs();
 	const backend = fakeBackend(calls, state);
 	const service = new SyncedFolderService({
-		createBackend: () => backend,
+		createBackend: (url, authToken) => {
+			calls.backend.push({ url, authToken });
+			return backend;
+		},
 		fs,
 		now: () => NOW,
 		deviceId: "device-test",
@@ -197,13 +212,20 @@ describe("SyncedFolderService routing", () => {
 	let events: Array<{ kind: string }>;
 
 	beforeEach(() => {
-		calls = { rename: [], move: [], import: [], patch: [], remove: [] };
+		calls = {
+			backend: [],
+			rename: [],
+			move: [],
+			import: [],
+			patch: [],
+			remove: [],
+		};
 		events = [];
 	});
 
 	it("reconcile: a change on an indexed path calls reconcileProjectionFile (applyDocumentPatch)", async () => {
 		const { service, fs } = makeService(calls, events);
-		await service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" });
+		await service.connect(CONNECT_INPUT);
 
 		// Materialize wrote "hello"; simulate an external edit on disk.
 		await fs.writeFile(`${SYNC_ROOT}/WS/Doc.md`, "hello world");
@@ -219,9 +241,22 @@ describe("SyncedFolderService routing", () => {
 		expect(events).toContainEqual({ kind: "reconciled" });
 	});
 
+	it("connect forwards the renderer auth token to the backend factory", async () => {
+		const { service } = makeService(calls, events);
+
+		await service.connect(CONNECT_INPUT);
+
+		expect(calls.backend).toEqual([
+			{
+				url: "https://fake.convex.cloud",
+				authToken: AUTH_TOKEN,
+			},
+		]);
+	});
+
 	it("self-write: a change whose hash matches our own write is suppressed", async () => {
 		const { service } = makeService(calls, events);
-		await service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" });
+		await service.connect(CONNECT_INPUT);
 
 		await service.handleRawEvent({
 			type: "change",
@@ -237,7 +272,7 @@ describe("SyncedFolderService routing", () => {
 
 	it("rename: unlink + correlated add calls renameDocument and re-keys", async () => {
 		const { service } = makeService(calls, events);
-		await service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" });
+		await service.connect(CONNECT_INPUT);
 
 		await service.handleRawEvent({
 			type: "unlink",
@@ -259,7 +294,7 @@ describe("SyncedFolderService routing", () => {
 
 	it("create: a new .md inside a workspace folder calls importLiveDocument", async () => {
 		const { service, fs } = makeService(calls, events);
-		await service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" });
+		await service.connect(CONNECT_INPUT);
 
 		await fs.writeFile(`${SYNC_ROOT}/WS/New.md`, "fresh note");
 		await service.handleRawEvent({
@@ -285,7 +320,7 @@ describe("SyncedFolderService routing", () => {
 		// Disconnected: nothing is a live document yet.
 		expect(service.isLiveDocument(`${SYNC_ROOT}/WS/Doc.md`)).toBe(false);
 
-		await service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" });
+		await service.connect(CONNECT_INPUT);
 
 		// Materialized doc is in the reverse index → owned by the engine.
 		expect(service.isLiveDocument(`${SYNC_ROOT}/WS/Doc.md`)).toBe(true);
@@ -301,7 +336,7 @@ describe("SyncedFolderService routing", () => {
 
 	it("backstop (missing-base): preserves on-disk bytes, re-materializes, no clobber", async () => {
 		const { service, fs } = makeService(calls, events);
-		await service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" });
+		await service.connect(CONNECT_INPUT);
 
 		// Drop the base cache so reconcile cannot scope a patch → missing-base.
 		await fs.deleteFile(BASE_MD);
@@ -334,7 +369,7 @@ describe("SyncedFolderService routing", () => {
 
 	it("read-only: a change to a non-writable doc is rejected and backstopped", async () => {
 		const { service, fs } = makeService(calls, events, { canWrite: false });
-		await service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" });
+		await service.connect(CONNECT_INPUT);
 
 		await fs.writeFile(`${SYNC_ROOT}/WS/Doc.md`, "edit to a read-only doc");
 		await service.handleRawEvent({
@@ -348,7 +383,9 @@ describe("SyncedFolderService routing", () => {
 		// On-disk edit preserved as a sibling; authoritative restored; no cloud write.
 		const sibling = findPath(fs, /\/WS\/Doc\.local-edit-.*\.md$/);
 		expect(sibling).toBeDefined();
-		expect(sibling && (await fs.readFile(sibling))).toBe("edit to a read-only doc");
+		expect(sibling && (await fs.readFile(sibling))).toBe(
+			"edit to a read-only doc",
+		);
 		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe("hello");
 		expect(calls.patch).toEqual([]);
 		expect(events).toContainEqual({ kind: "read-only-rejected" });
@@ -356,7 +393,7 @@ describe("SyncedFolderService routing", () => {
 
 	it("local-delete: an expired watcher unlink soft-deletes the cloud doc", async () => {
 		const { service } = makeService(calls, events);
-		await service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" });
+		await service.connect(CONNECT_INPUT);
 
 		// Watcher unlink with no correlated add → held, then window expires.
 		await service.handleRawEvent({
@@ -374,7 +411,7 @@ describe("SyncedFolderService routing", () => {
 
 	it("access-loss: a doc leaving the cloud set is trashed, never cloud-deleted", async () => {
 		const { service, fs, state } = makeService(calls, events);
-		await service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" });
+		await service.connect(CONNECT_INPUT);
 		expect(service.isLiveDocument(`${SYNC_ROOT}/WS/Doc.md`)).toBe(true);
 
 		// The doc leaves the desired cloud set (revoked share) — still exists in
@@ -410,8 +447,8 @@ describe("SyncedFolderService routing", () => {
 			statInode: () => 111,
 		});
 
-		await expect(
-			service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" }),
-		).rejects.toThrow(/already syncing/i);
+		await expect(service.connect(CONNECT_INPUT)).rejects.toThrow(
+			/already syncing/i,
+		);
 	});
 });

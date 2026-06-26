@@ -79,6 +79,8 @@ export type LiveSyncConnectInput = {
 	workspacePath: string;
 	deploymentUrl: string;
 	workspaceId: string;
+	/** Convex Auth JWT from the renderer session. IPC carries a string, not a token fetcher. */
+	authToken: string;
 };
 
 /** Status of the synced-folder watcher engine (Phase 3b). */
@@ -97,6 +99,8 @@ export type SyncedFolderConnectInput = {
 	/** The user-chosen sync root (bounded watch root). */
 	syncRoot: string;
 	deploymentUrl: string;
+	/** Convex Auth JWT from the renderer session. IPC carries a string, not a token fetcher. */
+	authToken: string;
 	deviceId?: string;
 };
 
@@ -215,7 +219,9 @@ export type DesktopApi = {
 	 */
 	isSyncedFolderDocument(absPath: string): Promise<boolean>;
 	/** Subscribe to synced-folder mirror events (reconciled/renamed/created/…). */
-	onSyncedFolderEvent(callback: (event: SyncedFolderEvent) => void): Unsubscribe;
+	onSyncedFolderEvent(
+		callback: (event: SyncedFolderEvent) => void,
+	): Unsubscribe;
 	getUpdateState(): Promise<DesktopUpdateState>;
 	getFullScreen(): Promise<boolean>;
 	checkForUpdates(): Promise<void>;

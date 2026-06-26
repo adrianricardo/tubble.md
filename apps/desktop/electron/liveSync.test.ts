@@ -6,7 +6,6 @@
  * follow reconcile.test.ts from the shared @hubble.md/sync package.
  */
 
-import { describe, expect, it, vi } from "vitest";
 import type {
 	AgentDocument,
 	DocumentPatchResult,
@@ -14,6 +13,7 @@ import type {
 	SyncBackend,
 } from "@hubble.md/sync";
 import { writeReconcileBase } from "@hubble.md/sync";
+import { describe, expect, it, vi } from "vitest";
 import { LiveSyncService } from "./liveSync";
 
 // Mock the production-only modules that cannot load cleanly in the Vitest
@@ -125,6 +125,7 @@ const CONNECTION = {
 	workspacePath: WORKSPACE,
 	deploymentUrl: "https://fake.convex.cloud",
 	workspaceId: "ws-1",
+	authToken: "test-auth-token",
 } as const;
 
 const RECONCILE_INPUT = {
@@ -184,6 +185,27 @@ describe("LiveSyncService", () => {
 			expect(status.workspaceId).toBe("ws-1");
 			expect(status.pending).toBe(0);
 			expect(status.lastError).toBeNull();
+		});
+
+		it("connect() forwards the renderer auth token to the backend factory", () => {
+			const calls: Array<{ url: string; authToken?: string }> = [];
+			const backendFactory = createFakeBackend({});
+			const svc = new LiveSyncService({
+				createBackend: (url, authToken) => {
+					calls.push({ url, authToken });
+					return backendFactory(url);
+				},
+				fs: createMemoryFs(),
+			});
+
+			svc.connect(CONNECTION);
+
+			expect(calls).toEqual([
+				{
+					url: "https://fake.convex.cloud",
+					authToken: "test-auth-token",
+				},
+			]);
 		});
 
 		it("reconcile() before connect throws", async () => {

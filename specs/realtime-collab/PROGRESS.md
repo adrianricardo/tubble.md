@@ -27,6 +27,11 @@ next work is decomposed into model-tiered, dispatch-ready slices:
   token plumbing) is the gate; **RT1 + RT2 is enough to smoke-test an empty
   `~/Hubble`**; RT3 (first-run guard) is needed before a non-empty folder. Full
   briefs in `tasks/RT1…RT5`. Peer-reviewed by Codex.
+  **RT1 landed locally 2026-06-26**: desktop now has Convex Auth in Settings,
+  a renderer-owned JWT string contract over IPC, authenticated main-process
+  `SyncBackend` creation, and token-change reconnect for the synced-folder engine.
+  Next pickup: **RT2** settings/workspace connect flow refinement; keep testing to
+  an empty folder until RT3's first-run guard lands.
 - **`READY-TO-DEPLOY.plan.md`** — RD1–RD12 roadmap to full production (reactive
   cloud→disk sync, schema migration, the doc-size + offline **gates**, auth audit,
   security review, flag-gated merge-to-main, release, monitoring). Briefs expand at
@@ -713,6 +718,18 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 ## Changelog
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
+
+- 2026-06-26 — Codex (orchestrated, reviewed) — RT1 ready-to-test gate landed:
+  desktop renderer now wraps the app in Convex Auth when `VITE_CONVEX_URL` is set,
+  exposes a Settings cloud-sync section with password sign-in/sign-up, queries the
+  authenticated workspace list, and sends the renderer JWT string from
+  `useAuthToken()` over IPC to both `connectSyncedFolder` and `connectLiveSync`.
+  `createConvexBackend(url, authToken?)` now authenticates the `ConvexHttpClient`;
+  the synced-folder renderer reconnects the main-process backend when the token
+  changes. Added token-forwarding tests for `LiveSyncService` and
+  `SyncedFolderService`; desktop vitest 74/74, `pnpm typecheck`, and
+  `pnpm build:desktop` pass. Actual deployed Convex sign-in/materialize remains
+  human-gated; use an empty sync folder until RT3's existing-folder guard lands.
 
 - 2026-06-25 — Opus (orchestrated, reviewed) — Synced-folder Phase 5 (safety
   nets): synced folder now protects local edits — a conflicting or read-only save

@@ -1,9 +1,15 @@
+import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { wikiDisplayNameForTarget } from "@hubble.md/editor";
 import { Button, EditorView, type WikiTarget } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
+import { ConvexReactClient } from "convex/react";
 import { keymatch } from "keymatch";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import {
+	CloudSyncSection,
+	CloudSyncUnavailableSection,
+} from "./components/CloudSyncSection";
 import {
 	HtmlAppsDialog,
 	SidebarHtmlAppsCallout,
@@ -16,6 +22,7 @@ import {
 	UpdatesSection,
 } from "./components/UpdatesSection";
 import { WelcomeScreen } from "./components/WelcomeScreen";
+import { desktopConvexUrl } from "./convex";
 import { desktopApi } from "./desktopApi";
 import type { DesktopUpdateState } from "./desktopApi/types";
 import { createEmbedExtension } from "./editor/EmbedExtension";
@@ -94,6 +101,23 @@ async function revealPath(path: string | null) {
 }
 
 function App() {
+	const convexClient = useMemo(
+		() => (desktopConvexUrl ? new ConvexReactClient(desktopConvexUrl) : null),
+		[],
+	);
+
+	if (!convexClient) {
+		return <AppContent />;
+	}
+
+	return (
+		<ConvexAuthProvider client={convexClient}>
+			<AppContent />
+		</ConvexAuthProvider>
+	);
+}
+
+function AppContent() {
 	const state = useStoreValue(viewerStore);
 	const workspacePath = useStoreValue(workspacePathStore);
 	const sidebarOpen = useStoreValue(sidebarOpenStore);
@@ -415,6 +439,11 @@ function App() {
 				</section>
 			</div>
 			<SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+				{desktopConvexUrl ? (
+					<CloudSyncSection deploymentUrl={desktopConvexUrl} />
+				) : (
+					<CloudSyncUnavailableSection />
+				)}
 				{updateState ? (
 					<UpdatesSection
 						state={updateState}

@@ -17,8 +17,14 @@ export type Subscriber = {
 	close(): Promise<void>;
 };
 
-export function createConvexBackend(url: string): SyncBackend {
+export function createConvexBackend(
+	url: string,
+	authToken?: string,
+): SyncBackend {
 	const client = new ConvexHttpClient(url);
+	if (authToken) {
+		client.setAuth(authToken);
+	}
 	return {
 		async getWorkspace(name) {
 			const workspace = await client.query(api.sync.getWorkspace, { name });
