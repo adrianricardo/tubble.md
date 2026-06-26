@@ -1,14 +1,21 @@
-# RT3 — Sync-root grant + first-run-on-existing-folder guard
+# RT3 — First-run-on-existing-folder guard
 
 **Tier:** standard (Sonnet) — bounded, but safety-critical (don't blast user files).
-**Depends-on:** RT2 (the Settings flow triggers it). **Parallel-with:** RT4.
+**Depends-on:** RT1 for the main-process IPC + classifier (can run **parallel with
+RT2**); the small UI-integration tail depends on RT2. **Parallel-with:** RT4.
+
+> **Scope note (corrected):** there is **no grant work** here — both folder pickers
+> (`desktop:open-folder-picker` / `desktop:create-folder-picker`) already call
+> `grantRoot()` on their result (`main.ts` L1281/L1295), so a picked root is granted
+> automatically. This slice is **only** the first-run safety guard.
 
 ## Objective
 
-(1) Grant the chosen sync root to the main process so `connectSyncedFolder`'s
-`assertGrantedRoot` passes, and (2) implement the **first-run safety guard** so
-connecting an existing non-empty folder never auto-materializes over the user's
-files (SYNCED-FOLDER §6 case 5).
+Implement the **first-run safety guard** so connecting an existing non-empty folder
+never auto-materializes over the user's files (SYNCED-FOLDER §6 case 5). The
+main-process IPC + classifier is independent of the Settings UI and can be built and
+unit-tested right after RT1; the UI branch that surfaces the two choices is the only
+RT2-dependent part.
 
 ## Read first
 
@@ -24,19 +31,23 @@ files (SYNCED-FOLDER §6 case 5).
 
 ## Scope
 
-1. **Grant on pick.** When the user chooses a sync root in Settings (RT2), grant that
-   root to the main process (the same mechanism a normally-opened workspace uses), so
-   `assertGrantedRoot(syncRoot)` succeeds. Persist the grant like other grants.
-2. **First-run guard** (new IPC, e.g. `desktop:live-sync:inspect-root(syncRoot)` →
-   `{ state: "empty" | "existing-hubble" | "non-empty-foreign" }`):
+1. **First-run guard IPC + classifier** (independent of RT2; build right after RT1):
+   `desktop:live-sync:inspect-root(syncRoot)` →
+   `{ state: "empty" | "existing-hubble" | "non-empty-foreign" }`:
    - `existing-hubble` (has `.hubble/index/synced-folder.json`) → safe to connect.
    - `empty` → safe to connect (fresh mirror).
-   - `non-empty-foreign` → **refuse by default**; Settings offers two explicit
-     choices: (a) pick/create an empty subfolder, or (b) **import** the existing
-     `.md` into the cloud via `importLiveDocuments` (idempotent by path) *before*
-     turning on the mirror. Never auto-materialize over unknown files.
-3. Wire the guard result into RT2's connect flow (block Connect on
-   `non-empty-foreign` until the user picks a or b).
+   - `non-empty-foreign` → **refuse by default** (the UI offers the two choices below).
+   Classification is a pure function over a directory listing → unit-test it with an
+   in-memory FS, no Electron.
+2. **UI branch (RT2-dependent tail).** Wire the guard result into RT2's connect flow:
+   block Connect on `non-empty-foreign` until the user picks (a) pick/create an empty
+   subfolder, or (b) **import** the existing `.md` into the cloud via
+   `importLiveDocuments` *before* turning on the mirror. Never auto-materialize over
+   unknown files.
+3. **Import requires a target workspace.** `importLiveDocuments()` takes a
+   **`workspaceId`** — option (b) must make the user pick an explicit target workspace
+   (from the authed `sync.listWorkspaces`) before importing; never import to an
+   inferred/default workspace.
 
 ## Out of scope
 
@@ -47,8 +58,8 @@ surfaces). Reactive sync, two-device lock (RD7).
 
 - Electron `tsconfig.node.json` is non-strict — flat optional fields for any union
   you add on the main side.
-- Granting must be revocable/scoped sensibly; don't widen the grant beyond the chosen
-  root.
+- Do **not** add grant logic — the pickers already grant. If you support manual path
+  entry (not via a picker), that path would need a grant, but the picker flow doesn't.
 - The `.hubble/index` marker is the source of truth for "already a Hubble root" — not
   the folder name.
 

@@ -36,10 +36,18 @@ disk→cloud reconcile, so the human starts from a known state.
      a `*.local-edit-<ts>` sibling appears and the file reloads.
    - Rename in Finder → cloud doc renames; move → folder changes.
    - Disconnect → watcher stops; reconnect → no duplicate docs (idempotent).
-2. **`scripts/synced-folder-smoke.mjs`** — seeds a workspace + one doc via Convex,
-   writes the sync root's base cache, simulates a file edit, runs the reconcile path,
-   and asserts the cloud doc updated. Headless where possible; clearly mark any step
-   that needs the running desktop app.
+2. **`scripts/synced-folder-reconcile-smoke.mjs`** — a **package-level reconcile
+   smoke** (NOT a full app smoke): seeds a workspace + one doc via Convex, writes the
+   sync root's base cache, simulates a file edit, runs the **reconcile path**
+   (`reconcileProjectionFile`, as `scripts/reconcile-poc.mjs` does), and asserts the
+   cloud doc updated. Be explicit that this **bypasses the desktop watcher + IPC** —
+   it does *not* prove `connectSyncedFolder → materialize → edit → cloud`. That full
+   path is proven by the **human runbook step** (item 1), not this script.
+   - **Auth:** against deployed Convex with real auth, the script **cannot seed
+     without a token**. Either (a) take `CONVEX_URL` + an `AUTH_TOKEN` env input, or
+     (b) restrict the script to a local/legacy unauthenticated `convex dev`
+     deployment and say so. Do not pretend it works unauthenticated against the
+     deployed backend.
 
 ## Out of scope
 

@@ -16,9 +16,13 @@ for engine events — driving the IPC that already exists.
   existing dialog and a section to mirror in structure/style.
 - `apps/desktop/src/desktopApi/types.ts` — the surface you call:
   `connectSyncedFolder(input)`, `disconnectSyncedFolder()`, `getSyncedFolderStatus()`,
-  `onSyncedFolderEvent(cb)`; `SyncedFolderStatus` (`state`, `connected`,
-  `lastReconciledAt`, `lastError`, …) and `SyncedFolderEvent` kinds
-  (`reconciled`/`backstop`/`removed-local`/`removed-access`/`read-only-rejected`).
+  `onSyncedFolderEvent(cb)`. **Verify the exact shapes in that file** — the real
+  `SyncedFolderStatus` is `{ state, connected, syncRoot, documentCount, lastEventAt,
+  lastError }` (there is **no `lastReconciledAt`** — use `lastEventAt` and
+  `documentCount`). The real `SyncedFolderEvent` kinds are `reconciled`, `renamed`,
+  `moved`, `created`, `removed-local`, `removed-access`, `read-only-rejected`, and
+  `backstop` (which carries `reason`) — render or intentionally suppress **all** of
+  them, not just a subset.
 - `apps/desktop/electron/preload.ts` — confirms the bridge names.
 - `apps/desktop/src/App.tsx` (L296–300) — `onMenuOpenSettings`/menu wiring and how
   the folder picker (`openFolderPicker`) is invoked elsewhere.
@@ -28,14 +32,18 @@ for engine events — driving the IPC that already exists.
 ## Scope
 
 1. A `SyncedFolderSection` component in `SettingsDialog.tsx`:
-   - **Folder picker** ("Choose…" → `desktopApi.openFolderPicker()`), showing the
-     chosen path (default suggestion `~/Hubble`).
+   - **Folder picker** ("Choose…"). Note: `openFolderPicker()` opens an **existing**
+     dir and has **no default-path** support, while `createFolderPicker()` can create
+     a new one — use `createFolderPicker()` for the "create `~/Hubble`" path, or wire
+     both (choose-existing vs create-new). Both already `grantRoot()` the result in
+     `main.ts` (so no separate grant step is needed — see RT3). Don't claim a
+     "default `~/Hubble`" the picker can't honor.
    - **Connect / Disconnect** buttons calling `connectSyncedFolder({ syncRoot,
      deploymentUrl, authToken, deviceId? })` / `disconnectSyncedFolder()`. Pull
      `deploymentUrl` + `authToken` from the RT1 Convex/auth context.
    - **Live status**: subscribe via `getSyncedFolderStatus()` on open + refresh on
-     events; show `state` (idle/connected/syncing/error), "last reconciled Ns ago",
-     and `lastError`.
+     events; show `state` (idle/connected/syncing/error), `documentCount`, "last
+     activity Ns ago" (from `lastEventAt`), and `lastError`.
    - **Event toasts**: `onSyncedFolderEvent` → `sonner` toasts (copy comes from RT4;
      use placeholder strings RT4 will refine, or coordinate).
 2. **Signed-out / signed-in gating**: the section is disabled (or hidden) when not
@@ -52,9 +60,10 @@ final toast copy (RT4), reactive sync (RD1). Don't invent backend; the IPC exist
 
 ## Gotchas
 
-- The `syncRoot` must be **granted** to the main process before
-  `connectSyncedFolder` (it calls `assertGrantedRoot`). RT3 owns granting; until RT3
-  lands, wire the call and expect a grant error — surface it, don't crash.
+- The `syncRoot` must be granted to the main process before `connectSyncedFolder`
+  (it calls `assertGrantedRoot`). **Both folder pickers already `grantRoot()` their
+  result**, so picking via the picker grants automatically — RT3 does **not** re-grant
+  (it owns the first-run *safety guard* and any manual-path entry, not granting).
 - Status should not poll aggressively; refresh on events + on dialog open.
 
 ## Verify
