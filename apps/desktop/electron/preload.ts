@@ -80,6 +80,14 @@ const desktopApi = {
 	getLiveSyncStatus: () => ipcRenderer.invoke("desktop:live-sync:status"),
 	reconcileLiveDocument: (input) =>
 		ipcRenderer.invoke("desktop:live-sync:reconcile", input),
+	connectSyncedFolder: (input) =>
+		ipcRenderer.invoke("desktop:live-sync:connect-folder", input),
+	disconnectSyncedFolder: () =>
+		ipcRenderer.invoke("desktop:live-sync:disconnect-folder"),
+	getSyncedFolderStatus: () =>
+		ipcRenderer.invoke("desktop:live-sync:status-folder"),
+	onSyncedFolderEvent: (callback) =>
+		subscribe("desktop:live-sync:event", callback),
 	getUpdateState: () => ipcRenderer.invoke("desktop:get-update-state"),
 	getFullScreen: () => ipcRenderer.invoke("desktop:get-fullscreen"),
 	checkForUpdates: () => ipcRenderer.invoke("desktop:check-for-updates"),

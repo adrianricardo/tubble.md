@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import hubbleRuntime from "@hubble.md/runtime/global.js?raw";
 import htmlAppTheme from "@hubble.md/runtime/html-app-theme.css?raw";
 import tailwindRuntime from "@tailwindcss/browser?raw";
+import { contentHash } from "@hubble.md/sync";
 import alpineRuntime from "alpinejs/dist/cdn.min.js?raw";
 import chokidar, { type FSWatcher } from "chokidar";
 import {
@@ -26,6 +28,7 @@ import type {
 	DirectoryListing,
 	LiveSyncConnectInput,
 	LiveSyncReconcileInput,
+	SyncedFolderConnectInput,
 	WorkspaceConfig,
 } from "../src/desktopApi/types";
 import {
@@ -35,6 +38,8 @@ import {
 	withMarkdownExtension,
 } from "../src/lib/filePath";
 import { LiveSyncService } from "./liveSync";
+import { shouldIgnoreForWatch } from "./syncedFolderClassify";
+import { SyncedFolderService } from "./syncedFolderService";
 import { createAppTray } from "./tray";
 import {
 	loadZoomFactor,
@@ -132,6 +137,45 @@ let backgroundActive = false;
 // Main-process Live Document reconcile engine (Phase 2). Manual-trigger only:
 // no workspace-wide watcher yet (Phase 3).
 const liveSync = new LiveSyncService();
+// Synced-folder watcher engine (Phase 3b): bounded chokidar watch over the sync
+// root → classify → reconcile/rename/move/create back to the cloud. The watcher
+// factory is injected here so the engine itself stays headless/unit-tested.
+const syncedFolder = new SyncedFolderService({
+	emit: (event) => sendToRenderer("desktop:live-sync:event", event),
+	deviceId: os.hostname(),
+	createWatcher: ({ syncRoot, onEvent }) => {
+		const watcher = chokidar.watch(syncRoot, {
+			ignoreInitial: true,
+			ignored: (candidate: string) =>
+				shouldIgnoreForWatch(path.resolve(candidate), syncRoot),
+		});
+		const emit = async (
+			type: "add" | "change" | "unlink",
+			changedPath: string,
+		) => {
+			const absPath = path.resolve(changedPath);
+			let inode: number | null = null;
+			let hash: string | null = null;
+			if (type !== "unlink") {
+				try {
+					inode = fsSync.statSync(absPath).ino;
+					hash = await contentHash(fsSync.readFileSync(absPath, "utf-8"));
+				} catch {
+					// File vanished between event and stat; correlation falls back to
+					// the held entry's stored inode/hash.
+				}
+			}
+			onEvent({ type, absPath, inode, hash, at: Date.now() });
+		};
+		watcher.on("add", (p) => void emit("add", p));
+		watcher.on("change", (p) => void emit("change", p));
+		watcher.on("unlink", (p) => void emit("unlink", p));
+		watcher.on("error", (error) =>
+			console.error("Synced-folder watcher failed:", error),
+		);
+		return { close: () => watcher.close() };
+	},
+});
 const grantedFiles = new Set<string>();
 const grantedRoots = new Set<string>();
 let grantsLoaded = false;
@@ -1407,6 +1451,31 @@ function registerIpc() {
 				path: input.path,
 			});
 		},
+	);
+
+	ipcMain.handle(
+		"desktop:live-sync:connect-folder",
+		async (_event, input: SyncedFolderConnectInput) => {
+			const syncRoot = assertGrantedRoot(input.syncRoot);
+			const status = await syncedFolder.connect({
+				syncRoot,
+				deploymentUrl: input.deploymentUrl,
+				deviceId: input.deviceId,
+			});
+			// Connecting the synced folder engages always-on mode (Decision C).
+			setBackgroundActive(true);
+			return status;
+		},
+	);
+
+	ipcMain.handle("desktop:live-sync:disconnect-folder", async () => {
+		const status = await syncedFolder.disconnect();
+		setBackgroundActive(false);
+		return status;
+	});
+
+	ipcMain.handle("desktop:live-sync:status-folder", () =>
+		syncedFolder.getStatus(),
 	);
 }
 

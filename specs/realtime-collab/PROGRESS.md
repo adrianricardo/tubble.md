@@ -570,6 +570,40 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
         `getDocumentForAgent` re-check); incremental removal of files that left the
         cloud set (Phase 3b watcher uses `diffSyncedFolderIndex`). —
         *Owner: Opus (orchestrated) · 2026-06-25*
+  - [~] **Phase 3b** (desktop watcher + IPC) — landed in the working tree.
+        New `apps/desktop/electron/syncedFolderClassify.ts` (pure classifier:
+        ignore-globs/self-write → `change`→reconcile, `unlink`→hold,
+        correlated unlink+add→`rename`/`move` by inode-or-hash within 750ms,
+        uncorrelated add in a workspace folder→`create`, else ignore; plus
+        `flushExpiredUnlinks`→`delete`, and the single-writer `owner.json`
+        lock acquire/heartbeat/release) and `syncedFolderService.ts`
+        (composes `materializeSyncedFolder` on connect → injected chokidar
+        watcher → classify → route to `reconcileProjectionFile`/`renameDocument`/
+        `moveDocument`/`importLiveDocument`, with `recentlyWrittenByUs` self-write
+        suppression and stat-populated inodes). Added `SyncBackend.renameDocument`/
+        `moveDocument`/`importLiveDocument` (over `api.documents.rename` /
+        `api.folders.moveDocument` / `api.documents.importMarkdown`) + convex-client
+        impls. IPC `desktop:live-sync:connect-folder|disconnect-folder|status-folder`
+        in `main.ts` (real chokidar factory injected, stat→inode/hash,
+        `assertGrantedRoot`, engages background mode) + `preload.ts`/`types.ts`
+        bridge incl. `onSyncedFolderEvent`. 12 classifier + 5 service unit tests;
+        desktop vitest **59/59**, `pnpm build:desktop` + `pnpm typecheck` clean.
+        **Two bugs found & fixed in orchestrator review:** (1) `AcquireLockResult`
+        was a discriminated union, which the non-strict electron `tsconfig.node.json`
+        won't narrow on a boolean discriminant — flattened to optional fields so
+        the `.reason`/`.current` access sites typecheck; (2) `isSelfWrite` blanket-
+        suppressed any hash-less event on a recently-materialized path, which
+        swallowed the leading `unlink` of a rename right after materialize — now
+        `unlink` is never treated as a self-write (the engine only ever writes
+        files), fixing rename/move correlation. **Scoped as seams (not half-built):**
+        the reactive cloud→disk Convex subscription (initial full materialize on
+        connect + a `refresh()` re-materialize stand in; reactive `ConvexClient`
+        is the follow-up); direction-aware **delete** (local `unlink`→`documents.
+        remove`) is logged/emitted only — the access-loss-vs-delete split is Phase 5;
+        no renderer connect UI yet (consistent with Phase 2: no cloud-workspace
+        flow exists in the renderer — the IPC is the entry point). **Human-gated:**
+        live chokidar watch, real two-machine single-writer lock, full Electron+
+        Convex round-trip. — *Owner: Opus (orchestrated, reviewed) · 2026-06-25*
 - [~] Offline edit + merge on reconnect — two flavors (Decision 6): in-editor (CRDT
       local buffer/replay) and external-file (watcher queues edits, flushes on
       reconnect via the reconcile path). Decision: **no Yjs fork** — keep
@@ -594,6 +628,22 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 ## Changelog
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
+
+- 2026-06-25 — Opus (orchestrated, reviewed) — Synced-folder Phase 3b (desktop
+  watcher + IPC): new `syncedFolderClassify.ts` (pure classifier + single-writer
+  lock) and `syncedFolderService.ts` (materialize→chokidar→classify→route:
+  reconcile/rename/move/create) in the Electron main process; added
+  `SyncBackend.renameDocument`/`moveDocument`/`importLiveDocument` + convex-client
+  impls; IPC `desktop:live-sync:connect-folder|disconnect-folder|status-folder`
+  + preload bridge. 12 classifier + 5 service tests; desktop vitest 59/59,
+  `pnpm build:desktop` + `pnpm typecheck` clean. The subagent was cut off by a
+  session limit before reporting; orchestrator review found & fixed two real bugs:
+  a discriminated-union `AcquireLockResult` the non-strict electron tsconfig won't
+  narrow (flattened), and `isSelfWrite` wrongly suppressing the `unlink` half of a
+  post-materialize rename (unlink is never a self-write). Seams left explicit:
+  reactive cloud→disk subscription, direction-aware delete (Phase 5), renderer
+  connect UI. Live watch / two-machine lock / Electron round-trip human-gated.
+  Unmerged.
 
 - 2026-06-25 — Opus (orchestrated) — Synced-folder Phase 3a (packages core):
   threaded `folderId` through the `LiveDocumentProjection` + `convex-client`

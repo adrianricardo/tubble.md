@@ -90,6 +90,20 @@ export function createConvexBackend(url: string): SyncBackend {
 				workspaceId: args.workspaceId as Id<"workspaces">,
 			});
 		},
+		async renameDocument(documentId, args) {
+			await client.mutation(api.documents.rename, {
+				documentId: documentId as Id<"documents">,
+				title: args.title,
+				path: args.path,
+				actor: args.actor,
+			});
+		},
+		async moveDocument(documentId, folderId) {
+			await client.mutation(api.folders.moveDocument, {
+				documentId: documentId as Id<"documents">,
+				folderId: folderId ? (folderId as Id<"folders">) : undefined,
+			});
+		},
 		async getDocumentForAgent(documentId) {
 			const document = await client.query(api.documents.getForAgent, {
 				documentId: documentId as Id<"documents">,

@@ -81,6 +81,35 @@ export type LiveSyncConnectInput = {
 	workspaceId: string;
 };
 
+/** Status of the synced-folder watcher engine (Phase 3b). */
+export type SyncedFolderStatus = {
+	state: LiveSyncStatusState;
+	connected: boolean;
+	/** The bounded watch root (the user's `~/Hubble`), or null when idle. */
+	syncRoot: string | null;
+	/** Number of indexed Live Documents in the mirror. */
+	documentCount: number;
+	lastEventAt: number | null;
+	lastError: string | null;
+};
+
+export type SyncedFolderConnectInput = {
+	/** The user-chosen sync root (bounded watch root). */
+	syncRoot: string;
+	deploymentUrl: string;
+	deviceId?: string;
+};
+
+/** Pushed to the renderer over `desktop:live-sync:event` as the mirror changes. */
+export type SyncedFolderEvent =
+	| { kind: "reconciled" }
+	| { kind: "renamed" }
+	| { kind: "moved" }
+	| { kind: "created" }
+	| { kind: "deleted-local" }
+	| { kind: "backstop"; reason: "missing-base" | "read-only" }
+	| { kind: "error" };
+
 export type LiveSyncReconcileInput = {
 	documentId: string;
 	/** Absolute path to the editable projection file on disk. */
@@ -156,6 +185,20 @@ export type DesktopApi = {
 	reconcileLiveDocument(
 		input: LiveSyncReconcileInput,
 	): Promise<ReconcileOutcome>;
+	/**
+	 * Connect the synced-folder engine to a sync root (Phase 3b): acquire the
+	 * single-writer lock, materialize the cloud → disk mirror, and start the
+	 * bounded watcher. Engages always-on background mode (Decision C). This is
+	 * the connect trigger for the synced folder; there is no separate settings UI
+	 * yet — the renderer calls this after a folder pick.
+	 */
+	connectSyncedFolder(
+		input: SyncedFolderConnectInput,
+	): Promise<SyncedFolderStatus>;
+	disconnectSyncedFolder(): Promise<SyncedFolderStatus>;
+	getSyncedFolderStatus(): Promise<SyncedFolderStatus>;
+	/** Subscribe to synced-folder mirror events (reconciled/renamed/created/…). */
+	onSyncedFolderEvent(callback: (event: SyncedFolderEvent) => void): Unsubscribe;
 	getUpdateState(): Promise<DesktopUpdateState>;
 	getFullScreen(): Promise<boolean>;
 	checkForUpdates(): Promise<void>;

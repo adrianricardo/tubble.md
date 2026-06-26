@@ -80,6 +80,21 @@ export interface SyncBackend {
 		actor?: string;
 	}): Promise<LiveDocumentImport>;
 
+	/**
+	 * Rename / re-path a Live Document after a Finder rename or move (over
+	 * `documents.rename`). `title` drives the on-disk filename; `path` is the
+	 * mutable relative-path metadata. Identity (`documentId`) is unchanged.
+	 */
+	renameDocument(
+		documentId: string,
+		args: { title: string; path?: string; actor?: string },
+	): Promise<void>;
+	/**
+	 * Move a Live Document into a different folder after a cross-folder Finder
+	 * drag (over `folders.moveDocument`). `folderId === null` → workspace root.
+	 */
+	moveDocument(documentId: string, folderId: string | null): Promise<void>;
+
 	getDocumentForAgent(documentId: string): Promise<AgentDocument | null>;
 	applyDocumentPatch(args: {
 		documentId: string;
