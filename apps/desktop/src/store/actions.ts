@@ -2,6 +2,10 @@ import { toast } from "sonner";
 import { desktopApi } from "../desktopApi";
 import { classifyFileChange } from "../externalFileChange";
 import {
+	isSyncedLiveDocument,
+	resolveExternalFileChange,
+} from "../syncedDocumentGuard";
+import {
 	absoluteWorkspacePath,
 	basename,
 	dirname,
@@ -398,12 +402,21 @@ export async function savePathContent(
 				baseline: getBaseline(nextCurrent),
 				diskContent: currentDiskContent,
 			});
+			// Only a divergence (reload/conflict/match) needs a decision. Before
+			// surfacing one, defer to the synced-folder engine: a synced Live
+			// Document is reconciled in the main process, so the renderer must NOT
+			// apply a legacy whole-file action (and must never write a
+			// `*.conflict-<ts>`) for it — fall through to the plain write instead
+			// (SYNCED-FOLDER §4). The IPC probe is paid only on a real divergence.
 			if (action !== "none") {
-				viewerStore.set((state) => {
-					if (state.currentPath !== path) return state;
-					return applyFileAction(state, currentDiskContent, action);
-				});
-				return;
+				const synced = await isSyncedLiveDocument(path, desktopApi);
+				if (!synced) {
+					viewerStore.set((state) => {
+						if (state.currentPath !== path) return state;
+						return applyFileAction(state, currentDiskContent, action);
+					});
+					return;
+				}
 			}
 		} catch {
 			// Fall through to the write path if the file cannot be read during preflight.
@@ -748,17 +761,24 @@ export async function deleteFolder(path: string) {
 	}
 }
 
-export function handleExternalFileChange(
+export async function handleExternalFileChange(
 	path: string,
 	nextDiskContent: string,
 ) {
+	// Defer entirely to the synced-folder engine for Live Documents: it already
+	// reconciled this on-disk change in the main process, so classifying here
+	// would risk a spurious `*.conflict-<ts>` for a doc that has no conflict
+	// (SYNCED-FOLDER §4). Non-synced, file-authoritative docs classify as before.
+	const synced = await isSyncedLiveDocument(path, desktopApi);
 	viewerStore.set((state) => {
 		if (state.currentPath !== path) return state;
-		const action = classifyFileChange({
+		const action = resolveExternalFileChange({
+			isSyncedLiveDocument: synced,
 			editorContent: state.content,
 			baseline: getBaseline(state),
 			diskContent: nextDiskContent,
 		});
+		if (action === "skip") return state;
 		return applyFileAction(state, nextDiskContent, action);
 	});
 }

@@ -155,6 +155,12 @@ export function AppShell({
 	};
 
 	const onRemoteFilesChanged = async () => {
+		// Live Documents are cloud-CRDT-rendered (the `documentId` route → the
+		// `LiveDocumentView` below), not file-authoritative. They must never run
+		// the legacy whole-file `ChangeKind` classification / conflict path
+		// (SYNCED-FOLDER §4). `documentId` is the existing signal that the open
+		// view is a Live Document; when set, `currentPath` is cleared above.
+		if (documentId) return;
 		const ctx = getActionCtx();
 		if (!ctx) return;
 		const remote = await ctx.backend.getFiles(ctx.workspaceId, {

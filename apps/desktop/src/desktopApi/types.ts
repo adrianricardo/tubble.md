@@ -197,6 +197,13 @@ export type DesktopApi = {
 	): Promise<SyncedFolderStatus>;
 	disconnectSyncedFolder(): Promise<SyncedFolderStatus>;
 	getSyncedFolderStatus(): Promise<SyncedFolderStatus>;
+	/**
+	 * True when `absPath` is a synced Live Document (present in the main-process
+	 * synced-folder reverse index). The renderer consults this to defer entirely
+	 * to the synced-folder reconcile engine and skip the legacy whole-file
+	 * conflict classifier for that path (SYNCED-FOLDER §4 routing isolation).
+	 */
+	isSyncedFolderDocument(absPath: string): Promise<boolean>;
 	/** Subscribe to synced-folder mirror events (reconciled/renamed/created/…). */
 	onSyncedFolderEvent(callback: (event: SyncedFolderEvent) => void): Unsubscribe;
 	getUpdateState(): Promise<DesktopUpdateState>;

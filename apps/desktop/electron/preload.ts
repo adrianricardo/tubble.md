@@ -86,6 +86,8 @@ const desktopApi = {
 		ipcRenderer.invoke("desktop:live-sync:disconnect-folder"),
 	getSyncedFolderStatus: () =>
 		ipcRenderer.invoke("desktop:live-sync:status-folder"),
+	isSyncedFolderDocument: (absPath) =>
+		ipcRenderer.invoke("desktop:live-sync:is-live-document", absPath),
 	onSyncedFolderEvent: (callback) =>
 		subscribe("desktop:live-sync:event", callback),
 	getUpdateState: () => ipcRenderer.invoke("desktop:get-update-state"),

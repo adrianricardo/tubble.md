@@ -1477,6 +1477,20 @@ function registerIpc() {
 	ipcMain.handle("desktop:live-sync:status-folder", () =>
 		syncedFolder.getStatus(),
 	);
+
+	ipcMain.handle(
+		"desktop:live-sync:is-live-document",
+		(_event, absPath: string) => {
+			let resolved: string;
+			try {
+				resolved = assertGranted(absPath);
+			} catch {
+				// An ungranted path is, by definition, not a synced Live Document.
+				return false;
+			}
+			return syncedFolder.isLiveDocument(resolved);
+		},
+	);
 }
 
 protocol.registerSchemesAsPrivileged([

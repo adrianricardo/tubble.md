@@ -604,6 +604,29 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
         flow exists in the renderer — the IPC is the entry point). **Human-gated:**
         live chokidar watch, real two-machine single-writer lock, full Electron+
         Convex round-trip. — *Owner: Opus (orchestrated, reviewed) · 2026-06-25*
+  - [~] **Phase 4** (routing isolation) — landed in the working tree. The renderer
+        and web now defer to the synced-folder engine for Live Documents so the
+        legacy whole-file conflict classifier never runs on a synced doc (and can
+        never write a spurious `*.conflict-<ts>`). New IPC
+        `desktop:live-sync:is-live-document(absPath)` answered from the engine's
+        reverse index via new `SyncedFolderService.isLiveDocument`/`lookup`;
+        new pure `apps/desktop/src/syncedDocumentGuard.ts`
+        (`resolveExternalFileChange` → `"skip"` for synced docs else the unchanged
+        `classifyFileChange`; `isSyncedLiveDocument` defaults safe-`false` when the
+        bridge/method is missing or IPC throws). `savePathContent` probes the IPC
+        **only on a real divergence** (`action !== "none"`, preserving the
+        newer-editor-content timing test and avoiding a round-trip per clean save);
+        `handleExternalFileChange` is now async and skips classification for synced
+        docs (`App.tsx` awaits it). Web `apps/www/src/shell/AppShell.tsx`
+        `onRemoteFilesChanged` returns early when `documentId` is set (the existing
+        Live-Document signal). `externalFileChange.ts` logic untouched — only its
+        call sites. 8 guard + 1 service unit tests; **desktop vitest 68/68**,
+        `pnpm typecheck` / `pnpm build:desktop` / `@hubble.md/www build` clean.
+        **Latent until the connect UI exists** (Phase 3b deferral): the renderer
+        can't open a synced-root doc yet, so the guard is structurally in place but
+        not routinely exercised. **Human-gated:** end-to-end "synced doc never
+        writes a conflict file, legacy doc still does" (needs connect UI + live
+        cloud). — *Owner: Opus (orchestrated, reviewed) · 2026-06-25*
 - [~] Offline edit + merge on reconnect — two flavors (Decision 6): in-editor (CRDT
       local buffer/replay) and external-file (watcher queues edits, flushes on
       reconnect via the reconcile path). Decision: **no Yjs fork** — keep
@@ -628,6 +651,17 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 ## Changelog
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
+
+- 2026-06-25 — Opus (orchestrated, reviewed) — Synced-folder Phase 4 (routing
+  isolation): synced-folder Live Documents now bypass the legacy whole-file
+  conflict classifier entirely, so a reconciled live doc can never produce a
+  spurious `.conflict` file. New IPC `desktop:live-sync:is-live-document` +
+  `SyncedFolderService.isLiveDocument/lookup`; pure `syncedDocumentGuard.ts`;
+  `savePathContent`/`handleExternalFileChange` (desktop) and `onRemoteFilesChanged`
+  (web, via the existing `documentId` signal) skip classification for synced/live
+  docs. `externalFileChange.ts` logic untouched. 8 guard + 1 service tests; desktop
+  68/68; typecheck + build:desktop + www build clean. Latent until the connect UI
+  exists; end-to-end conflict-file proof human-gated. Unmerged.
 
 - 2026-06-25 — Opus (orchestrated, reviewed) — Synced-folder Phase 3b (desktop
   watcher + IPC): new `syncedFolderClassify.ts` (pure classifier + single-writer

@@ -178,7 +178,7 @@ function App() {
 			try {
 				const nextContent = await desktopApi.readFileText(currentPath);
 				if (viewerStore.get().currentPath !== currentPath) return;
-				handleExternalFileChange(currentPath, nextContent);
+				await handleExternalFileChange(currentPath, nextContent);
 			} catch {
 				if (viewerStore.get().currentPath !== currentPath) return;
 				await loadPath(currentPath);

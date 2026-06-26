@@ -244,6 +244,25 @@ describe("SyncedFolderService routing", () => {
 		expect(events).toContainEqual({ kind: "created" });
 	});
 
+	it("isLiveDocument: index hit is true, miss is false", async () => {
+		const { service } = makeService(calls, events);
+		// Disconnected: nothing is a live document yet.
+		expect(service.isLiveDocument(`${SYNC_ROOT}/WS/Doc.md`)).toBe(false);
+
+		await service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" });
+
+		// Materialized doc is in the reverse index → owned by the engine.
+		expect(service.isLiveDocument(`${SYNC_ROOT}/WS/Doc.md`)).toBe(true);
+		expect(service.lookup(`${SYNC_ROOT}/WS/Doc.md`)?.documentId).toBe("d1");
+		// A path outside the index (legacy / unknown) is not a live document.
+		expect(service.isLiveDocument(`${SYNC_ROOT}/WS/Other.md`)).toBe(false);
+		expect(service.lookup(`${SYNC_ROOT}/WS/Other.md`)).toBeNull();
+
+		// After disconnect the index is cleared again.
+		await service.disconnect();
+		expect(service.isLiveDocument(`${SYNC_ROOT}/WS/Doc.md`)).toBe(false);
+	});
+
 	it("connect refuses when another fresh device holds the lock", async () => {
 		const fs = memoryFs({
 			[`${SYNC_ROOT}/.hubble/index/owner.json`]: JSON.stringify({

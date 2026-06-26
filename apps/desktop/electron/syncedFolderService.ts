@@ -124,6 +124,22 @@ export class SyncedFolderService {
 		return this.#syncRoot !== null;
 	}
 
+	/**
+	 * True when `absPath` is a synced Live Document — i.e. present in the loaded
+	 * reverse index (`.hubble/index/synced-folder.json`). This is the query the
+	 * renderer uses to defer to the reconcile engine and skip the legacy
+	 * whole-file conflict classifier (SYNCED-FOLDER §4). Returns `false` when
+	 * disconnected or when the path is not a mirrored document.
+	 */
+	isLiveDocument(absPath: string): boolean {
+		return this.#index[absPath] !== undefined;
+	}
+
+	/** The reverse-index entry for `absPath`, or `null` when not a synced doc. */
+	lookup(absPath: string): SyncedFolderIndexEntry | null {
+		return this.#index[absPath] ?? null;
+	}
+
 	getStatus(): SyncedFolderStatus {
 		return {
 			state: this.#state,
