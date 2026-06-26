@@ -106,8 +106,18 @@ export type SyncedFolderEvent =
 	| { kind: "renamed" }
 	| { kind: "moved" }
 	| { kind: "created" }
-	| { kind: "deleted-local" }
+	/** A local `unlink` (watcher-origin) soft-deleted the cloud document (§6 case 1). */
+	| { kind: "removed-local" }
+	/**
+	 * The user lost access to a doc that still exists in the cloud (materialize-
+	 * origin); the local file was moved to `.hubble/trash/`, the cloud doc was
+	 * left untouched (§6 case 1). Direction-aware counterpart of `removed-local`.
+	 */
+	| { kind: "removed-access" }
+	/** Reconcile could not be safely scoped; the on-disk edit was backstopped (§6 case 3). */
 	| { kind: "backstop"; reason: "missing-base" | "read-only" }
+	/** A change to a read-only doc was rejected; the local edit was backstopped (§3). */
+	| { kind: "read-only-rejected" }
 	| { kind: "error" };
 
 export type LiveSyncReconcileInput = {

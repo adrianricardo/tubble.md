@@ -104,6 +104,12 @@ export function createConvexBackend(url: string): SyncBackend {
 				folderId: folderId ? (folderId as Id<"folders">) : undefined,
 			});
 		},
+		async removeDocument(documentId, actor) {
+			await client.mutation(api.documents.remove, {
+				documentId: documentId as Id<"documents">,
+				actor,
+			});
+		},
 		async getDocumentForAgent(documentId) {
 			const document = await client.query(api.documents.getForAgent, {
 				documentId: documentId as Id<"documents">,

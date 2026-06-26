@@ -502,12 +502,19 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       remain pending. Verified `@hubble.md/cli` typecheck/build, `pnpm check`,
       and `pnpm build:desktop`. Unmerged. — *Owner: Codex · Started:
       2026-06-25*
-- [ ] **Desktop always-on app** (Decision 6): keep the Electron main process
+- [~] **Desktop always-on app** (Decision 6): keep the Electron main process
       running on window close (`window-all-closed`/`Tray`), host the live-doc
       watcher + sync engine in main (currently CLI-only), route live-doc external
       changes to the reconcile path instead of conflict classification
       (`apps/desktop/src/externalFileChange.ts`, `apps/www/src/store/actions.ts`),
-      with a `*.local-edit-<ts>` conflict-copy backstop. — *_*
+      with a `*.local-edit-<ts>` conflict-copy backstop. **Phases 0–5 all landed
+      (unmerged) and unit-verified** — see the sub-items below. **Remaining before
+      `[x]`:** (1) a renderer **connect UI** to actually pick a sync root and call
+      `connectSyncedFolder` (deferred throughout — no cloud-workspace flow exists
+      in the renderer yet; the IPC is the entry point); (2) the reactive cloud→disk
+      Convex subscription (currently a `refresh()` seam); (3) human end-to-end
+      verification (live chokidar watch, two-device lock, Electron+Convex
+      round-trip, conflict-file proof). — *Owner: Opus (orchestrated) · 2026-06-25*
   - [x] **Phase 0** (no behavior change): extracted the CLI reconcile core into
         a reusable `@hubble.md/sync` export (`reconcileProjectionFile`,
         `changedRange`, `readReconcileBase`/`writeReconcileBase`,
@@ -627,6 +634,34 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
         not routinely exercised. **Human-gated:** end-to-end "synced doc never
         writes a conflict file, legacy doc still does" (needs connect UI + live
         cloud). — *Owner: Opus (orchestrated, reviewed) · 2026-06-25*
+  - [~] **Phase 5** (backstop + access-loss + read-only + offline seam) — landed
+        in the working tree, completing the synced-folder safety nets. **Backstop
+        host** (`#backstop` in `syncedFolderService.ts`): on a `backstop` reconcile
+        outcome, preserve the user's on-disk bytes to a `toLocalEditName` sibling →
+        re-materialize the authoritative cloud markdown over the projection (re-
+        applying read-only chmod) → refresh base cache + index → emit. Never a
+        silent clobber. **Direction-aware removal** (the data-loss-critical split):
+        a watcher **local-delete** (`#route` `case "delete"`) is the ONLY caller of
+        the new `SyncBackend.removeDocument` (soft-delete over `api.documents.remove`)
+        and drops its own index entry before any materialize; **access-loss**
+        (detected in `#materialize` via `diffSyncedFolderIndex(result.index,
+        previous).removed`) moves the local file to `.hubble/trash/` and **never**
+        calls cloud remove. The two paths share no inputs, so a local delete can
+        never resurface as a false access-loss. **Read-only** edits surface as
+        `read-only-rejected` (the reconciler rejects before `applyPatch`).
+        **Offline queue = seam only** (`#enqueue`/`#flushQueue` no-ops, `.hubble/
+        queue/` reserved, `#offline` hard-`false`) — durable queueing/replay is
+        owned by the offline decision, not built here. New events `removed-local`/
+        `removed-access`/`read-only-rejected`. 4 new tests; **desktop vitest 72/72**,
+        `pnpm typecheck` + `pnpm build:desktop` clean. **Known latent interaction**
+        (record for the reactive-subscription follow-up): a local rename immediately
+        followed by a materialize that computes the *old* title-path before
+        `renameDocument` propagates could read as access-loss → trash; harmless in
+        this slice because materialize runs only on connect/`refresh()` (no reactive
+        push yet), but must be handled when the cloud→disk subscription lands.
+        **Human-gated:** live two-device lock, real chokidar, full Electron+Convex
+        round-trip, a real revoked-share access-loss. —
+        *Owner: Opus (orchestrated, reviewed) · 2026-06-25*
 - [~] Offline edit + merge on reconnect — two flavors (Decision 6): in-editor (CRDT
       local buffer/replay) and external-file (watcher queues edits, flushes on
       reconnect via the reconcile path). Decision: **no Yjs fork** — keep
@@ -651,6 +686,18 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 ## Changelog
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
+
+- 2026-06-25 — Opus (orchestrated, reviewed) — Synced-folder Phase 5 (safety
+  nets): synced folder now protects local edits — a conflicting or read-only save
+  is preserved as a `*.local-edit-<ts>` copy beside the doc (backstop host: write
+  sibling → re-materialize authoritative → refresh base+index), and losing access
+  to a shared doc moves the local copy to `.hubble/trash/` rather than deleting it.
+  Direction-aware removal kept unambiguous: watcher local-delete → new
+  `SyncBackend.removeDocument` (soft-delete); materialize-detected access-loss →
+  trash, never cloud-delete. Read-only edits surface as `read-only-rejected`.
+  Offline queue reserved as a no-op seam (owned by the offline decision). 4 new
+  tests; desktop 72/72; typecheck + build:desktop clean. Noted one latent
+  rename-vs-materialize interaction for the future reactive subscription. Unmerged.
 
 - 2026-06-25 — Opus (orchestrated, reviewed) — Synced-folder Phase 4 (routing
   isolation): synced-folder Live Documents now bypass the legacy whole-file

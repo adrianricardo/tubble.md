@@ -27,12 +27,16 @@ vi.mock("@hubble.md/convex-client", () => ({
 const SYNC_ROOT = "/Hubble";
 const NOW = 1_700_000_000_000;
 
-function memoryFs(initial: Record<string, string> = {}): FileSystem {
+/** In-memory FileSystem whose backing map is exposed for assertions. */
+type MemoryFs = FileSystem & { __files: Map<string, string> };
+
+function memoryFs(initial: Record<string, string> = {}): MemoryFs {
 	const files = new Map(Object.entries(initial));
 	const unsupported = (): never => {
 		throw new Error("not supported in memory fs");
 	};
 	return {
+		__files: files,
 		async readFile(path) {
 			const content = files.get(path);
 			if (content === undefined) throw new Error(`ENOENT: ${path}`);
@@ -61,25 +65,37 @@ type Calls = {
 	move: Array<{ documentId: string; folderId: string | null }>;
 	import: Array<{ workspaceId: string; path: string; title: string; markdown: string }>;
 	patch: Array<{ documentId: string }>;
+	remove: Array<{ documentId: string }>;
 };
 
-function fakeBackend(calls: Calls): SyncBackend {
+/**
+ * Mutable backend state the tests steer: `docs` is the live desired set (clear
+ * it to simulate access-loss on the next materialize); `canWrite` is what
+ * `getDocumentForAgent` reports (set false to force a read-only backstop).
+ */
+type BackendState = {
+	docs: LiveDocumentProjection[];
+	canWrite: boolean;
+};
+
+function doc1(): LiveDocumentProjection {
+	return {
+		_id: "d1",
+		path: "WS/Doc.md",
+		folderId: null,
+		title: "Doc",
+		markdown: "hello",
+		version: 3,
+		role: "editor",
+		canWrite: true,
+		updatedAt: 0,
+	};
+}
+
+function fakeBackend(calls: Calls, state: BackendState): SyncBackend {
 	const notImpl = (): never => {
 		throw new Error("not implemented in fake backend");
 	};
-	const docs: LiveDocumentProjection[] = [
-		{
-			_id: "d1",
-			path: "WS/Doc.md",
-			folderId: null,
-			title: "Doc",
-			markdown: "hello",
-			version: 3,
-			role: "editor",
-			canWrite: true,
-			updatedAt: 0,
-		},
-	];
 	return {
 		async listWorkspaces() {
 			return [{ _id: "ws", name: "WS" }];
@@ -90,13 +106,16 @@ function fakeBackend(calls: Calls): SyncBackend {
 			];
 		},
 		async getLiveDocuments() {
-			return docs;
+			return state.docs;
 		},
 		async renameDocument(documentId, args) {
 			calls.rename.push({ documentId, title: args.title, path: args.path });
 		},
 		async moveDocument(documentId, folderId) {
 			calls.move.push({ documentId, folderId });
+		},
+		async removeDocument(documentId) {
+			calls.remove.push({ documentId });
 		},
 		async importLiveDocument(args) {
 			calls.import.push({
@@ -117,7 +136,7 @@ function fakeBackend(calls: Calls): SyncBackend {
 				documentId,
 				revision: 3,
 				markdown: "hello",
-				canWrite: true,
+				canWrite: state.canWrite,
 			};
 		},
 		async applyDocumentPatch(args): Promise<DocumentPatchResult> {
@@ -141,9 +160,17 @@ function fakeBackend(calls: Calls): SyncBackend {
 	};
 }
 
-function makeService(calls: Calls, events: Array<{ kind: string }>) {
+function makeService(
+	calls: Calls,
+	events: Array<{ kind: string }>,
+	overrides: Partial<BackendState> = {},
+) {
+	const state: BackendState = {
+		docs: overrides.docs ?? [doc1()],
+		canWrite: overrides.canWrite ?? true,
+	};
 	const fs = memoryFs();
-	const backend = fakeBackend(calls);
+	const backend = fakeBackend(calls, state);
 	const service = new SyncedFolderService({
 		createBackend: () => backend,
 		fs,
@@ -153,7 +180,16 @@ function makeService(calls: Calls, events: Array<{ kind: string }>) {
 		emit: (event) => events.push(event),
 		// No createWatcher → no chokidar; events are driven directly.
 	});
-	return { service, fs };
+	return { service, fs, state };
+}
+
+/** Base-cache paths the reconciler reads, rooted at the sync root. */
+const BASE_MD = `${SYNC_ROOT}/.hubble/state/live-documents/d1.base.md`;
+const BASE_JSON = `${SYNC_ROOT}/.hubble/state/live-documents/d1.json`;
+
+/** Find a written path matching `re` in the memory fs. */
+function findPath(fs: MemoryFs, re: RegExp): string | undefined {
+	return [...fs.__files.keys()].find((k) => re.test(k));
 }
 
 describe("SyncedFolderService routing", () => {
@@ -161,7 +197,7 @@ describe("SyncedFolderService routing", () => {
 	let events: Array<{ kind: string }>;
 
 	beforeEach(() => {
-		calls = { rename: [], move: [], import: [], patch: [] };
+		calls = { rename: [], move: [], import: [], patch: [], remove: [] };
 		events = [];
 	});
 
@@ -263,6 +299,100 @@ describe("SyncedFolderService routing", () => {
 		expect(service.isLiveDocument(`${SYNC_ROOT}/WS/Doc.md`)).toBe(false);
 	});
 
+	it("backstop (missing-base): preserves on-disk bytes, re-materializes, no clobber", async () => {
+		const { service, fs } = makeService(calls, events);
+		await service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" });
+
+		// Drop the base cache so reconcile cannot scope a patch → missing-base.
+		await fs.deleteFile(BASE_MD);
+		await fs.deleteFile(BASE_JSON);
+
+		// User edited the doc on disk.
+		await fs.writeFile(`${SYNC_ROOT}/WS/Doc.md`, "my local edit");
+		await service.handleRawEvent({
+			type: "change",
+			absPath: `${SYNC_ROOT}/WS/Doc.md`,
+			hash: await contentHash("my local edit"),
+			inode: 111,
+			at: NOW,
+		});
+
+		// The user's bytes were preserved in a `*.local-edit-<ts>` sibling.
+		const sibling = findPath(fs, /\/WS\/Doc\.local-edit-.*\.md$/);
+		expect(sibling).toBeDefined();
+		expect(sibling && (await fs.readFile(sibling))).toBe("my local edit");
+
+		// The projection was re-materialized to the authoritative markdown…
+		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe("hello");
+		// …and the base cache was refreshed.
+		expect(await fs.readFileOrNull(BASE_MD)).toBe("hello");
+
+		// Never a silent clobber: applyPatch was never called.
+		expect(calls.patch).toEqual([]);
+		expect(events).toContainEqual({ kind: "backstop", reason: "missing-base" });
+	});
+
+	it("read-only: a change to a non-writable doc is rejected and backstopped", async () => {
+		const { service, fs } = makeService(calls, events, { canWrite: false });
+		await service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" });
+
+		await fs.writeFile(`${SYNC_ROOT}/WS/Doc.md`, "edit to a read-only doc");
+		await service.handleRawEvent({
+			type: "change",
+			absPath: `${SYNC_ROOT}/WS/Doc.md`,
+			hash: await contentHash("edit to a read-only doc"),
+			inode: 111,
+			at: NOW,
+		});
+
+		// On-disk edit preserved as a sibling; authoritative restored; no cloud write.
+		const sibling = findPath(fs, /\/WS\/Doc\.local-edit-.*\.md$/);
+		expect(sibling).toBeDefined();
+		expect(sibling && (await fs.readFile(sibling))).toBe("edit to a read-only doc");
+		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe("hello");
+		expect(calls.patch).toEqual([]);
+		expect(events).toContainEqual({ kind: "read-only-rejected" });
+	});
+
+	it("local-delete: an expired watcher unlink soft-deletes the cloud doc", async () => {
+		const { service } = makeService(calls, events);
+		await service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" });
+
+		// Watcher unlink with no correlated add → held, then window expires.
+		await service.handleRawEvent({
+			type: "unlink",
+			absPath: `${SYNC_ROOT}/WS/Doc.md`,
+			at: NOW,
+		});
+		await service.flushHeldUnlinks(NOW + 5_000);
+
+		// WATCHER-origin direction → removeDocument exactly once, entry gone.
+		expect(calls.remove).toEqual([{ documentId: "d1" }]);
+		expect(service.isLiveDocument(`${SYNC_ROOT}/WS/Doc.md`)).toBe(false);
+		expect(events).toContainEqual({ kind: "removed-local" });
+	});
+
+	it("access-loss: a doc leaving the cloud set is trashed, never cloud-deleted", async () => {
+		const { service, fs, state } = makeService(calls, events);
+		await service.connect({ syncRoot: SYNC_ROOT, deploymentUrl: "x" });
+		expect(service.isLiveDocument(`${SYNC_ROOT}/WS/Doc.md`)).toBe(true);
+
+		// The doc leaves the desired cloud set (revoked share) — still exists in
+		// the cloud, just no longer visible to this user.
+		state.docs = [];
+		await service.refresh();
+
+		// MATERIALIZE-origin direction → local bytes moved to `.hubble/trash/`,
+		// the cloud doc is left untouched (removeDocument NOT called).
+		const trashed = findPath(fs, /\/\.hubble\/trash\/d1__Doc\.md$/);
+		expect(trashed).toBeDefined();
+		expect(trashed && (await fs.readFile(trashed))).toBe("hello");
+		expect(await fs.readFileOrNull(`${SYNC_ROOT}/WS/Doc.md`)).toBeNull();
+		expect(calls.remove).toEqual([]);
+		expect(service.isLiveDocument(`${SYNC_ROOT}/WS/Doc.md`)).toBe(false);
+		expect(events).toContainEqual({ kind: "removed-access" });
+	});
+
 	it("connect refuses when another fresh device holds the lock", async () => {
 		const fs = memoryFs({
 			[`${SYNC_ROOT}/.hubble/index/owner.json`]: JSON.stringify({
@@ -271,7 +401,7 @@ describe("SyncedFolderService routing", () => {
 				heartbeatAt: NOW,
 			}),
 		});
-		const backend = fakeBackend(calls);
+		const backend = fakeBackend(calls, { docs: [doc1()], canWrite: true });
 		const service = new SyncedFolderService({
 			createBackend: () => backend,
 			fs,

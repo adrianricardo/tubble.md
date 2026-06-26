@@ -94,6 +94,16 @@ export interface SyncBackend {
 	 * drag (over `folders.moveDocument`). `folderId === null` → workspace root.
 	 */
 	moveDocument(documentId: string, folderId: string | null): Promise<void>;
+	/**
+	 * Soft-delete a Live Document (over `documents.remove`) after a **local
+	 * delete** — a watcher `unlink` whose rename/move correlation window expired.
+	 * This is the cloud-side half of the direction-aware removal split
+	 * (SYNCED-FOLDER §6 case 1): only a watcher-origin disappearance reaches here.
+	 * An **access-loss** (a doc leaving the cloud query while still existing) must
+	 * NEVER call this — it is trashed locally instead. v1 keeps local deletes
+	 * one-way and relies on the cloud trash UI for restore (§6 case 2).
+	 */
+	removeDocument(documentId: string, actor?: string): Promise<void>;
 
 	getDocumentForAgent(documentId: string): Promise<AgentDocument | null>;
 	applyDocumentPatch(args: {

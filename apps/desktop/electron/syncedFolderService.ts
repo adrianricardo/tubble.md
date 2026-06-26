@@ -1,9 +1,11 @@
 import { statSync } from "node:fs";
 import { createConvexBackend } from "@hubble.md/convex-client";
 import {
+	type BackstopReason,
 	contentHash,
+	diffSyncedFolderIndex,
 	type FileSystem,
-	loadSyncedFolderIndex,
+	liveDocumentBaseCacheRoot,
 	materializeSyncedFolder,
 	reconcileProjectionFile,
 	rekeySyncedFolderEntry,
@@ -11,6 +13,7 @@ import {
 	type SyncBackend,
 	type SyncedFolderIndex,
 	type SyncedFolderIndexEntry,
+	toLocalEditName,
 	writeReconcileBase,
 } from "@hubble.md/sync";
 import { createNodeFileSystem } from "@hubble.md/sync/node";
@@ -64,6 +67,15 @@ const HEARTBEAT_MS = 10_000;
 const SELF_WRITE_TTL_MS = 5_000;
 
 /**
+ * Reserved for the offline decision (SYNCED-FOLDER §7 closing note). The queue
+ * directory is created on connect but NOTHING is written to it here — durable
+ * queueing and replay are a separate, not-yet-designed slice.
+ */
+const QUEUE_DIR_REL = ".hubble/queue";
+/** Where access-lost local bytes are parked instead of being hard-deleted. */
+const TRASH_DIR_REL = ".hubble/trash";
+
+/**
  * Synced-folder engine for the Electron main process (SYNCED-FOLDER Phase 3b).
  *
  * On {@link connect}: acquire the single-writer lock → `materializeSyncedFolder`
@@ -95,6 +107,12 @@ export class SyncedFolderService {
 	#lastEventAt: number | null = null;
 
 	#heldUnlinks: HeldUnlink[] = [];
+	/**
+	 * Offline seam (SYNCED-FOLDER §7): always `false` in this build. The offline
+	 * decision flips it on to divert watcher events into the durable queue
+	 * instead of routing them to the cloud. Reserved here, not implemented.
+	 */
+	#offline = false;
 	#recentlyWrittenByUs = new Map<string, { hash: string; at: number }>();
 	#changeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	#flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -177,7 +195,12 @@ export class SyncedFolderService {
 		this.#syncRoot = syncRoot;
 		this.#lastError = null;
 
+		// Reserve the offline-queue directory (seam only; see #flushQueue).
+		await this.#fs.ensureDir(`${syncRoot}/${QUEUE_DIR_REL}`);
+
 		await this.#materialize();
+		// Flush-on-reconnect seam: no-op until the offline decision lands.
+		await this.#flushQueue();
 
 		this.#heartbeatTimer = setInterval(() => {
 			void this.#heartbeat();
@@ -245,6 +268,7 @@ export class SyncedFolderService {
 
 	async #materialize(): Promise<void> {
 		if (!this.#backend || !this.#syncRoot) return;
+		const previous = this.#index;
 		const result = await materializeSyncedFolder(this.#backend, this.#fs, {
 			syncRoot: this.#syncRoot,
 		});
@@ -257,6 +281,21 @@ export class SyncedFolderService {
 		}
 		await saveSyncedFolderIndex(this.#fs, this.#syncRoot, result.index);
 		this.#index = result.index;
+
+		// ── Access-loss (§6 case 1, MATERIALIZE-origin direction) ──────────────
+		// A doc that was in the previous index but is absent from the freshly
+		// materialized desired set: the user lost access while the doc still
+		// exists in the cloud (a revoked share, a removed membership, or a
+		// cloud-trash). This is the ONE cloud-driven removal signal. It is kept
+		// strictly separate from the watcher's local-delete (`#route` `case
+		// "delete"`): a local `unlink` drops its own index entry inside that
+		// route *before* the next materialize, so it can never re-surface here.
+		// Therefore everything `diff.removed` reports is access-loss → trash the
+		// local bytes, NEVER call `removeDocument`.
+		const diff = diffSyncedFolderIndex(result.index, previous);
+		for (const { path, entry } of diff.removed) {
+			await this.#handleAccessLoss(path, entry);
+		}
 	}
 
 	async #heartbeat(): Promise<void> {
@@ -278,6 +317,13 @@ export class SyncedFolderService {
 	#onRawEvent(event: RawWatcherEvent): void {
 		if (!this.#syncRoot) return;
 		if (shouldIgnoreSyncedPath(event.absPath, this.#syncRoot)) return;
+
+		// Offline seam (§7): when the offline decision flips `#offline` on, watcher
+		// events are diverted into the durable queue instead of routed. No-op here.
+		if (this.#offline) {
+			this.#enqueue(event);
+			return;
+		}
 
 		if (event.type === "change") {
 			const existing = this.#changeTimers.get(event.absPath);
@@ -356,8 +402,11 @@ export class SyncedFolderService {
 					await this.#refreshIndexEntry(decision.absPath, outcome.markdown);
 					this.#emit({ kind: "reconciled" });
 				} else if (outcome.status === "backstop") {
-					// Phase 5 writes the `*.local-edit-<ts>` copy + re-materializes.
-					this.#emit({ kind: "backstop", reason: outcome.reason });
+					await this.#backstop(
+						decision.absPath,
+						outcome.documentId,
+						outcome.reason,
+					);
 				}
 				return;
 			}
@@ -418,12 +467,18 @@ export class SyncedFolderService {
 			}
 
 			case "delete": {
-				// v1: a local delete does NOT call `documents.remove` — the
-				// direction-aware cloud delete is Phase 5. Just drop the local index
-				// entry and surface the event.
+				// ── Local delete (§6 case 1, WATCHER-origin direction) ───────────
+				// The user removed the file and the rename/move correlation window
+				// expired. This is the ONLY entry point that calls the cloud
+				// soft-delete; access-loss (materialize-origin) is handled in
+				// `#materialize` and NEVER reaches here. Keeping the two directions
+				// in two distinct routes is the data-loss-critical guarantee.
+				// One-way in v1: restore via the cloud trash UI (§6 case 2).
+				await backend.removeDocument(decision.documentId, "synced-folder");
 				delete this.#index[decision.absPath];
+				await this.#dropBaseCache(decision.documentId);
 				await saveSyncedFolderIndex(this.#fs, syncRoot, this.#index);
-				this.#emit({ kind: "deleted-local" });
+				this.#emit({ kind: "removed-local" });
 				return;
 			}
 		}
@@ -482,6 +537,134 @@ export class SyncedFolderService {
 		}
 	}
 
+	/**
+	 * Backstop host (§6 case 3). Reconcile could not be safely scoped
+	 * (`missing-base`) or the doc is read-only (`read-only`). Never a silent
+	 * clobber and never lost user bytes:
+	 *  1. write the on-disk bytes to a `*.local-edit-<ts>` sibling so the user's
+	 *     copy sits right next to the doc;
+	 *  2. re-materialize the authoritative cloud markdown over the projection
+	 *     path (re-applying the read-only chmod by role);
+	 *  3. refresh the base cache + reverse-index entry so the next save diffs
+	 *     cleanly against authoritative;
+	 *  4. surface it — `read-only` is its own `read-only-rejected` signal (a write
+	 *     to a doc the user cannot edit), everything else is a `backstop`.
+	 *
+	 * A read-only doc never reaches `applyPatch`: `reconcileProjectionFile`
+	 * refuses it (re-checked against `getDocumentForAgent`) and returns the
+	 * `read-only` backstop before any cloud write — this host only reacts to it.
+	 */
+	async #backstop(
+		absPath: string,
+		documentId: string,
+		reason: BackstopReason,
+	): Promise<void> {
+		const syncRoot = this.#syncRoot;
+		const backend = this.#backend;
+		if (!syncRoot || !backend) return;
+
+		// 1. Preserve the user's on-disk bytes in a sibling copy.
+		const onDisk = await this.#fs.readFileOrNull(absPath);
+		if (onDisk !== null) {
+			const sibling = toLocalEditName(absPath);
+			if (this.#fs.setReadOnly) {
+				await this.#fs.setReadOnly(sibling, false).catch(() => {});
+			}
+			await this.#fs.writeFile(sibling, onDisk);
+			this.#markWrittenByUs(sibling, onDisk);
+		}
+
+		// 2. Re-materialize the authoritative markdown over the projection path.
+		const authoritative = await backend.getDocumentForAgent(documentId);
+		if (authoritative) {
+			if (this.#fs.setReadOnly) {
+				await this.#fs.setReadOnly(absPath, false).catch(() => {});
+			}
+			await this.#fs.writeFile(absPath, authoritative.markdown);
+			if (this.#fs.setReadOnly) {
+				await this.#fs.setReadOnly(absPath, authoritative.canWrite === false);
+			}
+			// 3. Refresh base cache + index so the next reconcile starts clean.
+			await writeReconcileBase(this.#fs, syncRoot, documentId, {
+				markdown: authoritative.markdown,
+				revision: authoritative.revision,
+				path: relPath(syncRoot, absPath),
+			});
+			this.#markWrittenByUs(absPath, authoritative.markdown);
+			await this.#refreshIndexEntry(absPath, authoritative.markdown);
+		}
+
+		// 4. Surface the right signal.
+		if (reason === "read-only") {
+			this.#emit({ kind: "read-only-rejected" });
+		} else {
+			this.#emit({ kind: "backstop", reason });
+		}
+	}
+
+	/**
+	 * Access-loss handler (§6 case 1, MATERIALIZE-origin). The doc left the
+	 * desired cloud set while still existing in the cloud (revoked share, removed
+	 * membership, cloud trash). Move the local bytes to `.hubble/trash/` — NEVER
+	 * hard-delete the user's file — drop the index + base-cache entries, and emit
+	 * `removed-access`. This path NEVER calls `removeDocument`: the cloud copy is
+	 * untouched, and restore happens by the doc re-entering the desired set on a
+	 * later materialize (which recreates the file).
+	 */
+	async #handleAccessLoss(
+		absPath: string,
+		entry: SyncedFolderIndexEntry,
+	): Promise<void> {
+		const syncRoot = this.#syncRoot;
+		if (!syncRoot) return;
+
+		const bytes = await this.#fs.readFileOrNull(absPath);
+		if (bytes !== null) {
+			const trashDir = `${syncRoot}/${TRASH_DIR_REL}`;
+			await this.#fs.ensureDir(trashDir);
+			await this.#fs.writeFile(
+				`${trashDir}/${entry.documentId}__${basename(absPath)}`,
+				bytes,
+			);
+			if (this.#fs.setReadOnly) {
+				await this.#fs.setReadOnly(absPath, false).catch(() => {});
+			}
+			await this.#fs.deleteFile(absPath);
+		}
+
+		delete this.#index[absPath];
+		await this.#dropBaseCache(entry.documentId);
+		await saveSyncedFolderIndex(this.#fs, syncRoot, this.#index);
+		this.#emit({ kind: "removed-access" });
+	}
+
+	/** Delete a per-document reconcile base cache (markdown + metadata). */
+	async #dropBaseCache(documentId: string): Promise<void> {
+		if (!this.#syncRoot) return;
+		const root = liveDocumentBaseCacheRoot(this.#syncRoot);
+		await this.#fs.deleteFile(`${root}/${documentId}.base.md`).catch(() => {});
+		await this.#fs.deleteFile(`${root}/${documentId}.json`).catch(() => {});
+	}
+
+	// ─── Offline queue (SEAM ONLY — owned by the offline decision) ─────────────
+	//
+	// SYNCED-FOLDER §7 closing note: queued watcher edits flushed on reconnect
+	// are NOT designed or built in Phase 5. The two stubs below are deliberate
+	// no-ops that reserve the shape — `enqueue` a watcher event while offline,
+	// `flush` the queue on reconnect — and the `${syncRoot}/.hubble/queue/`
+	// directory (created in `connect`). The offline decision owns the durable
+	// queue + replay; do not implement queueing here.
+
+	#enqueue(_event: RawWatcherEvent): void {
+		// SEAM: no-op. The offline decision persists `_event` under
+		// `${this.#syncRoot}/${QUEUE_DIR_REL}` for replay on reconnect.
+	}
+
+	async #flushQueue(): Promise<void> {
+		// SEAM: no-op. The offline decision replays `${QUEUE_DIR_REL}` here on
+		// reconnect, re-driving each queued event through `handleRawEvent`.
+	}
+
 	#rekey(
 		fromPath: string,
 		toPath: string,
@@ -511,6 +694,11 @@ export class SyncedFolderService {
 function dir(absPath: string): string {
 	const slash = absPath.lastIndexOf("/");
 	return slash === -1 ? "" : absPath.slice(0, slash);
+}
+
+function basename(absPath: string): string {
+	const slash = absPath.lastIndexOf("/");
+	return slash === -1 ? absPath : absPath.slice(slash + 1);
 }
 
 function relPath(syncRoot: string, absPath: string): string {
