@@ -3,9 +3,11 @@ import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { createConvexBackend } from "@hubble.md/convex-client";
 import hubbleRuntime from "@hubble.md/runtime/global.js?raw";
 import htmlAppTheme from "@hubble.md/runtime/html-app-theme.css?raw";
-import { contentHash } from "@hubble.md/sync";
+import { contentHash, importLiveDocuments } from "@hubble.md/sync";
+import { createNodeFileSystem } from "@hubble.md/sync/node";
 import tailwindRuntime from "@tailwindcss/browser?raw";
 import alpineRuntime from "alpinejs/dist/cdn.min.js?raw";
 import chokidar, { type FSWatcher } from "chokidar";
@@ -29,6 +31,7 @@ import type {
 	LiveSyncConnectInput,
 	LiveSyncReconcileInput,
 	SyncedFolderConnectInput,
+	SyncedFolderImportInput,
 	WorkspaceConfig,
 } from "../src/desktopApi/types";
 import {
@@ -38,7 +41,11 @@ import {
 	withMarkdownExtension,
 } from "../src/lib/filePath";
 import { LiveSyncService } from "./liveSync";
-import { shouldIgnoreForWatch } from "./syncedFolderClassify";
+import {
+	classifySyncedFolderRoot,
+	SYNCED_FOLDER_INDEX_REL,
+	shouldIgnoreForWatch,
+} from "./syncedFolderClassify";
 import { SyncedFolderService } from "./syncedFolderService";
 import { createAppTray } from "./tray";
 import {
@@ -1467,6 +1474,35 @@ function registerIpc() {
 			// Connecting the synced folder engages always-on mode (Decision C).
 			setBackgroundActive(true);
 			return status;
+		},
+	);
+
+	ipcMain.handle(
+		"desktop:live-sync:inspect-root",
+		async (_event, { syncRoot: input }: { syncRoot: string }) => {
+			const syncRoot = assertGrantedRoot(input);
+			const stat = await fs.stat(syncRoot);
+			if (!stat.isDirectory()) throw new Error(`Not a directory: ${input}`);
+			const entries = await fs.readdir(syncRoot);
+			const hasSyncedFolderIndex = await pathExistsAsFile(
+				path.join(syncRoot, ...SYNCED_FOLDER_INDEX_REL.split("/")),
+			);
+			return classifySyncedFolderRoot(
+				hasSyncedFolderIndex ? [...entries, SYNCED_FOLDER_INDEX_REL] : entries,
+			);
+		},
+	);
+
+	ipcMain.handle(
+		"desktop:live-sync:import-folder-markdown",
+		async (_event, input: SyncedFolderImportInput) => {
+			const syncRoot = assertGrantedRoot(input.syncRoot);
+			const backend = createConvexBackend(input.deploymentUrl, input.authToken);
+			return importLiveDocuments(backend, createNodeFileSystem(), {
+				workspaceId: input.workspaceId,
+				workspacePath: syncRoot,
+				actor: "synced-folder-first-run-import",
+			});
 		},
 	);
 

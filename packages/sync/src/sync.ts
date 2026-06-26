@@ -428,7 +428,10 @@ export async function materializeSyncedFolder(
 		SyncBackend,
 		"listWorkspaces" | "getFolders" | "getLiveDocuments"
 	>,
-	fs: Pick<FileSystem, "ensureDir" | "writeFile" | "setReadOnly">,
+	fs: Pick<
+		FileSystem,
+		"ensureDir" | "writeFile" | "readFileOrNull" | "setReadOnly"
+	>,
 	opts: { syncRoot: string },
 ): Promise<MaterializeSyncedFolderResult> {
 	const { syncRoot } = opts;
@@ -470,9 +473,12 @@ export async function materializeSyncedFolder(
 			const absPath = `${syncRoot}/${relPath}`;
 
 			await fs.ensureDir(dirAbs);
-			// Clear any prior read-only flag so the write succeeds, then re-apply.
-			if (fs.setReadOnly) await fs.setReadOnly(absPath, false).catch(() => {});
-			await fs.writeFile(absPath, document.markdown);
+			const existingMarkdown = await fs.readFileOrNull(absPath);
+			if (existingMarkdown !== document.markdown) {
+				// Clear any prior read-only flag so the write succeeds, then re-apply.
+				if (fs.setReadOnly) await fs.setReadOnly(absPath, false).catch(() => {});
+				await fs.writeFile(absPath, document.markdown);
+			}
 			if (fs.setReadOnly)
 				await fs.setReadOnly(absPath, document.canWrite === false);
 

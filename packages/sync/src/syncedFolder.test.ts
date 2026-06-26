@@ -17,20 +17,24 @@ import type { LiveDocumentProjection } from "./types.js";
 /** In-memory FileSystem recording read-only chmod calls. */
 function createMemoryFs(initial: Record<string, string> = {}): FileSystem & {
 	readOnly: Map<string, boolean>;
+	writes: Array<{ path: string; content: string }>;
 } {
 	const files = new Map<string, string>(Object.entries(initial));
 	const readOnly = new Map<string, boolean>();
+	const writes: Array<{ path: string; content: string }> = [];
 	const unsupported = () => {
 		throw new Error("not supported in memory fs");
 	};
 	return {
 		readOnly,
+		writes,
 		async readFile(path) {
 			const content = files.get(path);
 			if (content === undefined) throw new Error(`ENOENT: ${path}`);
 			return content;
 		},
 		async writeFile(path, content) {
+			writes.push({ path, content });
 			files.set(path, content);
 		},
 		async deleteFile(path) {
@@ -272,5 +276,32 @@ describe("materializeSyncedFolder", () => {
 		// --- Result summary. ---
 		expect(result.written).toHaveLength(6);
 		expect(result.syncRoot).toBe(SYNC_ROOT);
+	});
+
+	it("does not rewrite an unchanged projection during materialization", async () => {
+		const fs = createMemoryFs({
+			[`${SYNC_ROOT}/Product Team/Roadmap.md`]: "# Roadmap\n",
+		});
+		const backend = createBackend({
+			...fixture(),
+			documents: {
+				ws_a: [doc({ _id: "d_roadmap", title: "Roadmap", version: 3 })],
+				ws_b: [],
+			},
+		});
+
+		await materializeSyncedFolder(backend, fs, {
+			syncRoot: SYNC_ROOT,
+		});
+
+		expect(
+			fs.writes.some(
+				(write) => write.path === `${SYNC_ROOT}/Product Team/Roadmap.md`,
+			),
+		).toBe(false);
+		expect(fs.readOnly.get(`${SYNC_ROOT}/Product Team/Roadmap.md`)).toBe(false);
+		const base = await readReconcileBase(fs, SYNC_ROOT, "d_roadmap");
+		expect(base?.baseMarkdown).toBe("# Roadmap\n");
+		expect(base?.metadata.revision).toBe(3);
 	});
 });

@@ -36,6 +36,17 @@ export type HeldUnlink = {
 /** What the engine has most recently written itself, to suppress feedback. */
 export type RecentlyWrittenByUs = ReadonlyMap<string, { hash: string }>;
 
+export type SyncedFolderRootInspectionState =
+	| "empty"
+	| "existing-hubble"
+	| "non-empty-foreign";
+
+export type SyncedFolderRootInspection = {
+	state: SyncedFolderRootInspectionState;
+};
+
+export const SYNCED_FOLDER_INDEX_REL = ".hubble/index/synced-folder.json";
+
 export type ClassifyContext = {
 	syncRoot: string;
 	index: SyncedFolderIndex;
@@ -83,7 +94,12 @@ export type ClassifyDecision =
 	/** Indexed `unlink` with no correlated add yet → hold for the window. */
 	| { kind: "hold"; absPath: string; entry: SyncedFolderIndexEntry }
 	/** Correlation window expired → treat as a local delete (Phase 5 routes it). */
-	| { kind: "delete"; documentId: string; absPath: string; entry: SyncedFolderIndexEntry };
+	| {
+			kind: "delete";
+			documentId: string;
+			absPath: string;
+			entry: SyncedFolderIndexEntry;
+	  };
 
 const TEMP_SUFFIXES = [".tmp", ".swp", ".swx", ".swo", ".crswap", "~"];
 const TEMP_PREFIXES = [".#", "~$"];
@@ -141,6 +157,20 @@ export function shouldIgnoreForWatch(
 	if (TEMP_PREFIXES.some((p) => name.startsWith(p))) return true;
 	if (TEMP_SUFFIXES.some((s) => name.endsWith(s))) return true;
 	return false;
+}
+
+/**
+ * First-run guard (§6 case 5): a root with Hubble's reverse-index marker can be
+ * reconnected, a truly empty root can be materialized into, and anything else is
+ * foreign content that must not be overwritten by the initial materialize pass.
+ */
+export function classifySyncedFolderRoot(
+	entries: readonly string[],
+): SyncedFolderRootInspection {
+	if (entries.includes(SYNCED_FOLDER_INDEX_REL)) {
+		return { state: "existing-hubble" };
+	}
+	return { state: entries.length === 0 ? "empty" : "non-empty-foreign" };
 }
 
 /** True when this event is the echo of one of our own writes (§2 / §6). */

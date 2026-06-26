@@ -2,10 +2,6 @@ import { toast } from "sonner";
 import { desktopApi } from "../desktopApi";
 import { classifyFileChange } from "../externalFileChange";
 import {
-	isSyncedLiveDocument,
-	resolveExternalFileChange,
-} from "../syncedDocumentGuard";
-import {
 	absoluteWorkspacePath,
 	basename,
 	dirname,
@@ -27,6 +23,10 @@ import {
 	pathAfterMove,
 	rewriteMovedLinks,
 } from "../lib/markdownLinkRewrite";
+import {
+	isSyncedLiveDocument,
+	resolveExternalFileChange,
+} from "../syncedDocumentGuard";
 import {
 	applyFileAction,
 	appStore,
@@ -778,7 +778,15 @@ export async function handleExternalFileChange(
 			baseline: getBaseline(state),
 			diskContent: nextDiskContent,
 		});
-		if (action === "skip") return state;
+		if (action === "sync-baseline") {
+			return {
+				...state,
+				diskContent: nextDiskContent,
+				externalChange: { kind: "none" },
+				status: "ready",
+				error: null,
+			};
+		}
 		return applyFileAction(state, nextDiskContent, action);
 	});
 }

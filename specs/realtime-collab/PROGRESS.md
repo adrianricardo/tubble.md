@@ -30,8 +30,19 @@ next work is decomposed into model-tiered, dispatch-ready slices:
   **RT1 landed locally 2026-06-26**: desktop now has Convex Auth in Settings,
   a renderer-owned JWT string contract over IPC, authenticated main-process
   `SyncBackend` creation, and token-change reconnect for the synced-folder engine.
-  Next pickup: **RT2** settings/workspace connect flow refinement; keep testing to
-  an empty folder until RT3's first-run guard lands.
+  **RT2 landed locally 2026-06-26**: Settings now shows synced-folder workspace
+  context, create/existing folder pickers, connect/disconnect, live status, manual
+  refresh, and toasts for every synced-folder event kind.
+  **RT3 landed locally 2026-06-26**: desktop now inspects a picked sync root before
+  materializing, allows empty/already-indexed Hubble roots, blocks non-empty
+  foreign folders by default, and offers explicit workspace import before enabling
+  the mirror. **Human smoke on `strong-setter-709` verified** sign-in, connected
+  folder materialization, external TextEdit save → `documents.applyPatch` →
+  Convex revision update, and no conflict/backstop file. **UX follow-up fixed
+  locally 2026-06-26:** Hubble now skips identical projection rewrites after
+  reconcile/materialize, and an already-open synced-folder editor refreshes clean
+  documents from disk while preserving dirty in-editor edits. Next pickup: **RT4**
+  copy polish or **RT5** runbook/smoke support.
 - **`READY-TO-DEPLOY.plan.md`** — RD1–RD12 roadmap to full production (reactive
   cloud→disk sync, schema migration, the doc-size + offline **gates**, auth audit,
   security review, flag-gated merge-to-main, release, monitoring). Briefs expand at
@@ -718,6 +729,42 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 ## Changelog
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
+
+- 2026-06-26 — Codex (orchestrated, reviewed) — Fixed the two ready-to-test
+  synced-folder UX gaps found during human smoke: `reconcileProjectionFile` and
+  `materializeSyncedFolder` now avoid rewriting projection files when the
+  authoritative markdown is byte-identical to disk, preventing external-editor
+  changed-by-another-app warnings on ordinary saves/reconnects; the desktop
+  synced-document guard now refreshes clean open editors from reconciled disk
+  content and only advances the saved baseline for dirty open editors. Verified
+  `pnpm --filter @hubble.md/sync test -- reconcile syncedFolder` and
+  `pnpm --filter @hubble.md/desktop test -- syncedDocumentGuard`.
+- 2026-06-26 — Adrian/Codex — Human-smoked the ready-to-test synced folder on
+  deployed Convex `strong-setter-709`: after setting Convex Auth `JWT_PRIVATE_KEY`
+  / `JWKS`, desktop sign-in worked, a seeded `Desktop Test/test-note.md`
+  materialized into `/Users/adriantavares/Documents/dubble-test`, an external
+  TextEdit save reconciled through `documents.applyPatch` to Convex revision 2,
+  and no `*.conflict-*` / `*.local-edit-*` file was written. Follow-up required:
+  suppress Hubble's own projection echo so TextEdit does not warn on ordinary
+  local edits, and refresh/patch an already-open Hubble editor view when the
+  synced-folder engine reconciles the currently open file.
+- 2026-06-26 — Codex (orchestrated, reviewed) — RT3 ready-to-test first-run guard
+  landed: added synced-folder root inspection IPC, pure root classification for
+  empty / existing Hubble / non-empty foreign roots, Settings guard UI that refuses
+  non-empty foreign folders by default, and explicit workspace import before mirror
+  connect. Verified the focused desktop synced-folder classifier test,
+  `pnpm typecheck`, and `pnpm build:desktop`.
+- 2026-06-26 — Codex — RT2 ready-to-test settings flow landed: the desktop
+  Settings cloud-sync section now shows signed-in workspace context, deployment,
+  sync-root path, connection state, mirrored document count, relative last
+  activity, create-folder and choose-existing folder actions, disconnect, manual
+  status refresh, and event-driven status refreshes. Added placeholder toasts for
+  every synced-folder event kind (`reconciled`, `renamed`, `moved`, `created`,
+  `removed-local`, `removed-access`, `read-only-rejected`, `backstop`, `error`).
+  Verified `pnpm check`, `pnpm typecheck`, `pnpm --filter @hubble.md/desktop
+  test` (74/74), and `pnpm build:desktop`. Human deployed-Convex sign-in and
+  empty-folder materialization remain gated on a manual Electron run; keep
+  non-empty-folder testing blocked until RT3.
 
 - 2026-06-26 — Codex (orchestrated, reviewed) — RT1 ready-to-test gate landed:
   desktop renderer now wraps the app in Convex Auth when `VITE_CONVEX_URL` is set,

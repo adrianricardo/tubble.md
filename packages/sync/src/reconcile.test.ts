@@ -15,19 +15,26 @@ import {
 	writeReconcileBase,
 } from "./reconcile.js";
 
+type MemoryFs = FileSystem & {
+	writes: Array<{ path: string; content: string }>;
+};
+
 /** Minimal in-memory FileSystem for reconcile tests. */
-function createMemoryFs(initial: Record<string, string> = {}): FileSystem {
+function createMemoryFs(initial: Record<string, string> = {}): MemoryFs {
 	const files = new Map<string, string>(Object.entries(initial));
+	const writes: MemoryFs["writes"] = [];
 	const unsupported = () => {
 		throw new Error("not supported in memory fs");
 	};
 	return {
+		writes,
 		async readFile(path) {
 			const content = files.get(path);
 			if (content === undefined) throw new Error(`ENOENT: ${path}`);
 			return content;
 		},
 		async writeFile(path, content) {
+			writes.push({ path, content });
 			files.set(path, content);
 		},
 		async deleteFile(path) {
@@ -156,7 +163,7 @@ describe("readReconcileBase / writeReconcileBase", () => {
 describe("reconcileProjectionFile", () => {
 	const projectionPath = "/ws/notes/todo.md";
 
-	function seededFs(base: string, disk: string, canWrite = true): FileSystem {
+	function seededFs(base: string, disk: string, canWrite = true): MemoryFs {
 		const { base: basePath, meta } = baseCachePaths(DOC_ID);
 		return createMemoryFs({
 			[basePath]: base,
@@ -284,6 +291,30 @@ describe("reconcileProjectionFile", () => {
 		expect(refreshed?.baseMarkdown).toBe("hello world!");
 		expect(refreshed?.metadata.revision).toBe(4);
 		expect(refreshed?.metadata.path).toBe("notes/todo.md");
+	});
+
+	it("does not rewrite the projection when the server markdown matches the saved file", async () => {
+		const fs = seededFs("hello", "hello world");
+		const { backend } = createBackend({
+			document: {
+				documentId: DOC_ID,
+				revision: 3,
+				markdown: "hello",
+				canWrite: true,
+			},
+			result: { documentId: DOC_ID, revision: 4, markdown: "hello world" },
+		});
+
+		await reconcileProjectionFile(backend, fs, {
+			documentId: DOC_ID,
+			projectionPath,
+			workspacePath: WORKSPACE,
+		});
+
+		expect(fs.writes.some((write) => write.path === projectionPath)).toBe(false);
+		const refreshed = await readReconcileBase(fs, WORKSPACE, DOC_ID);
+		expect(refreshed?.baseMarkdown).toBe("hello world");
+		expect(refreshed?.metadata.revision).toBe(4);
 	});
 
 	it("defaults the actor to file-reconcile", async () => {

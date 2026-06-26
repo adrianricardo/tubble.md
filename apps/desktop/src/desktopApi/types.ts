@@ -1,4 +1,7 @@
-import type { ReconcileOutcome } from "@hubble.md/sync";
+import type {
+	LiveDocumentImportResult,
+	ReconcileOutcome,
+} from "@hubble.md/sync";
 
 export type { ReconcileOutcome };
 
@@ -102,6 +105,20 @@ export type SyncedFolderConnectInput = {
 	/** Convex Auth JWT from the renderer session. IPC carries a string, not a token fetcher. */
 	authToken: string;
 	deviceId?: string;
+};
+
+export type SyncedFolderRootInspection = {
+	state: "empty" | "existing-hubble" | "non-empty-foreign";
+};
+
+export type SyncedFolderImportInput = {
+	/** The user-chosen sync root containing markdown files to import. */
+	syncRoot: string;
+	deploymentUrl: string;
+	/** Explicit target workspace selected by the user. */
+	workspaceId: string;
+	/** Convex Auth JWT from the renderer session. IPC carries a string, not a token fetcher. */
+	authToken: string;
 };
 
 /** Pushed to the renderer over `desktop:live-sync:event` as the mirror changes. */
@@ -209,6 +226,12 @@ export type DesktopApi = {
 	connectSyncedFolder(
 		input: SyncedFolderConnectInput,
 	): Promise<SyncedFolderStatus>;
+	inspectSyncedFolderRoot(
+		syncRoot: string,
+	): Promise<SyncedFolderRootInspection>;
+	importSyncedFolderMarkdown(
+		input: SyncedFolderImportInput,
+	): Promise<LiveDocumentImportResult>;
 	disconnectSyncedFolder(): Promise<SyncedFolderStatus>;
 	getSyncedFolderStatus(): Promise<SyncedFolderStatus>;
 	/**

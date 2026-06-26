@@ -13,13 +13,28 @@ describe("resolveExternalFileChange (routing isolation)", () => {
 		diskContent: "remote edit",
 	};
 
-	it("synced Live Document: returns 'skip' and never invokes the classifier", () => {
+	it("synced Live Document with clean editor: reloads and never invokes the classifier", () => {
+		const classify = vi.fn(classifyFileChange);
+		const decision = resolveExternalFileChange(
+			{
+				isSyncedLiveDocument: true,
+				editorContent: "before",
+				baseline: "before",
+				diskContent: "after",
+			},
+			classify,
+		);
+		expect(decision).toBe("reload");
+		expect(classify).not.toHaveBeenCalled();
+	});
+
+	it("synced Live Document with dirty editor: advances baseline and never invokes the classifier", () => {
 		const classify = vi.fn(classifyFileChange);
 		const decision = resolveExternalFileChange(
 			{ isSyncedLiveDocument: true, ...conflictingInputs },
 			classify,
 		);
-		expect(decision).toBe("skip");
+		expect(decision).toBe("sync-baseline");
 		expect(classify).not.toHaveBeenCalled();
 	});
 
@@ -59,7 +74,9 @@ describe("isSyncedLiveDocument", () => {
 	it("true when the main process reports a synced document", async () => {
 		const api = { isSyncedFolderDocument: vi.fn(async () => true) };
 		expect(await isSyncedLiveDocument("/Hubble/WS/Doc.md", api)).toBe(true);
-		expect(api.isSyncedFolderDocument).toHaveBeenCalledWith("/Hubble/WS/Doc.md");
+		expect(api.isSyncedFolderDocument).toHaveBeenCalledWith(
+			"/Hubble/WS/Doc.md",
+		);
 	});
 
 	it("false when the main process reports a non-synced document", async () => {

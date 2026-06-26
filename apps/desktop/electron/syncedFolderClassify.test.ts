@@ -5,17 +5,22 @@
  * pure functions in syncedFolderClassify.ts.
  */
 
-import type { SyncedFolderIndex, SyncedFolderIndexEntry } from "@hubble.md/sync";
+import type {
+	SyncedFolderIndex,
+	SyncedFolderIndexEntry,
+} from "@hubble.md/sync";
 import { describe, expect, it } from "vitest";
 import {
 	acquireSingleWriterLock,
 	type ClassifyContext,
 	classifySyncedFolderChange,
+	classifySyncedFolderRoot,
 	flushExpiredUnlinks,
 	type HeldUnlink,
 	OWNER_LOCK_STALE_MS,
 	ownerLockPath,
 	type RawWatcherEvent,
+	SYNCED_FOLDER_INDEX_REL,
 } from "./syncedFolderClassify";
 
 const SYNC_ROOT = "/Hubble";
@@ -42,6 +47,24 @@ const INDEX: SyncedFolderIndex = {
 	[`${SYNC_ROOT}/WS/Specs/Spec.md`]: SPEC,
 };
 
+describe("classifySyncedFolderRoot", () => {
+	it("classifies an empty root as safe to connect", () => {
+		expect(classifySyncedFolderRoot([])).toEqual({ state: "empty" });
+	});
+
+	it("classifies a root with .hubble/index/synced-folder.json as an existing Hubble root", () => {
+		expect(
+			classifySyncedFolderRoot([".hubble", SYNCED_FOLDER_INDEX_REL]),
+		).toEqual({ state: "existing-hubble" });
+	});
+
+	it("classifies any non-empty root without the Hubble marker as foreign", () => {
+		expect(classifySyncedFolderRoot(["Notes.md"])).toEqual({
+			state: "non-empty-foreign",
+		});
+	});
+});
+
 function ctx(overrides: Partial<ClassifyContext> = {}): ClassifyContext {
 	return {
 		syncRoot: SYNC_ROOT,
@@ -53,7 +76,9 @@ function ctx(overrides: Partial<ClassifyContext> = {}): ClassifyContext {
 	};
 }
 
-function event(partial: Partial<RawWatcherEvent> & Pick<RawWatcherEvent, "type" | "absPath">): RawWatcherEvent {
+function event(
+	partial: Partial<RawWatcherEvent> & Pick<RawWatcherEvent, "type" | "absPath">,
+): RawWatcherEvent {
 	return { at: 1_000, ...partial };
 }
 
@@ -243,9 +268,9 @@ describe("acquireSingleWriterLock", () => {
 			now: 10_000,
 		});
 		expect(result.acquired).toBe(true);
-		expect(JSON.parse(fs.files.get(ownerLockPath(SYNC_ROOT)) ?? "{}")).toMatchObject(
-			{ deviceId: "device-a" },
-		);
+		expect(
+			JSON.parse(fs.files.get(ownerLockPath(SYNC_ROOT)) ?? "{}"),
+		).toMatchObject({ deviceId: "device-a" });
 	});
 
 	it("refuses when a fresh foreign heartbeat is present", async () => {
@@ -282,8 +307,8 @@ describe("acquireSingleWriterLock", () => {
 			now: 10_000 + OWNER_LOCK_STALE_MS + 1,
 		});
 		expect(result.acquired).toBe(true);
-		expect(JSON.parse(fs.files.get(ownerLockPath(SYNC_ROOT)) ?? "{}")).toMatchObject(
-			{ deviceId: "device-a" },
-		);
+		expect(
+			JSON.parse(fs.files.get(ownerLockPath(SYNC_ROOT)) ?? "{}"),
+		).toMatchObject({ deviceId: "device-a" });
 	});
 });

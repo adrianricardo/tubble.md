@@ -80,6 +80,10 @@ const desktopApi = {
 	getLiveSyncStatus: () => ipcRenderer.invoke("desktop:live-sync:status"),
 	reconcileLiveDocument: (input) =>
 		ipcRenderer.invoke("desktop:live-sync:reconcile", input),
+	inspectSyncedFolderRoot: (syncRoot) =>
+		ipcRenderer.invoke("desktop:live-sync:inspect-root", { syncRoot }),
+	importSyncedFolderMarkdown: (input) =>
+		ipcRenderer.invoke("desktop:live-sync:import-folder-markdown", input),
 	connectSyncedFolder: (input) =>
 		ipcRenderer.invoke("desktop:live-sync:connect-folder", input),
 	disconnectSyncedFolder: () =>

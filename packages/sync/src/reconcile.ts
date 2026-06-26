@@ -163,8 +163,9 @@ export async function writeReconcileBase(
  *  2. Refuse read-only docs → `backstop("read-only")`.
  *  3. Diff base vs. on-disk; no change → `no-op`.
  *  4. Re-check `canWrite` against the backend; read-only → `backstop`.
- *  5. Apply a scoped `replace-range` patch, write the re-materialized markdown
- *     back to the projection file, and refresh the base cache → `reconciled`.
+ *  5. Apply a scoped `replace-range` patch, refresh the projection only if the
+ *     server materialization differs from the saved file, and refresh the base
+ *     cache → `reconciled`.
  *
  * Callers decide how to surface a `backstop` outcome (the CLI throws; a
  * long-lived host can write a `*.local-edit-<ts>` copy — Phase 5).
@@ -208,7 +209,9 @@ export async function reconcileProjectionFile(
 		actor: args.actor ?? "file-reconcile",
 	});
 
-	await fs.writeFile(projectionPath, result.markdown);
+	if (result.markdown !== nextMarkdown) {
+		await fs.writeFile(projectionPath, result.markdown);
+	}
 	await writeReconcileBase(fs, workspacePath, documentId, {
 		markdown: result.markdown,
 		revision: result.revision,

@@ -38,8 +38,11 @@ export async function isSyncedLiveDocument(
 	}
 }
 
-/** Either skip the legacy classifier entirely, or its resulting action. */
-export type ExternalChangeDecision = "skip" | FileAction;
+/**
+ * Either update only the saved baseline for a dirty synced doc, or apply a
+ * normal file action.
+ */
+export type ExternalChangeDecision = "sync-baseline" | FileAction;
 
 type ResolveArgs = {
 	/** True when the main-process synced-folder engine owns this path. */
@@ -51,8 +54,9 @@ type ResolveArgs = {
 
 /**
  * Decide what the renderer should do with an external/on-disk change. For a
- * synced Live Document → `"skip"` (the engine already reconciled it; the
- * classifier is NOT invoked). Otherwise delegate to the unchanged legacy
+ * synced Live Document, the legacy classifier is NOT invoked: a clean editor can
+ * reload the reconciled disk text, while a dirty editor keeps local content and
+ * only advances its saved baseline. Otherwise delegate to the unchanged legacy
  * `classifyFileChange`. `classify` is injectable so a test can assert the
  * classifier is never called on the synced branch.
  */
@@ -64,7 +68,9 @@ export function resolveExternalFileChange(
 		diskContent: string;
 	}) => FileAction = classifyFileChange,
 ): ExternalChangeDecision {
-	if (args.isSyncedLiveDocument) return "skip";
+	if (args.isSyncedLiveDocument) {
+		return args.editorContent === args.baseline ? "reload" : "sync-baseline";
+	}
 	return classify({
 		editorContent: args.editorContent,
 		baseline: args.baseline,
