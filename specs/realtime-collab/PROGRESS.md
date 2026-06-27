@@ -48,8 +48,8 @@ next work is decomposed into model-tiered, dispatch-ready slices:
   2026-06-26**: `TEST-RUNBOOK.md` now walks the human deployed-backend smoke, and
   `scripts/synced-folder-reconcile-smoke.mjs` provides an authenticated package
   smoke for the base-cache diff → `reconcileProjectionFile` → Convex patch path.
-  The script syntax/help path is verified; a real deployed run still needs
-  `CONVEX_URL` + `AUTH_TOKEN`.
+  Deployed package smoke verified on `strong-setter-709` 2026-06-27: imported a
+  Live Document, reconciled a projection edit, and advanced revision `1 → 2`.
 - **`READY-TO-DEPLOY.plan.md`** — RD1–RD12 roadmap to full production (reactive
   cloud→disk sync, schema migration, the doc-size + offline **gates**, auth audit,
   security review, flag-gated merge-to-main, release, monitoring). Briefs expand at
@@ -737,6 +737,12 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-27 — Codex — Verified the RT5 package-level synced-folder reconcile
+  smoke against deployed Convex `strong-setter-709` using the signed-in desktop
+  Convex Auth JWT. The smoke imported a Live Document, wrote the local projection
+  and base cache, reconciled a disk edit through `documents.applyPatch`, and
+  confirmed the cloud markdown advanced from revision `1 → 2`. Manual desktop
+  watcher/IPC/folder-picker runbook steps remain human-gated.
 - 2026-06-26 — Codex — RT5 ready-to-test runbook/smoke support landed:
   documented the manual deployed-backend synced-folder test path in
   `TEST-RUNBOOK.md` and added `scripts/synced-folder-reconcile-smoke.mjs`, an
