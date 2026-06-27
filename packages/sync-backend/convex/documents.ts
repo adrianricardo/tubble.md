@@ -1044,9 +1044,12 @@ export const listSharedWithMe = query({
 			// documentRole resolves the share row we already know exists, so null
 			// would be a data-integrity anomaly; skip to be safe.
 			if (role === null) continue;
+			const workspace = await ctx.db.get(document.workspaceId);
+			if (!workspace) continue;
 
 			results.push({
 				...document,
+				workspaceName: workspace.name,
 				markdown: projection.markdown,
 				version: projection.version,
 				role,

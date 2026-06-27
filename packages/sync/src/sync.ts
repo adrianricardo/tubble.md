@@ -20,6 +20,7 @@ import type {
 	LiveDocumentImportResult,
 	LiveDocumentProjectionWriteResult,
 	RemoteAsset,
+	SharedLiveDocumentProjection,
 	SyncResult,
 	WorkspaceConfig,
 } from "./types.js";
@@ -420,13 +421,12 @@ export type MaterializeSyncedFolderResult = {
  *    `syncRoot` as the workspace path, so it lands exactly where
  *    `reconcileProjectionFile` (`liveDocumentBaseCacheRoot(syncRoot)`) expects;
  *  - writes the **reverse index** (`absPath → documentId`) used by the watcher.
- *
- * `Shared with me/` materialization is deferred (SYNCED-FOLDER §1 gap 3).
+ *  - appends direct shares outside the user's workspaces under `Shared with me/`.
  */
 export async function materializeSyncedFolder(
 	backend: Pick<
 		SyncBackend,
-		"listWorkspaces" | "getFolders" | "getLiveDocuments"
+		"listWorkspaces" | "getFolders" | "getLiveDocuments" | "getSharedWithMe"
 	>,
 	fs: Pick<
 		FileSystem,
@@ -439,7 +439,9 @@ export async function materializeSyncedFolder(
 	const index: SyncedFolderIndex = {};
 
 	const workspaces = await backend.listWorkspaces();
-	const usedWorkspaceNames = new Set<string>();
+	const sharedDirName = "Shared with me";
+	const usedWorkspaceNames = new Set<string>([sharedDirName]);
+	const materializedDocumentIds = new Set<string>();
 
 	for (const workspace of workspaces) {
 		const workspaceName = uniqueName(
@@ -476,7 +478,8 @@ export async function materializeSyncedFolder(
 			const existingMarkdown = await fs.readFileOrNull(absPath);
 			if (existingMarkdown !== document.markdown) {
 				// Clear any prior read-only flag so the write succeeds, then re-apply.
-				if (fs.setReadOnly) await fs.setReadOnly(absPath, false).catch(() => {});
+				if (fs.setReadOnly)
+					await fs.setReadOnly(absPath, false).catch(() => {});
 				await fs.writeFile(absPath, document.markdown);
 			}
 			if (fs.setReadOnly)
@@ -499,12 +502,75 @@ export async function materializeSyncedFolder(
 				role: document.role ?? null,
 			};
 			written.push(absPath);
+			materializedDocumentIds.add(document._id);
 		}
 	}
+
+	const sharedDocuments = (await backend.getSharedWithMe()).filter(
+		(document) => !materializedDocumentIds.has(document._id),
+	);
+	await materializeSharedWithMe(
+		fs,
+		syncRoot,
+		sharedDirName,
+		sharedDocuments,
+		written,
+		index,
+	);
 
 	await saveSyncedFolderIndex(fs, syncRoot, index);
 
 	return { syncRoot, written, index };
+}
+
+async function materializeSharedWithMe(
+	fs: Pick<
+		FileSystem,
+		"ensureDir" | "writeFile" | "readFileOrNull" | "setReadOnly"
+	>,
+	syncRoot: string,
+	sharedDirName: string,
+	documents: SharedLiveDocumentProjection[],
+	written: string[],
+	index: SyncedFolderIndex,
+) {
+	if (documents.length === 0) return;
+
+	const sharedDirAbs = `${syncRoot}/${sharedDirName}`;
+	const usedNames = new Set<string>();
+	await fs.ensureDir(sharedDirAbs);
+
+	for (const document of documents) {
+		const fileName = uniqueName(
+			usedNames,
+			`${sanitizeSegment(document.workspaceName)} - ${sanitizeSegment(document.title)}.md`,
+		);
+		const relPath = `${sharedDirName}/${fileName}`;
+		const absPath = `${syncRoot}/${relPath}`;
+		const existingMarkdown = await fs.readFileOrNull(absPath);
+		if (existingMarkdown !== document.markdown) {
+			if (fs.setReadOnly) await fs.setReadOnly(absPath, false).catch(() => {});
+			await fs.writeFile(absPath, document.markdown);
+		}
+		if (fs.setReadOnly)
+			await fs.setReadOnly(absPath, document.canWrite === false);
+
+		await writeReconcileBase(fs, syncRoot, document._id, {
+			markdown: document.markdown,
+			revision: document.version ?? 0,
+			path: relPath,
+		});
+
+		index[absPath] = {
+			documentId: document._id,
+			workspaceId: document.workspaceId,
+			folderId: null,
+			inode: null,
+			hash: await contentHash(document.markdown),
+			role: document.role ?? null,
+		};
+		written.push(absPath);
+	}
 }
 
 /** Import local markdown files into cloud-authoritative Live Documents. */

@@ -51,6 +51,11 @@ export type LiveDocumentProjection = {
 	deletedAt?: number;
 };
 
+export type SharedLiveDocumentProjection = LiveDocumentProjection & {
+	workspaceId: string;
+	workspaceName: string;
+};
+
 export type LiveDocumentImport = {
 	documentId: string;
 	path: string;

@@ -1,5 +1,9 @@
 import { statSync } from "node:fs";
-import { createConvexBackend } from "@hubble.md/convex-client";
+import {
+	createConvexBackend,
+	createConvexSubscriber,
+	type Subscriber,
+} from "@hubble.md/convex-client";
 import {
 	type BackstopReason,
 	contentHash,
@@ -38,6 +42,7 @@ export type WatcherHandle = { close(): Promise<void> | void };
 
 export type SyncedFolderServiceOptions = {
 	createBackend?: (url: string, authToken?: string) => SyncBackend;
+	createSubscriber?: (url: string, authToken?: string) => Subscriber;
 	fs?: FileSystem;
 	/** Push a `desktop:live-sync:event` to the renderer. */
 	emit?: (event: SyncedFolderEvent) => void;
@@ -67,6 +72,7 @@ export type ConnectFolderInput = {
 
 const CORRELATION_WINDOW_MS = 750;
 const CHANGE_DEBOUNCE_MS = 250;
+const CLOUD_MATERIALIZE_DEBOUNCE_MS = 250;
 const HEARTBEAT_MS = 10_000;
 const SELF_WRITE_TTL_MS = 5_000;
 
@@ -95,6 +101,7 @@ const TRASH_DIR_REL = ".hubble/trash";
  */
 export class SyncedFolderService {
 	#createBackend: (url: string, authToken?: string) => SyncBackend;
+	#createSubscriber: (url: string, authToken?: string) => Subscriber;
 	#fs: FileSystem;
 	#emit: (event: SyncedFolderEvent) => void;
 	#now: () => number;
@@ -120,11 +127,18 @@ export class SyncedFolderService {
 	#recentlyWrittenByUs = new Map<string, { hash: string; at: number }>();
 	#changeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	#flushTimer: ReturnType<typeof setTimeout> | null = null;
+	#cloudMaterializeTimer: ReturnType<typeof setTimeout> | null = null;
+	#cloudMaterializeRunning = false;
+	#cloudMaterializePending = false;
 	#heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 	#watcher: WatcherHandle | null = null;
+	#subscriber: Subscriber | null = null;
+	#unsubscribeSyncedFolder: (() => void) | null = null;
+	#connectionGeneration = 0;
 
 	constructor(options: SyncedFolderServiceOptions = {}) {
 		this.#createBackend = options.createBackend ?? createConvexBackend;
+		this.#createSubscriber = options.createSubscriber ?? createConvexSubscriber;
 		this.#fs = options.fs ?? createNodeFileSystem();
 		this.#emit = options.emit ?? (() => {});
 		this.#now = options.now ?? (() => Date.now());
@@ -187,6 +201,7 @@ export class SyncedFolderService {
 		const { syncRoot, deploymentUrl, authToken } = input;
 		const deviceId = input.deviceId ?? this.#deviceId;
 		this.#deviceId = deviceId;
+		const connectionGeneration = this.#connectionGeneration + 1;
 
 		const lock = await acquireSingleWriterLock(this.#fs, syncRoot, {
 			deviceId,
@@ -202,14 +217,16 @@ export class SyncedFolderService {
 
 		this.#backend = this.#createBackend(deploymentUrl, authToken);
 		this.#syncRoot = syncRoot;
+		this.#connectionGeneration = connectionGeneration;
 		this.#lastError = null;
 
 		// Reserve the offline-queue directory (seam only; see #flushQueue).
 		await this.#fs.ensureDir(`${syncRoot}/${QUEUE_DIR_REL}`);
 
-		await this.#materialize();
+		await this.#materialize(connectionGeneration);
 		// Flush-on-reconnect seam: no-op until the offline decision lands.
 		await this.#flushQueue();
+		this.#startCloudSubscriptions(deploymentUrl, authToken);
 
 		this.#heartbeatTimer = setInterval(() => {
 			void this.#heartbeat();
@@ -230,6 +247,8 @@ export class SyncedFolderService {
 	}
 
 	async disconnect(): Promise<SyncedFolderStatus> {
+		this.#connectionGeneration += 1;
+		await this.#stopCloudSubscriptions();
 		if (this.#watcher) {
 			await this.#watcher.close();
 			this.#watcher = null;
@@ -242,8 +261,14 @@ export class SyncedFolderService {
 			clearTimeout(this.#flushTimer);
 			this.#flushTimer = null;
 		}
+		if (this.#cloudMaterializeTimer) {
+			clearTimeout(this.#cloudMaterializeTimer);
+			this.#cloudMaterializeTimer = null;
+		}
 		for (const timer of this.#changeTimers.values()) clearTimeout(timer);
 		this.#changeTimers.clear();
+		this.#cloudMaterializeRunning = false;
+		this.#cloudMaterializePending = false;
 
 		if (this.#syncRoot) {
 			await releaseSingleWriterLock(this.#fs, this.#syncRoot, this.#deviceId);
@@ -275,12 +300,23 @@ export class SyncedFolderService {
 		return this.getStatus();
 	}
 
-	async #materialize(): Promise<void> {
-		if (!this.#backend || !this.#syncRoot) return;
+	async #materialize(
+		connectionGeneration = this.#connectionGeneration,
+	): Promise<void> {
+		const backend = this.#backend;
+		const syncRoot = this.#syncRoot;
+		if (!backend || !syncRoot) return;
 		const previous = this.#index;
-		const result = await materializeSyncedFolder(this.#backend, this.#fs, {
-			syncRoot: this.#syncRoot,
+		const result = await materializeSyncedFolder(backend, this.#fs, {
+			syncRoot,
 		});
+		if (
+			connectionGeneration !== this.#connectionGeneration ||
+			backend !== this.#backend ||
+			syncRoot !== this.#syncRoot
+		) {
+			return;
+		}
 		// Fill `inode` (Phase 3a left it null) and seed self-write suppression so
 		// the watcher never re-classifies the materializer's own writes.
 		const now = this.#now();
@@ -288,7 +324,7 @@ export class SyncedFolderService {
 			entry.inode = this.#statInode(absPath);
 			this.#recentlyWrittenByUs.set(absPath, { hash: entry.hash, at: now });
 		}
-		await saveSyncedFolderIndex(this.#fs, this.#syncRoot, result.index);
+		await saveSyncedFolderIndex(this.#fs, syncRoot, result.index);
 		this.#index = result.index;
 
 		// ── Access-loss (§6 case 1, MATERIALIZE-origin direction) ──────────────
@@ -303,8 +339,77 @@ export class SyncedFolderService {
 		// local bytes, NEVER call `removeDocument`.
 		const diff = diffSyncedFolderIndex(result.index, previous);
 		for (const { path, entry } of diff.removed) {
+			const moved = findIndexEntryByDocumentId(result.index, entry.documentId);
+			if (moved) {
+				await this.#handleCloudPathChange(path, moved.path);
+				continue;
+			}
 			await this.#handleAccessLoss(path, entry);
 		}
+	}
+
+	#startCloudSubscriptions(deploymentUrl: string, authToken: string): void {
+		this.#subscriber = this.#createSubscriber(deploymentUrl, authToken);
+		this.#unsubscribeSyncedFolder = this.#subscriber.onSyncedFolderChanged(
+			() => this.#scheduleCloudMaterialize(),
+			(error) => this.#handleSubscriptionError(error),
+		);
+	}
+
+	async #stopCloudSubscriptions(): Promise<void> {
+		if (this.#unsubscribeSyncedFolder) {
+			this.#unsubscribeSyncedFolder();
+			this.#unsubscribeSyncedFolder = null;
+		}
+		if (this.#subscriber) {
+			await this.#subscriber.close();
+			this.#subscriber = null;
+		}
+	}
+
+	#scheduleCloudMaterialize(): void {
+		if (!this.#backend || !this.#syncRoot) return;
+		if (this.#cloudMaterializeTimer) {
+			clearTimeout(this.#cloudMaterializeTimer);
+		}
+		this.#cloudMaterializeTimer = setTimeout(() => {
+			this.#cloudMaterializeTimer = null;
+			void this.#runCloudMaterialize(this.#connectionGeneration);
+		}, CLOUD_MATERIALIZE_DEBOUNCE_MS);
+		if (typeof this.#cloudMaterializeTimer.unref === "function") {
+			this.#cloudMaterializeTimer.unref();
+		}
+	}
+
+	async #runCloudMaterialize(connectionGeneration: number): Promise<void> {
+		if (connectionGeneration !== this.#connectionGeneration) return;
+		if (this.#cloudMaterializeRunning) {
+			this.#cloudMaterializePending = true;
+			return;
+		}
+		this.#cloudMaterializeRunning = true;
+		this.#state = "syncing";
+		try {
+			await this.#materialize(connectionGeneration);
+			this.#lastError = null;
+			this.#state = this.connected ? "connected" : "idle";
+		} catch (error) {
+			this.#lastError = error instanceof Error ? error.message : String(error);
+			this.#state = "error";
+			this.#emit({ kind: "error" });
+		} finally {
+			this.#cloudMaterializeRunning = false;
+		}
+		if (this.#cloudMaterializePending) {
+			this.#cloudMaterializePending = false;
+			this.#scheduleCloudMaterialize();
+		}
+	}
+
+	#handleSubscriptionError(error: Error): void {
+		this.#lastError = error.message;
+		this.#state = "error";
+		this.#emit({ kind: "error" });
 	}
 
 	async #heartbeat(): Promise<void> {
@@ -647,6 +752,27 @@ export class SyncedFolderService {
 		this.#emit({ kind: "removed-access" });
 	}
 
+	/**
+	 * The document still exists in the desired cloud set under a different path
+	 * (cloud rename/move, or the echo of our own local rename). Clean up the old
+	 * projection path, but do not treat it as access loss: no trash copy, no base
+	 * cache drop, and never a cloud delete.
+	 */
+	async #handleCloudPathChange(
+		fromPath: string,
+		toPath: string,
+	): Promise<void> {
+		if (fromPath === toPath) return;
+		const bytes = await this.#fs.readFileOrNull(fromPath);
+		if (bytes === null) return;
+		if (this.#fs.setReadOnly) {
+			await this.#fs.setReadOnly(fromPath, false).catch(() => {});
+		}
+		await this.#fs.deleteFile(fromPath);
+		this.#recentlyWrittenByUs.delete(fromPath);
+		this.#heldUnlinks = this.#heldUnlinks.filter((h) => h.absPath !== fromPath);
+	}
+
 	/** Delete a per-document reconcile base cache (markdown + metadata). */
 	async #dropBaseCache(documentId: string): Promise<void> {
 		if (!this.#syncRoot) return;
@@ -719,4 +845,14 @@ function relPath(syncRoot: string, absPath: string): string {
 function titleFromPath(absPath: string): string {
 	const name = absPath.slice(absPath.lastIndexOf("/") + 1);
 	return name.replace(/\.md$/i, "") || "Untitled";
+}
+
+function findIndexEntryByDocumentId(
+	index: SyncedFolderIndex,
+	documentId: string,
+): { path: string; entry: SyncedFolderIndexEntry } | null {
+	for (const [path, entry] of Object.entries(index)) {
+		if (entry.documentId === documentId) return { path, entry };
+	}
+	return null;
 }

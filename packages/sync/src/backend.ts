@@ -3,6 +3,7 @@ import type {
 	LiveDocumentProjection,
 	RemoteAsset,
 	RemoteFile,
+	SharedLiveDocumentProjection,
 } from "./types.js";
 
 /** A workspace the signed-in user can see (from `sync.listWorkspaces`). */
@@ -72,6 +73,7 @@ export interface SyncBackend {
 	}): Promise<void>;
 
 	getLiveDocuments(workspaceId: string): Promise<LiveDocumentProjection[]>;
+	getSharedWithMe(): Promise<SharedLiveDocumentProjection[]>;
 	importLiveDocument(args: {
 		workspaceId: string;
 		path: string;

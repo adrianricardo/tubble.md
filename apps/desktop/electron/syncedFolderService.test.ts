@@ -15,12 +15,15 @@ import {
 	type LiveDocumentProjection,
 	type SyncBackend,
 } from "@hubble.md/sync";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SyncedFolderService } from "./syncedFolderService";
 
 vi.mock("@hubble.md/convex-client", () => ({
 	createConvexBackend: () => {
 		throw new Error("createConvexBackend must not be called in tests");
+	},
+	createConvexSubscriber: () => {
+		throw new Error("createConvexSubscriber must not be called in tests");
 	},
 }));
 
@@ -68,6 +71,10 @@ function memoryFs(initial: Record<string, string> = {}): MemoryFs {
 
 type Calls = {
 	backend: Array<{ url: string; authToken?: string }>;
+	subscriber: Array<{ url: string; authToken?: string }>;
+	subscriberClosed: number;
+	subscriberUnsubscribed: number;
+	getLiveDocuments: number;
 	rename: Array<{ documentId: string; title: string; path?: string }>;
 	move: Array<{ documentId: string; folderId: string | null }>;
 	import: Array<{
@@ -90,7 +97,9 @@ type BackendState = {
 	canWrite: boolean;
 };
 
-function doc1(): LiveDocumentProjection {
+function doc1(
+	overrides: Partial<LiveDocumentProjection> = {},
+): LiveDocumentProjection {
 	return {
 		_id: "d1",
 		path: "WS/Doc.md",
@@ -101,6 +110,7 @@ function doc1(): LiveDocumentProjection {
 		role: "editor",
 		canWrite: true,
 		updatedAt: 0,
+		...overrides,
 	};
 }
 
@@ -118,7 +128,11 @@ function fakeBackend(calls: Calls, state: BackendState): SyncBackend {
 			];
 		},
 		async getLiveDocuments() {
+			calls.getLiveDocuments += 1;
 			return state.docs;
+		},
+		async getSharedWithMe() {
+			return [];
 		},
 		async renameDocument(documentId, args) {
 			calls.rename.push({ documentId, title: args.title, path: args.path });
@@ -183,10 +197,38 @@ function makeService(
 	};
 	const fs = memoryFs();
 	const backend = fakeBackend(calls, state);
+	const subscription: {
+		callback: (() => void) | null;
+		error: ((error: Error) => void) | null;
+	} = {
+		callback: null,
+		error: null,
+	};
 	const service = new SyncedFolderService({
 		createBackend: (url, authToken) => {
 			calls.backend.push({ url, authToken });
 			return backend;
+		},
+		createSubscriber: (url, authToken) => {
+			calls.subscriber.push({ url, authToken });
+			return {
+				onFilesChanged() {
+					throw new Error("legacy file subscription is not used in tests");
+				},
+				onAssetsChanged() {
+					throw new Error("asset subscription is not used in tests");
+				},
+				onSyncedFolderChanged(callback, onError) {
+					subscription.callback = callback;
+					subscription.error = onError;
+					return () => {
+						calls.subscriberUnsubscribed += 1;
+					};
+				},
+				async close() {
+					calls.subscriberClosed += 1;
+				},
+			};
 		},
 		fs,
 		now: () => NOW,
@@ -195,7 +237,7 @@ function makeService(
 		emit: (event) => events.push(event),
 		// No createWatcher → no chokidar; events are driven directly.
 	});
-	return { service, fs, state };
+	return { service, fs, state, subscription };
 }
 
 /** Base-cache paths the reconciler reads, rooted at the sync root. */
@@ -214,6 +256,10 @@ describe("SyncedFolderService routing", () => {
 	beforeEach(() => {
 		calls = {
 			backend: [],
+			subscriber: [],
+			subscriberClosed: 0,
+			subscriberUnsubscribed: 0,
+			getLiveDocuments: 0,
 			rename: [],
 			move: [],
 			import: [],
@@ -222,6 +268,14 @@ describe("SyncedFolderService routing", () => {
 		};
 		events = [];
 	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	function waitForCloudMaterialize() {
+		return new Promise((resolve) => setTimeout(resolve, 300));
+	}
 
 	it("reconcile: a change on an indexed path calls reconcileProjectionFile (applyDocumentPatch)", async () => {
 		const { service, fs } = makeService(calls, events);
@@ -252,6 +306,67 @@ describe("SyncedFolderService routing", () => {
 				authToken: AUTH_TOKEN,
 			},
 		]);
+		expect(calls.subscriber).toEqual([
+			{
+				url: "https://fake.convex.cloud",
+				authToken: AUTH_TOKEN,
+			},
+		]);
+	});
+
+	it("cloud subscription: materializes markdown updates and suppresses the watcher echo", async () => {
+		const { service, fs, state, subscription } = makeService(calls, events);
+		await service.connect(CONNECT_INPUT);
+
+		state.docs = [doc1({ markdown: "cloud update", version: 4 })];
+		subscription.callback?.();
+		await waitForCloudMaterialize();
+
+		const path = `${SYNC_ROOT}/WS/Doc.md`;
+		expect(await fs.readFile(path)).toBe("cloud update");
+		expect(service.lookup(path)?.hash).toBe(await contentHash("cloud update"));
+
+		await service.handleRawEvent({
+			type: "change",
+			absPath: path,
+			hash: await contentHash("cloud update"),
+			inode: 111,
+			at: NOW,
+		});
+
+		expect(calls.patch).toEqual([]);
+	});
+
+	it("cloud subscription: rapid updates coalesce into one materialize pass", async () => {
+		const { service, fs, state, subscription } = makeService(calls, events);
+		await service.connect(CONNECT_INPUT);
+		const callsAfterConnect = calls.getLiveDocuments;
+
+		state.docs = [doc1({ markdown: "first", version: 4 })];
+		subscription.callback?.();
+		state.docs = [doc1({ markdown: "second", version: 5 })];
+		subscription.callback?.();
+		state.docs = [doc1({ markdown: "third", version: 6 })];
+		subscription.callback?.();
+
+		await waitForCloudMaterialize();
+		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe("third");
+		expect(calls.getLiveDocuments - callsAfterConnect).toBe(1);
+	});
+
+	it("disconnect closes cloud subscriptions and ignores later callbacks", async () => {
+		const { service, fs, state, subscription } = makeService(calls, events);
+		await service.connect(CONNECT_INPUT);
+
+		await service.disconnect();
+		expect(calls.subscriberUnsubscribed).toBe(1);
+		expect(calls.subscriberClosed).toBe(1);
+
+		state.docs = [doc1({ markdown: "after disconnect", version: 4 })];
+		subscription.callback?.();
+		await waitForCloudMaterialize();
+
+		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe("hello");
 	});
 
 	it("self-write: a change whose hash matches our own write is suppressed", async () => {
@@ -428,6 +543,42 @@ describe("SyncedFolderService routing", () => {
 		expect(calls.remove).toEqual([]);
 		expect(service.isLiveDocument(`${SYNC_ROOT}/WS/Doc.md`)).toBe(false);
 		expect(events).toContainEqual({ kind: "removed-access" });
+	});
+
+	it("cloud materialize: documentId path changes are not mistaken for access loss", async () => {
+		const { service, fs, state, subscription } = makeService(calls, events);
+		await service.connect(CONNECT_INPUT);
+
+		state.docs = [
+			doc1({
+				title: "Renamed",
+				path: "WS/Renamed.md",
+				markdown: "hello",
+				version: 4,
+			}),
+		];
+		subscription.callback?.();
+		await waitForCloudMaterialize();
+
+		expect(await fs.readFileOrNull(`${SYNC_ROOT}/WS/Doc.md`)).toBeNull();
+		expect(await fs.readFile(`${SYNC_ROOT}/WS/Renamed.md`)).toBe("hello");
+		expect(findPath(fs, /\/\.hubble\/trash\/d1__Doc\.md$/)).toBeUndefined();
+		expect(calls.remove).toEqual([]);
+		expect(service.lookup(`${SYNC_ROOT}/WS/Renamed.md`)?.documentId).toBe("d1");
+		expect(events).not.toContainEqual({ kind: "removed-access" });
+	});
+
+	it("subscription error updates status and emits an error event", async () => {
+		const { service, subscription } = makeService(calls, events);
+		await service.connect(CONNECT_INPUT);
+
+		subscription.error?.(new Error("subscription failed"));
+
+		expect(service.getStatus()).toMatchObject({
+			state: "error",
+			lastError: "subscription failed",
+		});
+		expect(events).toContainEqual({ kind: "error" });
 	});
 
 	it("connect refuses when another fresh device holds the lock", async () => {

@@ -59,6 +59,22 @@ next work is decomposed into model-tiered, dispatch-ready slices:
   codegen` had no generated diffs, and `convex dev --once --typecheck enable`
   passed. No production data backfill was run; production mutation is still gated
   on an operator-confirmed target and legacy-file import policy.
+  **RD1 landed locally 2026-06-27**: desktop synced folders now create an
+  authenticated Convex subscription client, reactively materialize cloud changes
+  across workspace/folder/live-document queries, coalesce update bursts, close
+  subscriptions on disconnect, and preserve the documentId-based
+  rename/move-vs-access-loss split so cloud echoes do not trash renamed local
+  paths. Verified focused desktop/sync tests, `pnpm typecheck`, and
+  `pnpm build:desktop`; `pnpm check` remains blocked by pre-existing formatting
+  drift outside the RD1 files.
+  **RD2 landed locally 2026-06-27**: synced-folder materialization now includes a
+  reserved `Shared with me/` area backed by `documents.listSharedWithMe`,
+  `SyncBackend.getSharedWithMe()`, and reactive subscription coverage for direct
+  shares. Shared files are flat, workspace-prefixed, collision-safe, indexed by
+  true `documentId`/`workspaceId`, base-cached for reconcile, and chmodded by
+  role. Verified focused sync/desktop tests, `@hubble.md/convex-client`
+  typecheck, `pnpm typecheck`, `pnpm build:desktop`, Convex codegen, and Convex
+  function typecheck on the configured deployment.
 - **`ORCHESTRATION-NOTES.md`** — how to run these as an orchestrator + tiered
   sub-agents (review-before-commit, `typecheck` ≠ `check`, disjoint-file
   parallelism, seam-scoping, session-limit recovery).
@@ -118,33 +134,18 @@ known risk — see SPIKE.md for the Yjs/DO fallback, don't paper over it.
 
 ### What to pick up next (this overrides the "first `[ ]`" rule below)
 
-The RT slices are landed locally and RD3 is expanded/verified. The next phase-start
-slice is **RD1 — Reactive cloud→disk Convex subscription** from
-`READY-TO-DEPLOY.plan.md`.
+The RT slices are landed locally, RD3 is expanded/verified, and RD1/RD2 are landed
+locally. The next lowest ready-to-deploy slice is **RD4 — Production auth
+hardening + enforcement audit** from `READY-TO-DEPLOY.plan.md`. RD4 is **premier**
+tier. RD5/RD6 are also unblocked premier gate slices if the human wants to close
+the doc-size/load or offline gates before the auth audit.
 
-Use `/orchestrate` discipline here:
-
-1. Expand RD1 into `specs/realtime-collab/tasks/RD1-reactive-cloud-disk-sync.md`
-   before implementing. The RD plan is tiered, but only RD3 currently has a full
-   phase-start brief.
-2. Keep RD1 at **premier**. It is cross-process, data-loss-sensitive work touching
-   the desktop main-process synced-folder service, live Convex subscriptions, and
-   the rename/access-loss materialization interaction.
-3. Likely files to inspect first:
-   `apps/desktop/electron/syncedFolderService.ts`,
-   `apps/desktop/electron/syncedFolderService.test.ts`,
-   `packages/convex-client/src/index.ts`,
-   `packages/sync/src/sync.ts`, and
-   `packages/sync/src/syncedFolderIndex.ts`.
-4. Useful finding from the aborted pickup: `packages/convex-client/src/index.ts`
-   already has `createConvexSubscriber()` using `ConvexClient.onUpdate` for legacy
-   files/assets, but it is unauthenticated and does not subscribe to
-   `sync.listWorkspaces`, `folders.list`, or `documents.listWithMarkdown` yet.
-   `SyncedFolderService.refresh()` is still the manual full materialize fallback.
-5. The known RD1 bug to avoid: a cloud/materialize pass must not treat the old path
-   of a just-renamed local document as cloud access loss and move it to
-   `.hubble/trash/`. Preserve the direction split between watcher-origin local
-   deletes and materialize-origin access loss.
+Useful RD4 files to inspect first:
+`packages/sync-backend/convex/permissions.ts`,
+`packages/sync-backend/convex/documents.ts`,
+`packages/sync-backend/convex/folders.ts`,
+`packages/sync-backend/convex/sync.ts`, `packages/convex-client/src/index.ts`,
+and `apps/desktop/electron/syncedFolderService.ts`.
 
 Do not restart old Stage 5 UI tasks from this block. Version history, comments,
 activity, suggestions, and search UI are already described as locally landed later
@@ -750,6 +751,36 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-27 — Codex — Implemented RD2 `Shared with me/` materialization for
+  synced folders: expanded the phase-start brief, added `workspaceName` to
+  `documents.listSharedWithMe`, threaded `SyncBackend.getSharedWithMe()` through
+  `@hubble.md/convex-client`, subscribed to `documents.listSharedWithMe` in the
+  synced-folder Convex subscriber, and materialized direct non-member shares under
+  a reserved flat `Shared with me/` directory with workspace-prefixed filenames,
+  reconcile base caches, reverse-index entries, role-based read-only chmod, and
+  collision handling. Verified `pnpm --filter @hubble.md/sync test syncedFolder`,
+  `pnpm --filter @hubble.md/desktop test syncedFolderService`,
+  `pnpm --filter @hubble.md/convex-client typecheck`, `pnpm typecheck`,
+  `pnpm build:desktop`, `pnpm --filter @hubble.md/sync-backend exec convex
+  codegen`, and `pnpm --filter @hubble.md/sync-backend exec convex dev --once
+  --typecheck enable`.
+- 2026-06-27 — Codex — Implemented RD1 reactive cloud-to-disk sync for synced
+  folders: added authenticated Convex subscriber support for workspace/folder/live
+  document query updates, wired `SyncedFolderService` to debounce subscription
+  callbacks into materialize passes, close subscriptions on disconnect, surface
+  subscription errors, and clean cloud path changes by `documentId` without
+  treating local rename/move echoes as access loss. Verified
+  `pnpm --filter @hubble.md/desktop test syncedFolderService`,
+  `pnpm --filter @hubble.md/sync test syncedFolder`,
+  `pnpm --filter @hubble.md/convex-client typecheck`, `pnpm typecheck`, and
+  `pnpm build:desktop`. `pnpm check` still reports pre-existing formatting drift
+  in unrelated files (`convex/tsconfig.json`, `skills-lock.json`,
+  `packages/sync/src/reconcile.test.ts`, `packages/sync/src/sync.ts`).
+- 2026-06-27 — Codex — Expanded the next RD phase-start brief at
+  `tasks/RD1-reactive-cloud-disk-sync.md`: scoped reactive cloud-to-disk
+  subscriptions as a premier slice, captured the rename-vs-access-loss
+  data-loss hazard, listed exact files/tests/checks, and summarized the remaining
+  RD model-tier routing. No RD1 implementation edits were made.
 - 2026-06-27 — Codex — Handoff refresh before switching agents: committed the
   inherited local Convex AI guidance/import-order changes as `17c73f8`, confirmed
   the working tree was clean before any RD1 implementation edits, corrected the

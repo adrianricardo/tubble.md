@@ -12,7 +12,10 @@ import {
 	saveSyncedFolderIndex,
 	syncedFolderIndexPath,
 } from "./syncedFolderIndex.js";
-import type { LiveDocumentProjection } from "./types.js";
+import type {
+	LiveDocumentProjection,
+	SharedLiveDocumentProjection,
+} from "./types.js";
 
 /** In-memory FileSystem recording read-only chmod calls. */
 function createMemoryFs(initial: Record<string, string> = {}): FileSystem & {
@@ -59,7 +62,11 @@ function createBackend(data: {
 	workspaces: Workspace[];
 	folders: Record<string, Folder[]>;
 	documents: Record<string, LiveDocumentProjection[]>;
-}): Pick<SyncBackend, "listWorkspaces" | "getFolders" | "getLiveDocuments"> {
+	shared?: SharedLiveDocumentProjection[];
+}): Pick<
+	SyncBackend,
+	"listWorkspaces" | "getFolders" | "getLiveDocuments" | "getSharedWithMe"
+> {
 	return {
 		async listWorkspaces() {
 			return data.workspaces;
@@ -69,6 +76,9 @@ function createBackend(data: {
 		},
 		async getLiveDocuments(workspaceId) {
 			return data.documents[workspaceId] ?? [];
+		},
+		async getSharedWithMe() {
+			return data.shared ?? [];
 		},
 	};
 }
@@ -205,7 +215,21 @@ describe("materializeSyncedFolder", () => {
 			],
 			ws_b: [doc({ _id: "d_journal", title: "Journal" })],
 		};
-		return { workspaces, folders, documents };
+		const shared: SharedLiveDocumentProjection[] = [
+			{
+				...doc({
+					_id: "d_budget",
+					title: "Budget 2026",
+					markdown: "# Budget\n",
+					role: "commenter",
+					canWrite: false,
+					version: 7,
+				}),
+				workspaceId: "ws_alice",
+				workspaceName: "Alice Finance",
+			},
+		];
+		return { workspaces, folders, documents, shared };
 	}
 
 	it("builds the nested tree, base caches, index, chmod and collisions", async () => {
@@ -229,6 +253,11 @@ describe("materializeSyncedFolder", () => {
 		expect(await fs.readFile(`${SYNC_ROOT}/Personal/Journal.md`)).toBe(
 			"# Journal\n",
 		);
+		expect(
+			await fs.readFile(
+				`${SYNC_ROOT}/Shared with me/Alice Finance - Budget 2026.md`,
+			),
+		).toBe("# Budget\n");
 
 		// --- Sibling-title collision → ` (2)` suffix. ---
 		expect(await fs.readFile(`${SYNC_ROOT}/Product Team/Notes.md`)).toBe(
@@ -266,16 +295,60 @@ describe("materializeSyncedFolder", () => {
 		expect(index[`${SYNC_ROOT}/Product Team/Notes (2).md`]?.documentId).toBe(
 			"d_notes2",
 		);
+		expect(
+			index[`${SYNC_ROOT}/Shared with me/Alice Finance - Budget 2026.md`],
+		).toEqual({
+			documentId: "d_budget",
+			workspaceId: "ws_alice",
+			folderId: null,
+			inode: null,
+			hash: await contentHash("# Budget\n"),
+			role: "commenter",
+		});
 
 		// --- Read-only chmod by role. ---
 		expect(
 			fs.readOnly.get(`${SYNC_ROOT}/Product Team/Specs/Archive/Old Plan.md`),
 		).toBe(true);
+		expect(
+			fs.readOnly.get(
+				`${SYNC_ROOT}/Shared with me/Alice Finance - Budget 2026.md`,
+			),
+		).toBe(true);
 		expect(fs.readOnly.get(`${SYNC_ROOT}/Product Team/Roadmap.md`)).toBe(false);
 
 		// --- Result summary. ---
-		expect(result.written).toHaveLength(6);
+		expect(result.written).toHaveLength(7);
 		expect(result.syncRoot).toBe(SYNC_ROOT);
+	});
+
+	it("keeps the Shared with me directory reserved when a workspace has the same name", async () => {
+		const fs = createMemoryFs();
+		const backend = createBackend({
+			workspaces: [{ _id: "ws_collision", name: "Shared with me" }],
+			folders: { ws_collision: [] },
+			documents: {
+				ws_collision: [doc({ _id: "d_own", title: "Own Doc" })],
+			},
+			shared: [
+				{
+					...doc({ _id: "d_shared", title: "Shared Doc" }),
+					workspaceId: "ws_other",
+					workspaceName: "Other Team",
+				},
+			],
+		});
+
+		await materializeSyncedFolder(backend, fs, { syncRoot: SYNC_ROOT });
+
+		expect(
+			await fs.readFile(`${SYNC_ROOT}/Shared with me (2)/Own Doc.md`),
+		).toBe("# Own Doc\n");
+		expect(
+			await fs.readFile(
+				`${SYNC_ROOT}/Shared with me/Other Team - Shared Doc.md`,
+			),
+		).toBe("# Shared Doc\n");
 	});
 
 	it("does not rewrite an unchanged projection during materialization", async () => {

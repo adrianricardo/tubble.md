@@ -14,6 +14,10 @@ export type Subscriber = {
 		callback: () => void,
 		onError: (err: Error) => void,
 	): () => void;
+	onSyncedFolderChanged(
+		callback: () => void,
+		onError: (err: Error) => void,
+	): () => void;
 	close(): Promise<void>;
 };
 
@@ -79,6 +83,23 @@ export function createConvexBackend(
 			});
 			return documents.map((document) => ({
 				_id: document._id,
+				path: document.path ?? null,
+				folderId: document.folderId ?? null,
+				title: document.title,
+				markdown: document.markdown,
+				version: document.version,
+				role: document.role,
+				canWrite: document.canWrite,
+				updatedAt: document.updatedAt,
+				deletedAt: document.deletedAt,
+			}));
+		},
+		async getSharedWithMe() {
+			const documents = await client.query(api.documents.listSharedWithMe, {});
+			return documents.map((document) => ({
+				_id: document._id,
+				workspaceId: document.workspaceId,
+				workspaceName: document.workspaceName,
 				path: document.path ?? null,
 				folderId: document.folderId ?? null,
 				title: document.title,
@@ -175,8 +196,14 @@ export function createConvexBackend(
 	};
 }
 
-export function createConvexSubscriber(url: string): Subscriber {
+export function createConvexSubscriber(
+	url: string,
+	authToken?: string,
+): Subscriber {
 	const client = new ConvexClient(url);
+	if (authToken) {
+		client.setAuth(async () => authToken);
+	}
 	return {
 		onFilesChanged(workspaceId, callback, onError) {
 			// Convex's onUpdate fires immediately with current state, then on
@@ -198,6 +225,66 @@ export function createConvexSubscriber(url: string): Subscriber {
 				() => callback(),
 				onError,
 			);
+		},
+		onSyncedFolderChanged(callback, onError) {
+			const workspaceUnsubscribes = new Map<string, Array<() => void>>();
+
+			const clearWorkspaceSubscriptions = () => {
+				for (const unsubscribes of workspaceUnsubscribes.values()) {
+					for (const unsubscribe of unsubscribes) unsubscribe();
+				}
+				workspaceUnsubscribes.clear();
+			};
+
+			const unsubscribeWorkspaces = client.onUpdate(
+				api.sync.listWorkspaces,
+				{},
+				(workspaces) => {
+					const nextWorkspaceIds = new Set(
+						workspaces.map((workspace) => workspace._id),
+					);
+					for (const workspaceId of workspaceUnsubscribes.keys()) {
+						if (!nextWorkspaceIds.has(workspaceId as Id<"workspaces">)) {
+							const unsubscribes = workspaceUnsubscribes.get(workspaceId) ?? [];
+							for (const unsubscribe of unsubscribes) unsubscribe();
+							workspaceUnsubscribes.delete(workspaceId);
+						}
+					}
+
+					for (const workspace of workspaces) {
+						if (workspaceUnsubscribes.has(workspace._id)) continue;
+						const args = { workspaceId: workspace._id };
+						workspaceUnsubscribes.set(workspace._id, [
+							client.onUpdate(
+								api.folders.list,
+								args,
+								() => callback(),
+								onError,
+							),
+							client.onUpdate(
+								api.documents.listWithMarkdown,
+								args,
+								() => callback(),
+								onError,
+							),
+						]);
+					}
+					callback();
+				},
+				onError,
+			);
+			const unsubscribeSharedWithMe = client.onUpdate(
+				api.documents.listSharedWithMe,
+				{},
+				() => callback(),
+				onError,
+			);
+
+			return () => {
+				unsubscribeWorkspaces();
+				unsubscribeSharedWithMe();
+				clearWorkspaceSubscriptions();
+			};
 		},
 		async close() {
 			await client.close();

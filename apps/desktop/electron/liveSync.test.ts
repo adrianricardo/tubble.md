@@ -104,6 +104,7 @@ function createFakeBackend(opts: {
 		pushFile: notImpl,
 		softDeleteFile: notImpl,
 		getLiveDocuments: notImpl,
+		getSharedWithMe: notImpl,
 		importLiveDocument: notImpl,
 		getAssets: notImpl,
 		pushAsset: notImpl,
