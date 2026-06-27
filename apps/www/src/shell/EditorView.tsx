@@ -21,6 +21,7 @@ import {
 	updateEditorContent,
 } from "../store/actions";
 import { filesStore } from "../store/state";
+import { createDurableOfflineExtension } from "./DurableOfflineExtension";
 import {
 	createDurableOfflinePersister,
 	createIndexedDbBufferStore,
@@ -28,7 +29,6 @@ import {
 	type DurableBufferStore,
 	hydrateSessionCache,
 } from "./durableOfflineBuffer";
-import { createDurableOfflineExtension } from "./DurableOfflineExtension";
 import { handleImageDrop, handleImagePaste } from "./handleImageUpload";
 import { createWebImageExtension } from "./WebImageExtension";
 
