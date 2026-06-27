@@ -19,6 +19,7 @@ import { currentActorName } from "./authIdentity";
 import {
 	canWriteRole,
 	documentRole,
+	requireDocumentComment,
 	requireDocumentOwner,
 	requireDocumentRead,
 	requireDocumentWrite,
@@ -694,7 +695,9 @@ export const listTrash = query({
 			.filter((document) => document.deletedAt !== undefined)
 			.sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
 		const roles = await Promise.all(
-			trashed.map((document) => documentRole(ctx, document._id)),
+			trashed.map((document) =>
+				documentRole(ctx, document._id, { includeDeleted: true }),
+			),
 		);
 		return trashed.filter((_, index) => roles[index] !== null);
 	},
@@ -885,7 +888,7 @@ export const createCommentThread = mutation({
 		actor: v.optional(v.string()),
 	},
 	handler: async (ctx, { documentId, anchor, body, actor }) => {
-		await requireDocumentRead(ctx, documentId);
+		await requireDocumentComment(ctx, documentId);
 		const trimmed = body.trim();
 		if (!trimmed) throw new Error("Comment body is required");
 		const author = await currentActorName(ctx, actor);
@@ -929,7 +932,7 @@ export const replyToCommentThread = mutation({
 	handler: async (ctx, { threadId, body, actor }) => {
 		const thread = await ctx.db.get(threadId);
 		if (!thread) throw new Error("Comment thread not found");
-		await requireDocumentRead(ctx, thread.documentId);
+		await requireDocumentComment(ctx, thread.documentId);
 		const trimmed = body.trim();
 		if (!trimmed) throw new Error("Comment body is required");
 		const commentId = await ctx.db.insert("comments", {
@@ -1134,7 +1137,7 @@ export const proposeSuggestion = mutation({
 		actor: v.optional(v.string()),
 	},
 	handler: async (ctx, { documentId, baseRevision, intent, actor }) => {
-		await requireDocumentRead(ctx, documentId);
+		await requireDocumentComment(ctx, documentId);
 		const suggestionId = await ctx.db.insert("documentSuggestions", {
 			documentId,
 			baseRevision,
@@ -1458,7 +1461,7 @@ export const restoreRemoved = mutation({
 	handler: async (ctx, { documentId, actor }) => {
 		const document = await ctx.db.get(documentId);
 		if (!document || document.deletedAt === undefined) return;
-		await requireWorkspaceMember(ctx, document.workspaceId);
+		await requireDocumentWrite(ctx, documentId, { includeDeleted: true });
 		const now = Date.now();
 		const resolvedActor = await currentActorName(ctx, actor);
 		await ctx.db.patch(documentId, {

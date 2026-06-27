@@ -12,7 +12,6 @@ import {
 import { Transform } from "@tiptap/pm/transform";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, type QueryCtx } from "./_generated/server";
 import {
 	documentIdFromSyncId,
@@ -22,15 +21,21 @@ import {
 
 const prosemirrorSync = new ProsemirrorSync(components.prosemirrorSync);
 
-async function checkRead(ctx: QueryCtx, syncId: string) {
+function requireLiveDocumentSyncId(syncId: string) {
 	const documentId = documentIdFromSyncId(syncId);
-	if (!documentId) return;
+	if (!documentId) {
+		throw new Error("Unauthorized");
+	}
+	return documentId;
+}
+
+async function checkRead(ctx: QueryCtx, syncId: string) {
+	const documentId = requireLiveDocumentSyncId(syncId);
 	await requireDocumentRead(ctx, documentId);
 }
 
 async function checkWrite(ctx: MutationCtx, syncId: string) {
-	const documentId = documentIdFromSyncId(syncId);
-	if (!documentId) return;
+	const documentId = requireLiveDocumentSyncId(syncId);
 	await requireDocumentWrite(ctx, documentId);
 }
 
@@ -57,8 +62,8 @@ export const {
 export const agentAppendParagraph = mutation({
 	args: { docId: v.string(), text: v.string() },
 	handler: async (ctx, { docId, text }) => {
-		const liveDocumentId = documentIdFromSyncId(docId);
-		if (liveDocumentId) await requireDocumentWrite(ctx, liveDocumentId);
+		const liveDocumentId = requireLiveDocumentSyncId(docId);
+		await requireDocumentWrite(ctx, liveDocumentId);
 
 		const schema = getHubbleEditorSchema();
 		const paragraph = schema.nodes.paragraph;
@@ -76,12 +81,10 @@ export const agentAppendParagraph = mutation({
 			return tr;
 		});
 
-		if (docId.startsWith("document:")) {
-			await ctx.db.patch(docId.slice("document:".length) as Id<"documents">, {
-				updatedBy: "Agent",
-				updatedAt: Date.now(),
-			});
-		}
+		await ctx.db.patch(liveDocumentId, {
+			updatedBy: "Agent",
+			updatedAt: Date.now(),
+		});
 	},
 });
 
@@ -241,8 +244,8 @@ export const reconcileMarkdownRangePoc = mutation({
 		actor: v.optional(v.string()),
 	},
 	handler: async (ctx, { docId, baseMarkdown, from, to, markdown, actor }) => {
-		const liveDocumentId = documentIdFromSyncId(docId);
-		if (liveDocumentId) await requireDocumentWrite(ctx, liveDocumentId);
+		const liveDocumentId = requireLiveDocumentSyncId(docId);
+		await requireDocumentWrite(ctx, liveDocumentId);
 
 		const schema = getHubbleEditorSchema();
 		let nextMarkdown = "";
@@ -281,12 +284,10 @@ export const reconcileMarkdownRangePoc = mutation({
 			{ clientId: actor?.trim() || "file-reconcile-poc" },
 		);
 
-		if (liveDocumentId) {
-			await ctx.db.patch(liveDocumentId, {
-				updatedBy: actor?.trim() || "file-reconcile-poc",
-				updatedAt: Date.now(),
-			});
-		}
+		await ctx.db.patch(liveDocumentId, {
+			updatedBy: actor?.trim() || "file-reconcile-poc",
+			updatedAt: Date.now(),
+		});
 
 		return { markdown: nextMarkdown };
 	},

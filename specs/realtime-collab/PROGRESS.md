@@ -75,6 +75,14 @@ next work is decomposed into model-tiered, dispatch-ready slices:
   role. Verified focused sync/desktop tests, `@hubble.md/convex-client`
   typecheck, `pnpm typecheck`, `pnpm build:desktop`, Convex codegen, and Convex
   function typecheck on the configured deployment.
+  **RD4 landed locally 2026-06-27**: expanded
+  `tasks/RD4-production-auth-hardening.md`, hardened the ProseMirror sync API to
+  reject non-Live-Document sync IDs, split commenter authorization from read/write
+  authorization, blocked viewers from creating comments or suggestions, and made
+  trash listing/restore authorize against deleted-document roles instead of broad
+  workspace membership. Verified focused Biome, Convex codegen, `pnpm typecheck`,
+  `pnpm build:desktop`, and Convex function typecheck on the configured
+  deployment.
 - **`ORCHESTRATION-NOTES.md`** — how to run these as an orchestrator + tiered
   sub-agents (review-before-commit, `typecheck` ≠ `check`, disjoint-file
   parallelism, seam-scoping, session-limit recovery).
@@ -134,18 +142,17 @@ known risk — see SPIKE.md for the Yjs/DO fallback, don't paper over it.
 
 ### What to pick up next (this overrides the "first `[ ]`" rule below)
 
-The RT slices are landed locally, RD3 is expanded/verified, and RD1/RD2 are landed
-locally. The next lowest ready-to-deploy slice is **RD4 — Production auth
-hardening + enforcement audit** from `READY-TO-DEPLOY.plan.md`. RD4 is **premier**
-tier. RD5/RD6 are also unblocked premier gate slices if the human wants to close
-the doc-size/load or offline gates before the auth audit.
+The RT slices are landed locally, RD3 is expanded/verified, and RD1/RD2/RD4 are
+landed locally. The next lowest ready-to-deploy slice is **RD5 — Stage-1 hard
+gate: doc-size + load test + live two-browser** from
+`READY-TO-DEPLOY.plan.md`. RD5 is **premier** tier. RD6 is also an unblocked
+premier gate slice if the human wants to close the offline gate first.
 
-Useful RD4 files to inspect first:
-`packages/sync-backend/convex/permissions.ts`,
+Useful RD5 files to inspect first: `specs/realtime-collab/SPIKE.md`,
+`packages/sync-backend/convex/prosemirror.ts`,
 `packages/sync-backend/convex/documents.ts`,
-`packages/sync-backend/convex/folders.ts`,
-`packages/sync-backend/convex/sync.ts`, `packages/convex-client/src/index.ts`,
-and `apps/desktop/electron/syncedFolderService.ts`.
+`apps/www/src/shell/EditorView.tsx`, and
+`apps/www/src/shell/AppShell.tsx`.
 
 Do not restart old Stage 5 UI tasks from this block. Version history, comments,
 activity, suggestions, and search UI are already described as locally landed later
@@ -751,6 +758,14 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-27 — Codex — Implemented RD4 production auth hardening: expanded the
+  phase-start brief, audited the Convex Auth/password wiring and public Convex
+  function gates, hardened ProseMirror sync to reject non-`document:` sync IDs,
+  added commenter-specific authorization, blocked viewers from comments and
+  suggestions, and made trash list/restore evaluate deleted-document roles
+  instead of broad workspace membership. Verified focused Biome, Convex codegen,
+  `pnpm typecheck`, `pnpm build:desktop`, and `convex dev --once --typecheck
+  enable`.
 - 2026-06-27 — Codex — Implemented RD2 `Shared with me/` materialization for
   synced folders: expanded the phase-start brief, added `workspaceName` to
   `documents.listSharedWithMe`, threaded `SyncBackend.getSharedWithMe()` through

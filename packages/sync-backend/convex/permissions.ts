@@ -19,6 +19,10 @@ export function documentIdFromSyncId(syncId: string): Id<"documents"> | null {
 	return syncId.slice("document:".length) as Id<"documents">;
 }
 
+export function canCommentRole(role: DocumentRole | null): boolean {
+	return role === "owner" || role === "editor" || role === "commenter";
+}
+
 export function canWriteRole(role: DocumentRole | null): boolean {
 	return role === "owner" || role === "editor";
 }
@@ -55,9 +59,15 @@ export async function requireWorkspaceMember(
 export async function documentRole(
 	ctx: PermissionCtx,
 	documentId: Id<"documents">,
+	options: { includeDeleted?: boolean } = {},
 ): Promise<DocumentRole | null> {
 	const document = await ctx.db.get(documentId);
-	if (!document || document.deletedAt !== undefined) return null;
+	if (
+		!document ||
+		(document.deletedAt !== undefined && !options.includeDeleted)
+	) {
+		return null;
+	}
 
 	const workspace = await ctx.db.get(document.workspaceId);
 	const userId = await getAuthUserId(ctx);
@@ -133,20 +143,26 @@ export async function requireDocumentRole(
 export async function requireDocumentRead(
 	ctx: PermissionCtx,
 	documentId: Id<"documents">,
+	options?: { includeDeleted?: boolean },
 ) {
-	await requireDocumentRole(ctx, documentId, [
-		"owner",
-		"editor",
-		"commenter",
-		"viewer",
-	]);
+	const role = await documentRole(ctx, documentId, options);
+	if (!role) throw new Error("Unauthorized");
+}
+
+export async function requireDocumentComment(
+	ctx: PermissionCtx,
+	documentId: Id<"documents">,
+) {
+	const role = await documentRole(ctx, documentId);
+	if (!canCommentRole(role)) throw new Error("Unauthorized");
 }
 
 export async function requireDocumentWrite(
 	ctx: PermissionCtx,
 	documentId: Id<"documents">,
+	options?: { includeDeleted?: boolean },
 ) {
-	const role = await documentRole(ctx, documentId);
+	const role = await documentRole(ctx, documentId, options);
 	if (!canWriteRole(role)) throw new Error("Unauthorized");
 }
 
