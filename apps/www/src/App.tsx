@@ -11,6 +11,7 @@ import {
 import { disconnect, readConnection } from "./connection/connection";
 import { ConnectScreen } from "./screens/ConnectScreen";
 import { OpenWorkspaceScreen } from "./screens/OpenWorkspaceScreen";
+import { realtimeCollabEnabled } from "./realtimeFlag";
 import { AppShell } from "./shell/AppShell";
 import { workspaceStore } from "./store/state";
 
@@ -136,19 +137,21 @@ function AppRoutes() {
 					/>
 				}
 			/>
-			<Route
-				path="/w/:workspaceId/d/:documentId"
-				element={
-					<WorkspaceRoute
-						connection={connection}
-						filePath={null}
-						onConnected={handleConnected}
-						onTestIdentitySelected={handleTestIdentitySelected}
-						onWorkspaceLoaded={handleWorkspaceLoaded}
-						onDisconnect={handleDisconnect}
-					/>
-				}
-			/>
+			{realtimeCollabEnabled ? (
+				<Route
+					path="/w/:workspaceId/d/:documentId"
+					element={
+						<WorkspaceRoute
+							connection={connection}
+							filePath={null}
+							onConnected={handleConnected}
+							onTestIdentitySelected={handleTestIdentitySelected}
+							onWorkspaceLoaded={handleWorkspaceLoaded}
+							onDisconnect={handleDisconnect}
+						/>
+					}
+				/>
+			) : null}
 			<Route path="*" element={<Navigate to="/" replace />} />
 		</Routes>
 	);
@@ -217,7 +220,7 @@ function WorkspaceRoute({
 	const params = useParams();
 	const navigate = useNavigate();
 	const workspaceId = params.workspaceId;
-	const documentId = params.documentId ?? null;
+	const documentId = realtimeCollabEnabled ? (params.documentId ?? null) : null;
 	const routeFilePath =
 		filePath === undefined ? (params["*"] ?? null) : filePath;
 
@@ -242,6 +245,7 @@ function WorkspaceRoute({
 				navigate(workspaceFileRoute(workspaceId, path));
 			}}
 			onSelectDocument={(id) => {
+				if (!realtimeCollabEnabled) return;
 				navigate(workspaceDocumentRoute(workspaceId, id));
 			}}
 			onSwitch={(id) => {

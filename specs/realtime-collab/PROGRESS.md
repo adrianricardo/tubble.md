@@ -174,8 +174,12 @@ unblocked launch gate was **RD8 security review** (premier). **RD8 landed locall
 the reconcile POC script through production `documents.applyPatch`, validated
 cloud-sync IPC payloads in Electron main, removed renderer control of the
 synced-folder lock identity, and tightened synced-folder path sanitization for
-cloud-controlled leading-dot names. Next premier launch gate is **RD10
-flag-gated merge to fork `main`**; RD9 release remains blocked on RD10.
+cloud-controlled leading-dot names. **RD10 landed locally 2026-06-28**: merged
+`origin/main` into the realtime branch, resolved realtime API conflicts to the
+secured RD8/RD5/RD6 branch versions, added a default-off
+`VITE_HUBBLE_REALTIME_COLLAB` gate for web Live Documents and desktop Cloud Sync,
+and advanced local `main`. Next launch gate is **RD9 packaged desktop release**
+(standard).
 
 Useful RD5 files to inspect first: `specs/realtime-collab/SPIKE.md`,
 `packages/sync-backend/convex/prosemirror.ts`,
@@ -813,6 +817,14 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       Verified focused Biome, focused sync/desktop tests, Convex codegen,
       `node --check`, and `pnpm typecheck` plus `pnpm build:desktop`.
       — *Owner: Codex · Started: 2026-06-28*
+- [~] **RD10 flag-gated merge to fork `main`.** Premier-tier slice landed locally
+      in `tasks/RD10-flag-gated-main-merge.md`: `origin/main` is merged into
+      `spike/prosemirror-sync`, realtime API conflicts resolved to the secured
+      branch versions, older upstream public document CRUD stayed out of
+      `sync.ts`, and web Live Documents / desktop Cloud Sync are guarded by
+      default-off `VITE_HUBBLE_REALTIME_COLLAB`. Verified `pnpm typecheck` and
+      `pnpm build:desktop`; local `main` advanced to the merge commit.
+      — *Owner: Codex · Started: 2026-06-28 · Landed: 2026-06-28*
 - [~] Offline edit + merge on reconnect — two flavors (Decision 6): in-editor (CRDT
       local buffer/replay) and external-file (watcher queues edits, flushes on
       reconnect via the reconcile path). Decision: **no Yjs fork** — keep
@@ -854,6 +866,12 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-28 — Codex — Landed RD10 premier-tier flag-gated merge: merged
+  `origin/main` into the realtime branch, kept RD8-secured Live Document APIs over
+  older upstream public document CRUD, and added default-off
+  `VITE_HUBBLE_REALTIME_COLLAB` gating for web Live Documents/routes/auth shell
+  and desktop Cloud Sync settings/Auth setup. Verified `pnpm typecheck` and
+  `pnpm build:desktop`; local `main` was advanced to the merge commit.
 - 2026-06-28 — Codex — Implemented RD8 premier-tier security review: removed the
   public throwaway ProseMirror POC mutation endpoints, routed
   `scripts/reconcile-poc.mjs` through production `documents.applyPatch`, added

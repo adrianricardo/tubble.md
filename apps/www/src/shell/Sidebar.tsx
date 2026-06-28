@@ -27,6 +27,7 @@ export function Sidebar({
 	onSelectDocument,
 	onSwitch,
 	onDisconnect,
+	realtimeCollabEnabled,
 }: {
 	url: string;
 	workspaceId: string;
@@ -36,6 +37,7 @@ export function Sidebar({
 	onSelectDocument: (documentId: string) => void;
 	onSwitch: (id: string) => void;
 	onDisconnect: () => void;
+	realtimeCollabEnabled: boolean;
 }) {
 	const files = useStoreValue(filesStore);
 	const filesLoaded = useStoreValue(filesLoadedStore);
@@ -63,11 +65,13 @@ export function Sidebar({
 				/>
 			}
 			footer={
-				<LiveDocumentsSection
-					workspaceId={workspaceId}
-					selectedDocumentId={selectedDocumentId}
-					onSelectDocument={onSelectDocument}
-				/>
+				realtimeCollabEnabled ? (
+					<LiveDocumentsSection
+						workspaceId={workspaceId}
+						selectedDocumentId={selectedDocumentId}
+						onSelectDocument={onSelectDocument}
+					/>
+				) : undefined
 			}
 			onSortModeChange={setSortMode}
 			onSelectFile={onSelectFile}

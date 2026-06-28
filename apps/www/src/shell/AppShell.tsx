@@ -16,6 +16,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TestIdentity } from "../App";
 import { saveWorkspace } from "../connection/connection";
+import { realtimeCollabEnabled } from "../realtimeFlag";
 import {
 	applyRemoteChange,
 	clearCurrentPath,
@@ -200,30 +201,37 @@ export function AppShell({
 		);
 	}
 
+	const shellContent = (
+		<AppShellContent
+			url={url}
+			documentId={realtimeCollabEnabled ? documentId : null}
+			testIdentity={testIdentity}
+			viewer={viewer}
+			workspace={workspace}
+			newNoteName={newNoteName}
+			newNoteInputRef={newNoteInputRef}
+			newNotePath={newNotePath}
+			showNewNoteConflict={showNewNoteConflict}
+			onSelectFile={onSelectFile}
+			onSelectDocument={onSelectDocument}
+			onSwitch={onSwitch}
+			onDisconnect={onDisconnect}
+			onNewNote={handleNewNote}
+			onSubmitNewNote={submitNewNote}
+			onSetNewNoteName={setNewNoteName}
+			onReloadWorkspace={() => {
+				void loadWorkspaceSnapshot(url, workspaceId, filePath);
+			}}
+			realtimeCollabEnabled={realtimeCollabEnabled}
+		/>
+	);
+
+	if (!realtimeCollabEnabled) return shellContent;
+
 	return (
 		<ConvexAuthProvider client={convexClient}>
 			{testIdentity ? (
-				<AppShellContent
-					url={url}
-					documentId={documentId}
-					testIdentity={testIdentity}
-					viewer={viewer}
-					workspace={workspace}
-					newNoteName={newNoteName}
-					newNoteInputRef={newNoteInputRef}
-					newNotePath={newNotePath}
-					showNewNoteConflict={showNewNoteConflict}
-					onSelectFile={onSelectFile}
-					onSelectDocument={onSelectDocument}
-					onSwitch={onSwitch}
-					onDisconnect={onDisconnect}
-					onNewNote={handleNewNote}
-					onSubmitNewNote={submitNewNote}
-					onSetNewNoteName={setNewNoteName}
-					onReloadWorkspace={() => {
-						void loadWorkspaceSnapshot(url, workspaceId, filePath);
-					}}
-				/>
+				shellContent
 			) : (
 				<>
 					<AuthLoading>
@@ -233,27 +241,7 @@ export function AppShell({
 						<SignInScreen />
 					</Unauthenticated>
 					<Authenticated>
-						<AppShellContent
-							url={url}
-							documentId={documentId}
-							testIdentity={testIdentity}
-							viewer={viewer}
-							workspace={workspace}
-							newNoteName={newNoteName}
-							newNoteInputRef={newNoteInputRef}
-							newNotePath={newNotePath}
-							showNewNoteConflict={showNewNoteConflict}
-							onSelectFile={onSelectFile}
-							onSelectDocument={onSelectDocument}
-							onSwitch={onSwitch}
-							onDisconnect={onDisconnect}
-							onNewNote={handleNewNote}
-							onSubmitNewNote={submitNewNote}
-							onSetNewNoteName={setNewNoteName}
-							onReloadWorkspace={() => {
-								void loadWorkspaceSnapshot(url, workspaceId, filePath);
-							}}
-						/>
+						{shellContent}
 					</Authenticated>
 				</>
 			)}
@@ -279,6 +267,7 @@ function AppShellContent({
 	onSubmitNewNote,
 	onSetNewNoteName,
 	onReloadWorkspace,
+	realtimeCollabEnabled,
 }: {
 	url: string;
 	documentId: string | null;
@@ -297,6 +286,7 @@ function AppShellContent({
 	onSubmitNewNote: (event: React.FormEvent) => void;
 	onSetNewNoteName: (name: string | null) => void;
 	onReloadWorkspace: () => void;
+	realtimeCollabEnabled: boolean;
 }) {
 	if (!workspace.snapshot) return null;
 
@@ -312,6 +302,7 @@ function AppShellContent({
 					onSelectDocument={onSelectDocument}
 					onSwitch={onSwitch}
 					onDisconnect={onDisconnect}
+					realtimeCollabEnabled={realtimeCollabEnabled}
 				/>
 			}
 			toolbar={
@@ -370,7 +361,7 @@ function AppShellContent({
 					)}
 				</form>
 			)}
-			{documentId && (
+			{realtimeCollabEnabled && documentId && (
 				<LiveDocumentView
 					workspaceId={workspace.snapshot.id}
 					documentId={documentId}

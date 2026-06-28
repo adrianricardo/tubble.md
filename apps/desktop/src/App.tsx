@@ -32,6 +32,7 @@ import { createImageExtension } from "./editor/ImageExtension";
 import { createMarkdownFile } from "./fileActions";
 import { hasHtmlExtension, relativeWorkspacePath } from "./lib/filePath";
 import { hasHubbleSkillsInstalled } from "./lib/hubbleSkills";
+import { desktopRealtimeCollabEnabled } from "./realtimeFlag";
 import { resolveWikiPath } from "./lib/wikiPath";
 import { SIDEBAR_NAV_SELECTOR } from "./selectors";
 import {
@@ -441,9 +442,9 @@ function AppContent() {
 			<SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen}>
 				{desktopConvexUrl ? (
 					<CloudSyncSection deploymentUrl={desktopConvexUrl} />
-				) : (
+				) : desktopRealtimeCollabEnabled ? (
 					<CloudSyncUnavailableSection />
-				)}
+				) : null}
 				{updateState ? (
 					<UpdatesSection
 						state={updateState}
