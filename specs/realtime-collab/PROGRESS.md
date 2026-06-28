@@ -184,7 +184,11 @@ macOS artifacts for `@hubble.md/desktop@0.1.13`, `codesign --verify` passed, the
 packaged app launch-smoked, and the generated DMG mounted with `Hubble.app`.
 Distribution notarization remains operator-gated on GitHub Actions secrets and a
 confirmed `desktop-v<version>` release tag. Next launch follow-up is **RD11
-monitoring / observability / on-call** (standard).
+monitoring / observability / on-call** (standard). **RD11 landed locally
+2026-06-28**: desktop synced-folder status now carries local operational
+telemetry for reconciles, backstops, read-only rejects, errors, offline queue
+depth, and recent events, and Settings surfaces those diagnostics. External alert
+plumbing remains a post-release service-choice follow-up.
 
 Useful RD5 files to inspect first: `specs/realtime-collab/SPIKE.md`,
 `packages/sync-backend/convex/prosemirror.ts`,
@@ -839,6 +843,14 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       production signing/notarization remains a release-cut prerequisite through
       GitHub Actions secrets plus the `desktop-v<version>` tag.
       — *Owner: Codex · Started: 2026-06-28 · Landed: 2026-06-28*
+- [~] **RD11 monitoring / observability / on-call.** Standard-tier slice landed
+      locally in `tasks/RD11-monitoring-observability.md`: `SyncedFolderService`
+      now records local telemetry counters for reconciles, backstops, read-only
+      rejects, sync errors, and queued offline watcher events; synced-folder
+      status includes recent event timestamps/reasons; and the desktop Cloud Sync
+      settings panel surfaces the diagnostics. External monitoring/alert vendor
+      wiring is deferred until a release owner chooses the sink.
+      — *Owner: Codex · Started: 2026-06-28 · Landed: 2026-06-28*
 - [~] Offline edit + merge on reconnect — two flavors (Decision 6): in-editor (CRDT
       local buffer/replay) and external-file (watcher queues edits, flushes on
       reconnect via the reconcile path). Decision: **no Yjs fork** — keep
@@ -880,6 +892,13 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-28 — Codex — Landed RD11 standard-tier monitoring /
+  observability: added local synced-folder telemetry to `getSyncedFolderStatus`
+  for reconciles, backstops, read-only rejects, errors, queued offline events, and
+  recent event timestamps/reasons, then surfaced those diagnostics in the desktop
+  Cloud Sync settings card. Added focused service coverage for telemetry updates
+  and queue depth. Verified `pnpm --filter @hubble.md/desktop test --
+  syncedFolderService.test.ts` and `pnpm typecheck`.
 - 2026-06-28 — Codex — Landed RD9 standard-tier packaged desktop release:
   verified `pnpm build:desktop` and `pnpm bundle:desktop`, produced
   `latest-mac.yml`, `Hubble-0.1.13-arm64-mac.zip`,

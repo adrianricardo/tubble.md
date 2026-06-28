@@ -86,6 +86,21 @@ export type LiveSyncConnectInput = {
 	authToken: string;
 };
 
+export type SyncedFolderTelemetryEvent = {
+	kind: SyncedFolderEvent["kind"];
+	at: number;
+	reason?: "missing-base" | "read-only";
+};
+
+export type SyncedFolderTelemetry = {
+	reconciledCount: number;
+	backstopCount: number;
+	readOnlyRejectedCount: number;
+	errorCount: number;
+	queuedEventCount: number;
+	recentEvents: SyncedFolderTelemetryEvent[];
+};
+
 /** Status of the synced-folder watcher engine (Phase 3b). */
 export type SyncedFolderStatus = {
 	state: LiveSyncStatusState;
@@ -96,6 +111,7 @@ export type SyncedFolderStatus = {
 	documentCount: number;
 	lastEventAt: number | null;
 	lastError: string | null;
+	telemetry: SyncedFolderTelemetry;
 };
 
 export type SyncedFolderConnectInput = {

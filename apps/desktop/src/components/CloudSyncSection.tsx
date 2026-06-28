@@ -21,6 +21,7 @@ import type {
 	SyncedFolderEvent,
 	SyncedFolderRootInspection,
 	SyncedFolderStatus,
+	SyncedFolderTelemetryEvent,
 } from "../desktopApi/types";
 import { SettingsSection } from "./SettingsDialog";
 
@@ -375,6 +376,7 @@ function SignedInCloudSync({ deploymentUrl }: { deploymentUrl: string }) {
 					<p>{workspaceSummary}</p>
 					<p>Deployment: {deploymentUrl}</p>
 					<p>Documents mirrored: {status?.documentCount ?? 0}</p>
+					<p>Queued offline edits: {status?.telemetry.queuedEventCount ?? 0}</p>
 					<p>
 						Last activity:{" "}
 						{status?.lastEventAt
@@ -382,6 +384,43 @@ function SignedInCloudSync({ deploymentUrl }: { deploymentUrl: string }) {
 							: "None yet"}
 					</p>
 				</div>
+				{status?.telemetry ? (
+					<div className="grid gap-2 border-border/70 [border-block-start-width:1px] [padding-block-start:0.625rem]">
+						<div className="grid gap-1 text-muted-foreground sm:grid-cols-4">
+							<Metric
+								label="Reconciled"
+								value={status.telemetry.reconciledCount}
+							/>
+							<Metric
+								label="Backstops"
+								value={status.telemetry.backstopCount}
+							/>
+							<Metric
+								label="Read-only"
+								value={status.telemetry.readOnlyRejectedCount}
+							/>
+							<Metric label="Errors" value={status.telemetry.errorCount} />
+						</div>
+						{status.telemetry.recentEvents.length > 0 ? (
+							<div className="grid gap-1">
+								<p className="font-medium text-foreground">
+									Recent sync events
+								</p>
+								<ul className="grid gap-1 text-muted-foreground">
+									{status.telemetry.recentEvents.map((event) => (
+										<li
+											key={`${event.kind}:${event.at}:${event.reason ?? ""}`}
+											className="flex flex-wrap justify-between gap-2"
+										>
+											<span>{formatSyncedFolderEvent(event)}</span>
+											<span>{formatRelativeTime(event.at, now)}</span>
+										</li>
+									))}
+								</ul>
+							</div>
+						) : null}
+					</div>
+				) : null}
 				{status?.lastError ? (
 					<p className="text-xs text-destructive">
 						{status.lastError} Try refreshing status or reconnecting the folder.
@@ -518,6 +557,17 @@ function SignedInCloudSync({ deploymentUrl }: { deploymentUrl: string }) {
 	);
 }
 
+function Metric({ label, value }: { label: string; value: number }) {
+	return (
+		<div className="min-w-0">
+			<p className="text-[0.6875rem] uppercase text-muted-foreground">
+				{label}
+			</p>
+			<p className="text-sm font-medium text-foreground">{value}</p>
+		</div>
+	);
+}
+
 function getSyncedFolderStatusView(status: SyncedFolderStatus | null): {
 	label: string;
 	dotClassName: string;
@@ -550,6 +600,31 @@ function getSyncedFolderStatusView(status: SyncedFolderStatus | null): {
 				label: "Idle",
 				dotClassName: `${dotBase} bg-muted-foreground/40`,
 			};
+	}
+}
+
+function formatSyncedFolderEvent(event: SyncedFolderTelemetryEvent) {
+	switch (event.kind) {
+		case "reconciled":
+			return "Projection reconciled";
+		case "renamed":
+			return "Rename synced";
+		case "moved":
+			return "Move synced";
+		case "created":
+			return "Document added";
+		case "removed-local":
+			return "Document removed";
+		case "removed-access":
+			return "Access removed";
+		case "read-only-rejected":
+			return "Read-only edit preserved";
+		case "backstop":
+			return event.reason === "missing-base"
+				? "Missing-base backstop"
+				: "Read-only backstop";
+		case "error":
+			return "Sync error";
 	}
 }
 

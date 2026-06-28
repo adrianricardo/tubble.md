@@ -25,6 +25,7 @@ import { createNodeFileSystem } from "@hubble.md/sync/node";
 import type {
 	SyncedFolderEvent,
 	SyncedFolderStatus,
+	SyncedFolderTelemetry,
 } from "../src/desktopApi/types";
 import {
 	acquireSingleWriterLock,
@@ -82,6 +83,7 @@ const QUEUE_DIR_REL = ".hubble/queue";
 const QUEUE_MANIFEST_REL = `${QUEUE_DIR_REL}/events.json`;
 /** Where access-lost local bytes are parked instead of being hard-deleted. */
 const TRASH_DIR_REL = ".hubble/trash";
+const RECENT_TELEMETRY_EVENTS = 8;
 
 type QueuedWatcherEvent = RawWatcherEvent & {
 	id: string;
@@ -127,6 +129,7 @@ export class SyncedFolderService {
 	#state: SyncedFolderStatus["state"] = "idle";
 	#lastError: string | null = null;
 	#lastEventAt: number | null = null;
+	#telemetry: SyncedFolderTelemetry = emptyTelemetry();
 
 	#heldUnlinks: HeldUnlink[] = [];
 	#recentlyWrittenByUs = new Map<string, { hash: string; at: number }>();
@@ -191,6 +194,7 @@ export class SyncedFolderService {
 			documentCount: Object.keys(this.#index).length,
 			lastEventAt: this.#lastEventAt,
 			lastError: this.#lastError,
+			telemetry: cloneTelemetry(this.#telemetry),
 		};
 	}
 
@@ -407,7 +411,7 @@ export class SyncedFolderService {
 		} catch (error) {
 			this.#lastError = error instanceof Error ? error.message : String(error);
 			this.#state = "error";
-			this.#emit({ kind: "error" });
+			this.#recordEvent({ kind: "error" });
 		} finally {
 			this.#cloudMaterializeRunning = false;
 		}
@@ -420,7 +424,7 @@ export class SyncedFolderService {
 	#handleSubscriptionError(error: Error): void {
 		this.#lastError = error.message;
 		this.#state = "error";
-		this.#emit({ kind: "error" });
+		this.#recordEvent({ kind: "error" });
 	}
 
 	async #heartbeat(): Promise<void> {
@@ -433,7 +437,7 @@ export class SyncedFolderService {
 		if (!result || result.acquired) return;
 		this.#lastError = `Already syncing this folder on device ${result.current?.deviceId ?? "another device"}`;
 		this.#state = "error";
-		this.#emit({ kind: "error" });
+		this.#recordEvent({ kind: "error" });
 		await this.#stopAfterLockLoss();
 	}
 
@@ -533,7 +537,7 @@ export class SyncedFolderService {
 			if (enqueueOnError) {
 				await this.#enqueue(event, this.#lastError);
 			}
-			this.#emit({ kind: "error" });
+			this.#recordEvent({ kind: "error" });
 		}
 	}
 
@@ -569,7 +573,7 @@ export class SyncedFolderService {
 				if (outcome.status === "reconciled") {
 					this.#markWrittenByUs(decision.absPath, outcome.markdown);
 					await this.#refreshIndexEntry(decision.absPath, outcome.markdown);
-					this.#emit({ kind: "reconciled" });
+					this.#recordEvent({ kind: "reconciled" });
 				} else if (outcome.status === "backstop") {
 					await this.#backstop(
 						decision.absPath,
@@ -587,7 +591,7 @@ export class SyncedFolderService {
 					actor: "synced-folder",
 				});
 				this.#rekey(decision.fromPath, decision.toPath, {});
-				this.#emit({ kind: "renamed" });
+				this.#recordEvent({ kind: "renamed" });
 				return;
 			}
 
@@ -600,7 +604,7 @@ export class SyncedFolderService {
 					actor: "synced-folder",
 				});
 				this.#rekey(decision.fromPath, decision.toPath, { folderId });
-				this.#emit({ kind: "moved" });
+				this.#recordEvent({ kind: "moved" });
 				return;
 			}
 
@@ -631,7 +635,7 @@ export class SyncedFolderService {
 				};
 				this.#markWrittenByUs(decision.absPath, markdown);
 				await saveSyncedFolderIndex(this.#fs, syncRoot, this.#index);
-				this.#emit({ kind: "created" });
+				this.#recordEvent({ kind: "created" });
 				return;
 			}
 
@@ -647,7 +651,7 @@ export class SyncedFolderService {
 				delete this.#index[decision.absPath];
 				await this.#dropBaseCache(decision.documentId);
 				await saveSyncedFolderIndex(this.#fs, syncRoot, this.#index);
-				this.#emit({ kind: "removed-local" });
+				this.#recordEvent({ kind: "removed-local" });
 				return;
 			}
 		}
@@ -765,9 +769,9 @@ export class SyncedFolderService {
 
 		// 4. Surface the right signal.
 		if (reason === "read-only") {
-			this.#emit({ kind: "read-only-rejected" });
+			this.#recordEvent({ kind: "read-only-rejected" });
 		} else {
-			this.#emit({ kind: "backstop", reason });
+			this.#recordEvent({ kind: "backstop", reason });
 		}
 	}
 
@@ -804,7 +808,7 @@ export class SyncedFolderService {
 		delete this.#index[absPath];
 		await this.#dropBaseCache(entry.documentId);
 		await saveSyncedFolderIndex(this.#fs, syncRoot, this.#index);
-		this.#emit({ kind: "removed-access" });
+		this.#recordEvent({ kind: "removed-access" });
 	}
 
 	/**
@@ -856,6 +860,7 @@ export class SyncedFolderService {
 	async #flushQueue(): Promise<boolean> {
 		if (!this.#syncRoot) return true;
 		const manifest = await this.#readQueueManifest();
+		this.#telemetry.queuedEventCount = manifest.events.length;
 		if (manifest.events.length === 0) return true;
 		if (this.#isOffline()) return false;
 
@@ -887,7 +892,7 @@ export class SyncedFolderService {
 					error instanceof Error ? error.message : String(error);
 				await this.#writeQueueManifest({ version: 1, events: pending });
 				this.#lastError = queued.lastError;
-				this.#emit({ kind: "error" });
+				this.#recordEvent({ kind: "error" });
 				return false;
 			}
 		}
@@ -897,21 +902,27 @@ export class SyncedFolderService {
 	async #readQueueManifest(): Promise<QueueManifest> {
 		if (!this.#syncRoot) return { version: 1, events: [] };
 		const raw = await this.#fs.readFileOrNull(this.#queueManifestPath());
-		if (!raw) return { version: 1, events: [] };
+		if (!raw) {
+			this.#telemetry.queuedEventCount = 0;
+			return { version: 1, events: [] };
+		}
 		try {
 			const parsed = JSON.parse(raw) as QueueManifest;
 			if (parsed.version === 1 && Array.isArray(parsed.events)) {
+				this.#telemetry.queuedEventCount = parsed.events.length;
 				return parsed;
 			}
 		} catch {
 			// Corrupt queue metadata should not crash the sync engine. Preserve
 			// local files on disk and start a fresh queue manifest.
 		}
+		this.#telemetry.queuedEventCount = 0;
 		return { version: 1, events: [] };
 	}
 
 	async #writeQueueManifest(manifest: QueueManifest): Promise<void> {
 		if (!this.#syncRoot) return;
+		this.#telemetry.queuedEventCount = manifest.events.length;
 		await this.#fs.ensureDir(`${this.#syncRoot}/${QUEUE_DIR_REL}`);
 		await this.#fs.writeFile(
 			this.#queueManifestPath(),
@@ -947,6 +958,54 @@ export class SyncedFolderService {
 		}
 		return null;
 	}
+
+	#recordEvent(event: SyncedFolderEvent): void {
+		const at = this.#now();
+		this.#lastEventAt = at;
+		switch (event.kind) {
+			case "reconciled":
+				this.#telemetry.reconciledCount += 1;
+				break;
+			case "backstop":
+				this.#telemetry.backstopCount += 1;
+				break;
+			case "read-only-rejected":
+				this.#telemetry.readOnlyRejectedCount += 1;
+				break;
+			case "error":
+				this.#telemetry.errorCount += 1;
+				break;
+		}
+		this.#telemetry.recentEvents = [
+			{
+				kind: event.kind,
+				at,
+				...("reason" in event ? { reason: event.reason } : {}),
+			},
+			...this.#telemetry.recentEvents,
+		].slice(0, RECENT_TELEMETRY_EVENTS);
+		this.#emit(event);
+	}
+}
+
+function emptyTelemetry(): SyncedFolderTelemetry {
+	return {
+		reconciledCount: 0,
+		backstopCount: 0,
+		readOnlyRejectedCount: 0,
+		errorCount: 0,
+		queuedEventCount: 0,
+		recentEvents: [],
+	};
+}
+
+function cloneTelemetry(
+	telemetry: SyncedFolderTelemetry,
+): SyncedFolderTelemetry {
+	return {
+		...telemetry,
+		recentEvents: telemetry.recentEvents.map((event) => ({ ...event })),
+	};
 }
 
 function dir(absPath: string): string {

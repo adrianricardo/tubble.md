@@ -299,6 +299,17 @@ describe("SyncedFolderService routing", () => {
 
 		expect(calls.patch).toEqual([{ documentId: "d1" }]);
 		expect(events).toContainEqual({ kind: "reconciled" });
+		expect(service.getStatus().telemetry).toMatchObject({
+			reconciledCount: 1,
+			backstopCount: 0,
+			readOnlyRejectedCount: 0,
+			errorCount: 0,
+			queuedEventCount: 0,
+		});
+		expect(service.getStatus().telemetry.recentEvents[0]).toMatchObject({
+			kind: "reconciled",
+			at: NOW,
+		});
 	});
 
 	it("connect forwards the renderer auth token to the backend factory", async () => {
@@ -486,6 +497,14 @@ describe("SyncedFolderService routing", () => {
 		// Never a silent clobber: applyPatch was never called.
 		expect(calls.patch).toEqual([]);
 		expect(events).toContainEqual({ kind: "backstop", reason: "missing-base" });
+		expect(service.getStatus().telemetry).toMatchObject({
+			backstopCount: 1,
+			readOnlyRejectedCount: 0,
+		});
+		expect(service.getStatus().telemetry.recentEvents[0]).toMatchObject({
+			kind: "backstop",
+			reason: "missing-base",
+		});
 	});
 
 	it("offline queue: replays a changed projection before reconnect materialize", async () => {
@@ -511,6 +530,7 @@ describe("SyncedFolderService routing", () => {
 		expect(JSON.parse(await fs.readFile(QUEUE_MANIFEST)).events).toHaveLength(
 			1,
 		);
+		expect(service.getStatus().telemetry.queuedEventCount).toBe(1);
 
 		await service.disconnect();
 		offline = false;
@@ -521,6 +541,7 @@ describe("SyncedFolderService routing", () => {
 		expect(JSON.parse(await fs.readFile(QUEUE_MANIFEST)).events).toHaveLength(
 			0,
 		);
+		expect(service.getStatus().telemetry.queuedEventCount).toBe(0);
 		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe("hello world");
 	});
 
@@ -558,6 +579,10 @@ describe("SyncedFolderService routing", () => {
 		expect(status.state).toBe("error");
 		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe("hello offline");
 		expect(events).toContainEqual({ kind: "error" });
+		expect(status.telemetry).toMatchObject({
+			errorCount: 1,
+			queuedEventCount: 1,
+		});
 	});
 
 	it("read-only: a change to a non-writable doc is rejected and backstopped", async () => {
@@ -582,6 +607,10 @@ describe("SyncedFolderService routing", () => {
 		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe("hello");
 		expect(calls.patch).toEqual([]);
 		expect(events).toContainEqual({ kind: "read-only-rejected" });
+		expect(service.getStatus().telemetry).toMatchObject({
+			backstopCount: 0,
+			readOnlyRejectedCount: 1,
+		});
 	});
 
 	it("local-delete: an expired watcher unlink soft-deletes the cloud doc", async () => {
@@ -657,6 +686,7 @@ describe("SyncedFolderService routing", () => {
 			lastError: "subscription failed",
 		});
 		expect(events).toContainEqual({ kind: "error" });
+		expect(service.getStatus().telemetry.errorCount).toBe(1);
 	});
 
 	it("connect refuses when another fresh device holds the lock", async () => {
