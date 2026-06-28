@@ -178,8 +178,13 @@ cloud-controlled leading-dot names. **RD10 landed locally 2026-06-28**: merged
 `origin/main` into the realtime branch, resolved realtime API conflicts to the
 secured RD8/RD5/RD6 branch versions, added a default-off
 `VITE_HUBBLE_REALTIME_COLLAB` gate for web Live Documents and desktop Cloud Sync,
-and advanced local `main`. Next launch gate is **RD9 packaged desktop release**
-(standard).
+and advanced local `main`. **RD9 landed locally 2026-06-28** as the next
+standard-tier slice: `pnpm build:desktop` and `pnpm bundle:desktop` produced
+macOS artifacts for `@hubble.md/desktop@0.1.13`, `codesign --verify` passed, the
+packaged app launch-smoked, and the generated DMG mounted with `Hubble.app`.
+Distribution notarization remains operator-gated on GitHub Actions secrets and a
+confirmed `desktop-v<version>` release tag. Next launch follow-up is **RD11
+monitoring / observability / on-call** (standard).
 
 Useful RD5 files to inspect first: `specs/realtime-collab/SPIKE.md`,
 `packages/sync-backend/convex/prosemirror.ts`,
@@ -825,6 +830,15 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       default-off `VITE_HUBBLE_REALTIME_COLLAB`. Verified `pnpm typecheck` and
       `pnpm build:desktop`; local `main` advanced to the merge commit.
       — *Owner: Codex · Started: 2026-06-28 · Landed: 2026-06-28*
+- [~] **RD9 packaged desktop release.** Standard-tier slice landed locally in
+      `tasks/RD9-packaged-desktop-release.md`: `pnpm build:desktop` and
+      `pnpm bundle:desktop` produced `latest-mac.yml`, arm64 zip, arm64 dmg, and
+      blockmaps for desktop `0.1.13`; `codesign --verify --deep --strict` passed;
+      the packaged `.app` launch-smoked; and the DMG mounted with `Hubble.app`.
+      Local notarization was skipped because notarize options were unavailable;
+      production signing/notarization remains a release-cut prerequisite through
+      GitHub Actions secrets plus the `desktop-v<version>` tag.
+      — *Owner: Codex · Started: 2026-06-28 · Landed: 2026-06-28*
 - [~] Offline edit + merge on reconnect — two flavors (Decision 6): in-editor (CRDT
       local buffer/replay) and external-file (watcher queues edits, flushes on
       reconnect via the reconcile path). Decision: **no Yjs fork** — keep
@@ -866,6 +880,19 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-28 — Codex — Landed RD9 standard-tier packaged desktop release:
+  verified `pnpm build:desktop` and `pnpm bundle:desktop`, produced
+  `latest-mac.yml`, `Hubble-0.1.13-arm64-mac.zip`,
+  `Hubble-0.1.13-arm64.dmg`, and blockmaps, confirmed strict codesign
+  verification, launch-smoked the packaged `.app`, and mounted the DMG to confirm
+  it contains `Hubble.app`. Local notarization was skipped without notarize
+  options; production release cut still requires the configured GitHub Actions
+  signing/notarization secrets and a confirmed `desktop-v<version>` tag.
+- 2026-06-28 — Codex — Started RD9 standard-tier packaged desktop release:
+  added the phase-start brief for local production packaging, updater artifact
+  checks, packaged `.app` launch smoke, release workflow tag/version validation,
+  and explicit operator prerequisites for signing/notarization before cutting a
+  `desktop-v<version>` release.
 - 2026-06-28 — Codex — Landed RD10 premier-tier flag-gated merge: merged
   `origin/main` into the realtime branch, kept RD8-secured Live Document APIs over
   older upstream public document CRUD, and added default-off
