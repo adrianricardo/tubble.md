@@ -95,6 +95,7 @@ type Calls = {
 type BackendState = {
 	docs: LiveDocumentProjection[];
 	canWrite: boolean;
+	patchError?: Error | null;
 };
 
 function doc1(
@@ -167,6 +168,7 @@ function fakeBackend(calls: Calls, state: BackendState): SyncBackend {
 		},
 		async applyDocumentPatch(args): Promise<DocumentPatchResult> {
 			calls.patch.push({ documentId: args.documentId });
+			if (state.patchError) throw state.patchError;
 			return {
 				documentId: args.documentId,
 				revision: args.baseRevision + 1,
@@ -190,10 +192,12 @@ function makeService(
 	calls: Calls,
 	events: Array<{ kind: string }>,
 	overrides: Partial<BackendState> = {},
+	options: { isOffline?: () => boolean } = {},
 ) {
 	const state: BackendState = {
 		docs: overrides.docs ?? [doc1()],
 		canWrite: overrides.canWrite ?? true,
+		patchError: overrides.patchError ?? null,
 	};
 	const fs = memoryFs();
 	const backend = fakeBackend(calls, state);
@@ -234,6 +238,7 @@ function makeService(
 		now: () => NOW,
 		deviceId: "device-test",
 		statInode: () => 111,
+		isOffline: options.isOffline,
 		emit: (event) => events.push(event),
 		// No createWatcher → no chokidar; events are driven directly.
 	});
@@ -243,6 +248,7 @@ function makeService(
 /** Base-cache paths the reconciler reads, rooted at the sync root. */
 const BASE_MD = `${SYNC_ROOT}/.hubble/state/live-documents/d1.base.md`;
 const BASE_JSON = `${SYNC_ROOT}/.hubble/state/live-documents/d1.json`;
+const QUEUE_MANIFEST = `${SYNC_ROOT}/.hubble/queue/events.json`;
 
 /** Find a written path matching `re` in the memory fs. */
 function findPath(fs: MemoryFs, re: RegExp): string | undefined {
@@ -480,6 +486,78 @@ describe("SyncedFolderService routing", () => {
 		// Never a silent clobber: applyPatch was never called.
 		expect(calls.patch).toEqual([]);
 		expect(events).toContainEqual({ kind: "backstop", reason: "missing-base" });
+	});
+
+	it("offline queue: replays a changed projection before reconnect materialize", async () => {
+		let offline = true;
+		const { service, fs, state } = makeService(
+			calls,
+			events,
+			{},
+			{ isOffline: () => offline },
+		);
+		await service.connect(CONNECT_INPUT);
+
+		await fs.writeFile(`${SYNC_ROOT}/WS/Doc.md`, "hello offline");
+		await service.handleRawEvent({
+			type: "change",
+			absPath: `${SYNC_ROOT}/WS/Doc.md`,
+			hash: await contentHash("hello offline"),
+			inode: 111,
+			at: NOW,
+		});
+
+		expect(calls.patch).toEqual([]);
+		expect(JSON.parse(await fs.readFile(QUEUE_MANIFEST)).events).toHaveLength(
+			1,
+		);
+
+		await service.disconnect();
+		offline = false;
+		state.docs = [doc1({ markdown: "hello world", version: 4 })];
+		await service.connect(CONNECT_INPUT);
+
+		expect(calls.patch).toEqual([{ documentId: "d1" }]);
+		expect(JSON.parse(await fs.readFile(QUEUE_MANIFEST)).events).toHaveLength(
+			0,
+		);
+		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe("hello world");
+	});
+
+	it("offline queue: keeps a failed replay on disk and skips materialize", async () => {
+		let offline = true;
+		const { service, fs, state } = makeService(
+			calls,
+			events,
+			{},
+			{ isOffline: () => offline },
+		);
+		await service.connect(CONNECT_INPUT);
+
+		await fs.writeFile(`${SYNC_ROOT}/WS/Doc.md`, "hello offline");
+		await service.handleRawEvent({
+			type: "change",
+			absPath: `${SYNC_ROOT}/WS/Doc.md`,
+			hash: await contentHash("hello offline"),
+			inode: 111,
+			at: NOW,
+		});
+
+		await service.disconnect();
+		offline = false;
+		state.patchError = new Error("network unavailable");
+		state.docs = [doc1({ markdown: "cloud should not clobber", version: 4 })];
+		const status = await service.connect(CONNECT_INPUT);
+
+		const queued = JSON.parse(await fs.readFile(QUEUE_MANIFEST)).events;
+		expect(queued).toHaveLength(1);
+		expect(queued[0]).toMatchObject({
+			attempts: 1,
+			lastError: "network unavailable",
+		});
+		expect(status.state).toBe("error");
+		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe("hello offline");
+		expect(events).toContainEqual({ kind: "error" });
 	});
 
 	it("read-only: a change to a non-writable doc is rejected and backstopped", async () => {

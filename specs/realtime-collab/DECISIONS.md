@@ -38,8 +38,9 @@ component, so it does not remove the core editor-collaboration complexity.
 
 ## 3. Provisionally Adopt `@convex-dev/prosemirror-sync`
 
-**Decision:** Provisionally adopt `@convex-dev/prosemirror-sync` for the Stage 1
-POC.
+**Decision:** Adopt `@convex-dev/prosemirror-sync` for the current production path,
+with an explicit Live Document size cap before deploy. Do **not** trigger the
+Yjs/Durable Objects fallback yet.
 
 **Why:** It fits the existing Convex + Tiptap stack and supports the hard gates
 already checked locally:
@@ -50,8 +51,29 @@ already checked locally:
   history later.
 - Read/write hooks exist for future permission enforcement.
 
-**Not final until:** Two-browser live merge, doc-size/performance, presence
-strategy, and agent dashboard proof are validated.
+**RD5 doc-size result:** Hosted measurements on `strong-setter-709` proved the
+current shape works for small/medium documents but fails the large-doc gate:
+64 KiB, 256 KiB, and 320 KiB markdown docs patched and converged through reactive
+subscribers, while 384 KiB and 512 KiB failed on first patch with Convex values
+over 1 MiB and 768 KiB import timed out.
+
+**Why continue instead of fallback:** The failure is concrete but localized to the
+current storage/revision materialization shape. The rest of the fork already has
+substantial Convex/prosemirror-sync integration: auth, permissions, revisions,
+agent patching, synced-folder projection, and sharing. Moving to Yjs/DO now would
+reopen that whole surface before proving Convex cannot meet the first production
+release with a documented cap.
+
+**Current release boundary:** Live Documents must ship with a conservative markdown
+size cap, initially **256 KiB**, enforced before import/conversion/mutation. Local
+file-authoritative workspaces remain unrestricted. Raising the cap requires a
+follow-up storage/revision redesign and a rerun of RD5.
+
+**RD5 live editor result:** Hosted two-browser testing on `strong-setter-709`
+passed with Ada/Ben `?test=1` sessions editing document
+`kn7e5a4kwk4mhb207mxnxst9t189h9tj`. Presence appeared in both sessions, separate
+paragraph edits merged into backend revision 107, and same-paragraph adjacent
+inserts converged in both browser pages and backend revision 175.
 
 **Known gap:** The installed package source exposes sync APIs but no obvious
 presence/cursor API. Presence may need an additional Convex-backed layer or a
@@ -113,11 +135,9 @@ location) — deferred; direction decided, path TBD.
 
 - **Presence/cursors:** Use a custom Convex presence layer, find an API in
   `prosemirror-sync`, or reconsider provider if this is a hard blocker.
-- **Stage 1 identity:** Decide the minimal POC identity model for two distinct
-  users before full Stage 3 auth.
-- **Stable document IDs timing:** The POC currently uses path-derived ids. Before
-  anything durable ships, Live Documents need stable `documents` rows.
 - **Offline:** two flavors of the same machinery — (a) in-editor offline via CRDT
   local buffer/replay (`prosemirror-sync` offline is spike-gated; Yjs/`y-indexeddb`
   is the proven fallback), and (b) external-file offline edits queued by the watcher
   and flushed on reconnect via the reconcile path (Decision 6).
+- **Large-doc cap removal:** Decide the storage/revision design that can safely
+  raise or remove the initial 256 KiB Live Document markdown cap.

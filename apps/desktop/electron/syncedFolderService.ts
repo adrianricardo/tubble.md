@@ -10,6 +10,7 @@ import {
 	diffSyncedFolderIndex,
 	type FileSystem,
 	liveDocumentBaseCacheRoot,
+	loadSyncedFolderIndex,
 	materializeSyncedFolder,
 	reconcileProjectionFile,
 	rekeySyncedFolderEntry,
@@ -53,6 +54,8 @@ export type SyncedFolderServiceOptions = {
 	pid?: number;
 	/** `inode` lookup; defaults to `fs.statSync`. Tests may omit it. */
 	statInode?: (absPath: string) => number | null;
+	/** Injectable connectivity predicate. When true, watcher events are queued. */
+	isOffline?: () => boolean;
 	/**
 	 * Factory for the real watcher. Returns `null` to skip wiring a watcher
 	 * (unit tests drive {@link SyncedFolderService.handleRawEvent} directly).
@@ -76,14 +79,22 @@ const CLOUD_MATERIALIZE_DEBOUNCE_MS = 250;
 const HEARTBEAT_MS = 10_000;
 const SELF_WRITE_TTL_MS = 5_000;
 
-/**
- * Reserved for the offline decision (SYNCED-FOLDER §7 closing note). The queue
- * directory is created on connect but NOTHING is written to it here — durable
- * queueing and replay are a separate, not-yet-designed slice.
- */
 const QUEUE_DIR_REL = ".hubble/queue";
+const QUEUE_MANIFEST_REL = `${QUEUE_DIR_REL}/events.json`;
 /** Where access-lost local bytes are parked instead of being hard-deleted. */
 const TRASH_DIR_REL = ".hubble/trash";
+
+type QueuedWatcherEvent = RawWatcherEvent & {
+	id: string;
+	queuedAt: number;
+	attempts: number;
+	lastError?: string;
+};
+
+type QueueManifest = {
+	version: 1;
+	events: QueuedWatcherEvent[];
+};
 
 /**
  * Synced-folder engine for the Electron main process (SYNCED-FOLDER Phase 3b).
@@ -108,6 +119,7 @@ export class SyncedFolderService {
 	#deviceId: string;
 	#pid: number;
 	#statInode: (absPath: string) => number | null;
+	#isOffline: () => boolean;
 	#createWatcher: SyncedFolderServiceOptions["createWatcher"];
 
 	#backend: SyncBackend | null = null;
@@ -118,12 +130,6 @@ export class SyncedFolderService {
 	#lastEventAt: number | null = null;
 
 	#heldUnlinks: HeldUnlink[] = [];
-	/**
-	 * Offline seam (SYNCED-FOLDER §7): always `false` in this build. The offline
-	 * decision flips it on to divert watcher events into the durable queue
-	 * instead of routing them to the cloud. Reserved here, not implemented.
-	 */
-	#offline = false;
 	#recentlyWrittenByUs = new Map<string, { hash: string; at: number }>();
 	#changeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	#flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -154,6 +160,7 @@ export class SyncedFolderService {
 					return null;
 				}
 			});
+		this.#isOffline = options.isOffline ?? (() => false);
 		this.#createWatcher = options.createWatcher;
 	}
 
@@ -220,12 +227,18 @@ export class SyncedFolderService {
 		this.#connectionGeneration = connectionGeneration;
 		this.#lastError = null;
 
-		// Reserve the offline-queue directory (seam only; see #flushQueue).
 		await this.#fs.ensureDir(`${syncRoot}/${QUEUE_DIR_REL}`);
 
+		// Replay offline edits against the previous index before materializing;
+		// otherwise cloud→disk sync could overwrite the unsynced local bytes.
+		this.#index = await loadSyncedFolderIndex(this.#fs, syncRoot);
+		const queueDrained = await this.#flushQueue();
+		if (!queueDrained) {
+			this.#state = "error";
+			return this.getStatus();
+		}
+
 		await this.#materialize(connectionGeneration);
-		// Flush-on-reconnect seam: no-op until the offline decision lands.
-		await this.#flushQueue();
 		this.#startCloudSubscriptions(deploymentUrl, authToken);
 
 		this.#heartbeatTimer = setInterval(() => {
@@ -432,10 +445,8 @@ export class SyncedFolderService {
 		if (!this.#syncRoot) return;
 		if (shouldIgnoreSyncedPath(event.absPath, this.#syncRoot)) return;
 
-		// Offline seam (§7): when the offline decision flips `#offline` on, watcher
-		// events are diverted into the durable queue instead of routed. No-op here.
-		if (this.#offline) {
-			this.#enqueue(event);
+		if (this.#isOffline()) {
+			void this.#enqueue(event);
 			return;
 		}
 
@@ -460,6 +471,18 @@ export class SyncedFolderService {
 	 */
 	async handleRawEvent(event: RawWatcherEvent): Promise<void> {
 		if (!this.#backend || !this.#syncRoot) return;
+		if (this.#isOffline()) {
+			await this.#enqueue(event);
+			return;
+		}
+		await this.#handleRawEventOnline(event, true);
+	}
+
+	async #handleRawEventOnline(
+		event: RawWatcherEvent,
+		enqueueOnError: boolean,
+	): Promise<void> {
+		if (!this.#backend || !this.#syncRoot) return;
 		this.#sweepSelfWrites();
 
 		const decision = classifySyncedFolderChange(event, {
@@ -478,6 +501,9 @@ export class SyncedFolderService {
 		} catch (error) {
 			this.#lastError = error instanceof Error ? error.message : String(error);
 			this.#state = "error";
+			if (enqueueOnError) {
+				await this.#enqueue(event, this.#lastError);
+			}
 			this.#emit({ kind: "error" });
 		}
 	}
@@ -781,23 +807,91 @@ export class SyncedFolderService {
 		await this.#fs.deleteFile(`${root}/${documentId}.json`).catch(() => {});
 	}
 
-	// ─── Offline queue (SEAM ONLY — owned by the offline decision) ─────────────
-	//
-	// SYNCED-FOLDER §7 closing note: queued watcher edits flushed on reconnect
-	// are NOT designed or built in Phase 5. The two stubs below are deliberate
-	// no-ops that reserve the shape — `enqueue` a watcher event while offline,
-	// `flush` the queue on reconnect — and the `${syncRoot}/.hubble/queue/`
-	// directory (created in `connect`). The offline decision owns the durable
-	// queue + replay; do not implement queueing here.
+	// ─── Offline queue (RD6) ───────────────────────────────────────────────────
 
-	#enqueue(_event: RawWatcherEvent): void {
-		// SEAM: no-op. The offline decision persists `_event` under
-		// `${this.#syncRoot}/${QUEUE_DIR_REL}` for replay on reconnect.
+	async #enqueue(event: RawWatcherEvent, lastError?: string): Promise<void> {
+		if (!this.#syncRoot) return;
+		const manifest = await this.#readQueueManifest();
+		manifest.events.push({
+			...event,
+			id: `${this.#now()}-${manifest.events.length}-${Math.random()
+				.toString(36)
+				.slice(2)}`,
+			queuedAt: this.#now(),
+			attempts: 0,
+			...(lastError ? { lastError } : {}),
+		});
+		await this.#writeQueueManifest(manifest);
 	}
 
-	async #flushQueue(): Promise<void> {
-		// SEAM: no-op. The offline decision replays `${QUEUE_DIR_REL}` here on
-		// reconnect, re-driving each queued event through `handleRawEvent`.
+	async #flushQueue(): Promise<boolean> {
+		if (!this.#syncRoot) return true;
+		const manifest = await this.#readQueueManifest();
+		if (manifest.events.length === 0) return true;
+		if (this.#isOffline()) return false;
+
+		const pending = [...manifest.events];
+		while (pending.length > 0) {
+			const queued = pending[0];
+			try {
+				await this.#handleRawEventOnline(
+					{
+						type: queued.type,
+						absPath: queued.absPath,
+						hash: queued.hash,
+						inode: queued.inode,
+						at: queued.at,
+					},
+					false,
+				);
+				if (this.#lastError) {
+					queued.attempts += 1;
+					queued.lastError = this.#lastError;
+					await this.#writeQueueManifest({ version: 1, events: pending });
+					return false;
+				}
+				pending.shift();
+				await this.#writeQueueManifest({ version: 1, events: pending });
+			} catch (error) {
+				queued.attempts += 1;
+				queued.lastError =
+					error instanceof Error ? error.message : String(error);
+				await this.#writeQueueManifest({ version: 1, events: pending });
+				this.#lastError = queued.lastError;
+				this.#emit({ kind: "error" });
+				return false;
+			}
+		}
+		return true;
+	}
+
+	async #readQueueManifest(): Promise<QueueManifest> {
+		if (!this.#syncRoot) return { version: 1, events: [] };
+		const raw = await this.#fs.readFileOrNull(this.#queueManifestPath());
+		if (!raw) return { version: 1, events: [] };
+		try {
+			const parsed = JSON.parse(raw) as QueueManifest;
+			if (parsed.version === 1 && Array.isArray(parsed.events)) {
+				return parsed;
+			}
+		} catch {
+			// Corrupt queue metadata should not crash the sync engine. Preserve
+			// local files on disk and start a fresh queue manifest.
+		}
+		return { version: 1, events: [] };
+	}
+
+	async #writeQueueManifest(manifest: QueueManifest): Promise<void> {
+		if (!this.#syncRoot) return;
+		await this.#fs.ensureDir(`${this.#syncRoot}/${QUEUE_DIR_REL}`);
+		await this.#fs.writeFile(
+			this.#queueManifestPath(),
+			JSON.stringify(manifest, null, 2),
+		);
+	}
+
+	#queueManifestPath(): string {
+		return `${this.#syncRoot}/${QUEUE_MANIFEST_REL}`;
 	}
 
 	#rekey(

@@ -29,6 +29,9 @@ import {
 
 const prosemirrorSync = new ProsemirrorSync(components.prosemirrorSync);
 
+const LIVE_DOCUMENT_MARKDOWN_MAX_BYTES = 256 * 1024;
+const textEncoder = new TextEncoder();
+
 type DocumentRole = "owner" | "editor" | "commenter" | "viewer";
 type LinkScope = "workspace" | "public";
 type PatchIntent =
@@ -88,6 +91,19 @@ function normalizeTitle(title: string): string {
 
 function syncDocumentId(documentId: string): string {
 	return `document:${documentId}`;
+}
+
+function markdownByteLength(markdown: string): number {
+	return textEncoder.encode(markdown).byteLength;
+}
+
+function assertLiveDocumentMarkdownWithinCap(markdown: string) {
+	const bytes = markdownByteLength(markdown);
+	if (bytes > LIVE_DOCUMENT_MARKDOWN_MAX_BYTES) {
+		throw new Error(
+			`Live Document markdown is too large: ${bytes} bytes exceeds the 256 KiB limit`,
+		);
+	}
 }
 
 async function ensureDocumentShare(
@@ -176,6 +192,7 @@ async function replaceLiveDocumentMarkdown(
 	documentId: string,
 	markdown: string,
 ) {
+	assertLiveDocumentMarkdownWithinCap(markdown);
 	const schema = getHubbleEditorSchema();
 	const id = syncDocumentId(documentId);
 	const nextDoc = schema.nodeFromJSON(markdownToTiptapDoc(markdown));
@@ -277,6 +294,7 @@ async function transformLiveDocumentMarkdown(
 	nextMarkdown: string,
 	clientId: string,
 ) {
+	assertLiveDocumentMarkdownWithinCap(nextMarkdown);
 	const schema = getHubbleEditorSchema();
 	const id = syncDocumentId(documentId);
 	const nextDoc = schema.nodeFromJSON(markdownToTiptapDoc(nextMarkdown));
@@ -461,6 +479,7 @@ async function transformLiveDocumentMarkdownRange(
 				currentMarkdown.slice(0, range.from) +
 				mergedMarkdown +
 				currentMarkdown.slice(range.to);
+			assertLiveDocumentMarkdownWithinCap(nextMarkdown);
 			const nextDoc = schema.nodeFromJSON(markdownToTiptapDoc(nextMarkdown));
 			if (doc.eq(nextDoc)) return null;
 
@@ -494,6 +513,7 @@ async function applyPatchToDocument(
 	}
 
 	const current = await projectMarkdown(ctx, args.documentId);
+	assertLiveDocumentMarkdownWithinCap(current.markdown);
 	const currentRevision = current.version ?? 0;
 	const isRebasableRangePatch =
 		args.intent.kind === "replace-range" ||
@@ -502,6 +522,43 @@ async function applyPatchToDocument(
 		throw new Error(
 			`Stale base revision: expected ${currentRevision}, got ${args.baseRevision}`,
 		);
+	}
+
+	// Check the post-patch size before materializing a revision; the RD5 failure
+	// mode was the revision snapshot itself crossing Convex's 1 MiB value limit.
+	switch (args.intent.kind) {
+		case "replace-range":
+		case "markdown-diff": {
+			const range = findReconcileRange(current.markdown, args.intent);
+			const mergedMarkdown = mergeMarkdownRange(
+				args.intent.baseMarkdown.slice(args.intent.from, args.intent.to),
+				current.markdown.slice(range.from, range.to),
+				args.intent.markdown,
+			);
+			assertLiveDocumentMarkdownWithinCap(
+				current.markdown.slice(0, range.from) +
+					mergedMarkdown +
+					current.markdown.slice(range.to),
+			);
+			break;
+		}
+		case "replace-document":
+			assertLiveDocumentMarkdownWithinCap(args.intent.markdown);
+			break;
+		case "append-markdown":
+			assertLiveDocumentMarkdownWithinCap(
+				appendMarkdown(current.markdown, args.intent.markdown),
+			);
+			break;
+		case "insert-after-heading":
+			assertLiveDocumentMarkdownWithinCap(
+				insertMarkdownAfterHeading(
+					current.markdown,
+					args.intent.heading,
+					args.intent.markdown,
+				),
+			);
+			break;
 	}
 
 	await materializeRevisionForDocument(ctx, {

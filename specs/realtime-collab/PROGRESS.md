@@ -133,26 +133,44 @@ only — it does not typecheck or build anything.** Use these instead:
 
 ### The foundation is still provisional — do not treat it as settled
 
-Stage 1's decision gate (adopt `prosemirror-sync`) is **provisional**, and
-Stages 2–6 are all built on top of it. The two hard gates are still open:
-**offline ❌** (not implemented upstream) and **doc-size ⚠️ unverified**. The live
-co-edit/reconcile passes were human-verified *locally on a dev deployment*, never
-merged or load-tested. If you hit a wall that looks foundational, that is the
-known risk — see SPIKE.md for the Yjs/DO fallback, don't paper over it.
+Stage 1's decision gate (adopt `prosemirror-sync`) is **accepted with boundaries**,
+not a blank check. RD5 found the current large-doc failure; the product decision is
+to continue Convex/prosemirror-sync for this release with an initial **256 KiB
+Live Document markdown cap**, then revisit large-doc storage/revision design later.
+The offline gate is still open (**offline ❌** upstream; durable buffer WIP). The
+live co-edit/reconcile passes were human-verified locally, and RD5's hosted
+manual two-browser editor pass completed on `strong-setter-709` on 2026-06-28. If
+you hit a wall that looks foundational, check SPIKE.md and DECISIONS.md before
+reopening the Yjs/DO fallback.
 
 ### What to pick up next (this overrides the "first `[ ]`" rule below)
 
-The RT slices are landed locally, RD3 is expanded/verified, and RD1/RD2/RD4 are
-landed locally. The next lowest ready-to-deploy slice is **RD5 — Stage-1 hard
-gate: doc-size + load test + live two-browser** from
-`READY-TO-DEPLOY.plan.md`. RD5 is **premier** tier. RD6 is also an unblocked
-premier gate slice if the human wants to close the offline gate first.
+The RT slices are landed locally, RD3 is expanded/verified, RD1/RD2/RD4 are
+landed locally, and RD5 doc-size probing has a product decision: continue with an
+initial 256 KiB Live Document markdown cap. **RD5 cap enforcement landed locally
+2026-06-28** across Convex import/patch/conversion paths and local Live Document
+import preflight. **RD5 hosted manual two-browser pass completed 2026-06-28** on
+`strong-setter-709`: Ada/Ben sessions showed presence, separate-paragraph edits
+merged, and same-paragraph adjacent inserts converged in both browsers and backend
+markdown. **RD6 started locally 2026-06-28**: `tasks/RD6-offline-gate-resolution.md`
+is expanded, and the desktop external-file offline queue now persists watcher
+events under `.hubble/queue/events.json`, replays them before reconnect
+materialization, and retains failed replays to avoid clobbering local offline
+edits. The RD6 gate is **not closed** until the in-editor durable offline buffer is
+human-verified (or explicitly bounded/deferred).
 
 Useful RD5 files to inspect first: `specs/realtime-collab/SPIKE.md`,
 `packages/sync-backend/convex/prosemirror.ts`,
 `packages/sync-backend/convex/documents.ts`,
 `apps/www/src/shell/EditorView.tsx`, and
 `apps/www/src/shell/AppShell.tsx`.
+
+Useful RD6 files to inspect first: `specs/realtime-collab/OFFLINE-DECISION.md`,
+`specs/realtime-collab/tasks/RD6-offline-gate-resolution.md`,
+`apps/desktop/electron/syncedFolderService.ts`,
+`apps/desktop/electron/syncedFolderService.test.ts`,
+`apps/www/src/shell/durableOfflineBuffer.ts`, and
+`apps/www/src/shell/EditorView.tsx`.
 
 Do not restart old Stage 5 UI tasks from this block. Version history, comments,
 activity, suggestions, and search UI are already described as locally landed later
@@ -217,14 +235,39 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 - [~] **Spike `@convex-dev/prosemirror-sync`** against the decision gate. Findings
       in **`SPIKE.md`**: server-side agent edits ✅, versioning hooks ✅, auth hooks
-      ✅, Tiptap client ✅; **offline ❌ (not implemented upstream)**; doc-size +
-      live two-browser test ⚠️ unverified (need interactive `convex dev`).
+      ✅, Tiptap client ✅; **offline ❌ (not implemented upstream)**; doc-size
+      accepted with a 256 KiB cap; hosted live two-browser test ✅ passed on
+      `strong-setter-709`.
       Scaffold landed: `convex/convex.config.ts`, `convex/prosemirror.ts` (incl.
       `agentAppendParagraph` server-edit proof), dep added to `package.json`.
       — *Owner: Adrian/agent · Started: 2026-06-24 · Landed: _ · PR: spike branch*
 - [~] Decision gate outcome: **provisionally ADOPT prosemirror-sync** (hard gates
-      pass on existing Convex stack). Finalize to `[x]` after the live two-browser
-      + doc-size test. Fallback documented in SPIKE.md if a hard gate fails. — *_*
+      previously looked viable on existing Convex stack, but RD5 doc-size probing
+      on 2026-06-28 found a large-doc failure in the current storage/revision shape:
+      64/256/320 KiB markdown docs passed repeated patch + reactive-subscriber
+      checks on `strong-setter-709`, while 384 KiB and 512 KiB failed on first
+      patch with Convex values over 1 MiB and 768 KiB import timed out. Product
+      decision: continue Convex/prosemirror-sync with an initial 256 KiB Live
+      Document markdown cap; do **not** trigger Yjs/DO for this result alone. Do
+      not claim large-doc parity without a follow-up storage/revision redesign.
+      Hosted Ada/Ben two-browser editor pass completed on 2026-06-28. — *_*
+- [~] **RD5 ready-to-deploy hard gate: doc-size + load + live two-browser.**
+      Phase-start brief added at `tasks/RD5-doc-size-load-live-gate.md`; runnable
+      load harness added at `scripts/prosemirror-doc-size-gate.mjs` to seed
+      timestamped Live Documents, measure import/read/patch latency, confirm
+      revision advancement, and wait for two reactive subscribers to observe the
+      final revision. Hosted measurements on `strong-setter-709` show pass at
+      64/256/320 KiB, hard Convex 1 MiB value failures at 384/512 KiB, and a 768
+      KiB import timeout. Decision is to ship current path with an initial 256 KiB
+      Live Document markdown cap. Cap enforcement landed locally across
+      `documents.importMarkdown`, `documents.applyPatch`, markdown conversion
+      helpers, and local `importLiveDocuments` preflight, with focused cap tests.
+      Manual hosted two-browser web pass completed on 2026-06-28 using document
+      `kn7e5a4kwk4mhb207mxnxst9t189h9tj`: Ada/Ben presence appeared in both
+      sessions, separate-paragraph edits persisted in backend revision 107, and
+      same-paragraph adjacent inserts converged in both browser pages and backend
+      revision 175. RD5 is accepted with cap, not large-doc parity. — *Owner:
+      Codex · Started: 2026-06-28*
 - [~] Run `pnpm install` + `convex dev` (interactive login) to generate the
       component API so `prosemirror.ts` typechecks. Local anonymous deployment
       generated; `convex dev --once --typecheck enable` passes. Unmerged. —
@@ -743,8 +786,14 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       `DurableOfflineExtension.ts`, wired in `EditorView.tsx`). **Compiles**
       (`pnpm typecheck` green) but offline-reload replay is **not yet
       behavior-verified** (needs a human browser pass). Checkpointed at commit
-      `d5355c7`. External-file queue flavor is part of desktop Phase 5, not started.
-      — *Owner: Opus · Started: 2026-06-25*
+      `d5355c7`. External-file queue flavor `[local]` now has
+      `tasks/RD6-offline-gate-resolution.md` and durable desktop queueing:
+      watcher events persist to `.hubble/queue/events.json` while offline or after
+      a route failure, queued events replay before reconnect materialization, and a
+      failed replay stays queued so cloud materialization cannot overwrite the
+      unsynced local edit. Verified focused desktop service tests and
+      `pnpm typecheck`; gate remains open pending the in-editor browser pass.
+      — *Owner: Opus/Codex · Started: 2026-06-25 · RD6 resumed: 2026-06-28*
 - [~] Audit log, trash + restore, admin/role management. Trash/restore backend
       started locally with `documents.listTrash`, `documents.restoreRemoved`,
       `folders.listTrash`, and `folders.restoreRemoved`. Activity events
@@ -758,6 +807,51 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-28 — Codex — Started RD6 offline resolution as the next premier gate:
+  expanded `tasks/RD6-offline-gate-resolution.md` and implemented the desktop
+  external-file offline queue in `syncedFolderService`. Watcher events now persist
+  under `.hubble/queue/events.json` while offline or after route failure, replay
+  before reconnect materialization, and stay queued on failed replay so local
+  offline edits are not overwritten by cloud materialization. Verified
+  `pnpm --filter @hubble.md/desktop test -- syncedFolderService.test.ts` and
+  `pnpm typecheck`. RD6 remains open pending the in-editor durable offline browser
+  verification.
+- 2026-06-28 — Codex — Completed the remaining RD5 hosted manual two-browser web
+  pass against `strong-setter-709` using document
+  `kn7e5a4kwk4mhb207mxnxst9t189h9tj`: Ada/Ben `?test=1` browser sessions both
+  showed presence, separate-paragraph edits merged into backend revision 107, and
+  same-paragraph adjacent inserts converged in both browser pages and backend
+  revision 175. RD5 is accepted with the 256 KiB Live Document cap; this does not
+  claim large-doc parity. The next unblocked premier gate is RD6 offline
+  resolution.
+- 2026-06-28 — Codex — Continued RD5 cap enforcement: added a 256 KiB byte cap to
+  Convex Live Document import/patch/conversion paths before revision
+  materialization, added local `importLiveDocuments` preflight so oversized
+  batches fail before partial cloud writes, exported the sync cap helper, and
+  covered the preflight with focused tests. Verified targeted Biome on touched
+  files, `@hubble.md/sync` tests/typecheck, Convex codegen/typecheck,
+  `pnpm typecheck`, and `pnpm build:desktop`; `pnpm check` remains blocked by
+  pre-existing formatting drift in `convex/tsconfig.json`,
+  `packages/sync/src/reconcile.test.ts`, and `skills-lock.json`.
+- 2026-06-28 — Adrian/Codex — Marked RD12 MCP server as a post-launch follow-up
+  rather than a launch gate. The CLI `hubble cloud document get/patch/reconcile`
+  path remains the launch agent surface; MCP can be picked up later as
+  standard-tier protocol/auth/security work.
+- 2026-06-28 — Adrian/Codex — RD5 doc-size decision: keep Convex/
+  `@convex-dev/prosemirror-sync` for the current production path, enforce an
+  initial **256 KiB Live Document markdown cap**, and defer large-doc parity to a
+  storage/revision redesign. Do not trigger the Yjs/Durable Objects fallback for
+  the RD5 large-doc result alone. Remaining RD5 work: cap enforcement and hosted
+  manual two-browser editor pass.
+- 2026-06-28 — Codex — Started RD5 as the next premier ready-to-deploy gate:
+  expanded `tasks/RD5-doc-size-load-live-gate.md`, added
+  `scripts/prosemirror-doc-size-gate.mjs`, and ran hosted measurements against
+  `strong-setter-709`. The harness passed 64 KiB, 256 KiB, and 320 KiB markdown
+  Live Documents with repeated `documents.applyPatch` edits and two reactive
+  subscribers observing the final revision, but exposed a current-stack doc-size
+  failure: 384 KiB and 512 KiB fail on first patch with Convex values over 1 MiB,
+  and 768 KiB import times out. RD5 is not passed; manual two-browser editor pass
+  and an architecture/product decision on large docs remain pending.
 - 2026-06-27 — Codex — Implemented RD4 production auth hardening: expanded the
   phase-start brief, audited the Convex Auth/password wiring and public Convex
   function gates, hardened ProseMirror sync to reject non-`document:` sync IDs,

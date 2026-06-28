@@ -2,8 +2,9 @@
 
 Validating the realtime backend decision gate (TECH.md). **Provisional outcome:
 adopt prosemirror-sync** — it answers the hard gates (server-side agent edits,
-versioning hooks) on the existing Convex stack. Live validation of doc-size and a
-real two-browser test still pending (needs an interactive `convex dev`).
+versioning hooks) on the existing Convex stack. Hosted doc-size probing is
+accepted with a 256 KiB cap; the hosted real two-browser pass completed on
+2026-06-28.
 
 ## Decision-gate findings
 
@@ -14,8 +15,8 @@ real two-browser test still pending (needs an interactive `convex dev`).
 | **Auth integration** | ✅ Expected | `syncApi({ checkRead, checkWrite })` hooks — where Stage 3 permission enforcement lands. Not yet exercised. |
 | **Tiptap client** | ✅ Supported | `useTiptapSync(api.<file>, docId)` → `{ isLoading, initialContent, extension, create() }`. Drops into the existing Tiptap editor. |
 | **Offline editing** | ❌ **Not implemented** | Listed as planned (session/localStorage caching). **Stage 6 "offline edit + merge" cannot rely on this today** — flag as a gap; revisit upstream or implement separately. |
-| **Doc-size limits** | ⚠️ Unverified | Needs a live test with a large doc. Convex per-document/step size limits apply; measure before committing to very large docs. |
-| **Two-browser conflict-free merge** | ⚠️ Unverified | Needs a running deployment + the editor wired. The component is OT-based and designed for this; confirm empirically in the POC. |
+| **Doc-size limits** | ⚠️ **Accepted with cap** | Hosted RD5 probe on `strong-setter-709` passed 64 KiB, 256 KiB, and 320 KiB markdown docs with repeated `documents.applyPatch` edits, but 384 KiB failed on first patch with `Value is too large (1.02 MiB > maximum size 1 MiB)` and 512 KiB failed with `1.37 MiB > maximum size 1 MiB`. Product decision: continue Convex/prosemirror-sync for the current release with an initial 256 KiB Live Document markdown cap; cap enforcement landed locally on 2026-06-28; defer large-doc parity to storage/revision redesign. |
+| **Two-browser conflict-free merge** | ✅ **Passed on hosted dev** | RD5 hosted pass on `strong-setter-709` used document `kn7e5a4kwk4mhb207mxnxst9t189h9tj` in workspace `mn75k6wxszm8dzjmfn1db4546989hxfa`. Ada/Ben browser sessions both showed presence, separate-paragraph edits merged into backend revision 107, and same-paragraph adjacent inserts converged in both pages and backend revision 175. |
 
 ## What is scaffolded / locally wired
 
@@ -45,8 +46,8 @@ real two-browser test still pending (needs an interactive `convex dev`).
 3. Open two browsers on one `docId`, type simultaneously → confirm conflict-free
    merge + presence. Call `agentAppendParagraph` from the Convex dashboard and
    confirm it appears live in both browsers (agent-edit proof).
-4. Measure a large doc for size/perf. Record results in the table above and flip
-   the PROGRESS.md decision-gate task to `[x]` with the final adopt/fallback call.
+4. RD5 hosted live two-browser pass is complete. Keep the rollout decision
+   recorded as accepted-with-cap rather than large-doc parity.
 
 ## Fallback (only if a hard gate fails)
 

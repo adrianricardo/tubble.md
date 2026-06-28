@@ -40,9 +40,11 @@ export {
 } from "./reconcile.js";
 export type { MaterializeSyncedFolderResult } from "./sync.js";
 export {
+	assertLiveDocumentMarkdownWithinCap,
 	exportLiveDocuments,
 	importLiveDocuments,
 	init,
+	LIVE_DOCUMENT_MARKDOWN_MAX_BYTES,
 	materializeSyncedFolder,
 	status,
 	sync,

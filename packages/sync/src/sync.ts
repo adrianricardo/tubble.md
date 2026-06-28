@@ -25,6 +25,9 @@ import type {
 	WorkspaceConfig,
 } from "./types.js";
 
+export const LIVE_DOCUMENT_MARKDOWN_MAX_BYTES = 256 * 1024;
+const textEncoder = new TextEncoder();
+
 /** Initialize a workspace for syncing. Creates .hubble/ config. */
 export async function init(
 	backend: SyncBackend,
@@ -580,6 +583,12 @@ export async function importLiveDocuments(
 	opts: { workspaceId: string; workspacePath: string; actor?: string },
 ): Promise<LiveDocumentImportResult> {
 	const localFiles = await fs.listMarkdownFiles(opts.workspacePath);
+	for (const local of localFiles) {
+		assertLiveDocumentMarkdownWithinCap(
+			local.content,
+			`Live Document import "${local.relativePath}"`,
+		);
+	}
 	const result: LiveDocumentImportResult = {
 		imported: [],
 		created: [],
@@ -635,6 +644,22 @@ function toConflictName(filePath: string): string {
 	const dot = filePath.lastIndexOf(".");
 	if (dot === -1) return `${filePath}.conflict-${ts}`;
 	return `${filePath.slice(0, dot)}.conflict-${ts}${filePath.slice(dot)}`;
+}
+
+function markdownByteLength(markdown: string): number {
+	return textEncoder.encode(markdown).byteLength;
+}
+
+export function assertLiveDocumentMarkdownWithinCap(
+	markdown: string,
+	label = "Live Document markdown",
+) {
+	const bytes = markdownByteLength(markdown);
+	if (bytes > LIVE_DOCUMENT_MARKDOWN_MAX_BYTES) {
+		throw new Error(
+			`${label} is too large: ${bytes} bytes exceeds the 256 KiB limit`,
+		);
+	}
 }
 
 async function ensureParentDir(
