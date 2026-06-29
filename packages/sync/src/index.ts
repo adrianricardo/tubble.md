@@ -1,5 +1,6 @@
 export type {
 	AgentDocument,
+	AgentPatchIntent,
 	DocumentPatchResult,
 	Folder,
 	ReplaceRangeIntent,

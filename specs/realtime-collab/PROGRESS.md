@@ -188,7 +188,10 @@ monitoring / observability / on-call** (standard). **RD11 landed locally
 2026-06-28**: desktop synced-folder status now carries local operational
 telemetry for reconciles, backstops, read-only rejects, errors, offline queue
 depth, and recent events, and Settings surfaces those diagnostics. External alert
-plumbing remains a post-release service-choice follow-up.
+plumbing remains a post-release service-choice follow-up. **RD12 landed locally
+2026-06-29** as the post-launch standard-tier MCP follow-up: `@hubble.md/mcp-server`
+now exposes stdio tools for Live Document get, patch, and markdown export through
+the existing Convex client/backend permission path.
 
 Useful RD5 files to inspect first: `specs/realtime-collab/SPIKE.md`,
 `packages/sync-backend/convex/prosemirror.ts`,
@@ -513,9 +516,12 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       implemented locally as `hubble cloud document get --id <documentId>` and
       `hubble cloud document patch --id <documentId> --base-revision <n>` with
       `--replace`, `--append`, or `--after-heading ... --markdown ...` intents.
-      MCP server remains pending. Verified `pnpm check`, `@hubble.md/cli`
-      build, and `pnpm build:desktop`. Unmerged. — *Owner: Codex · Started:
-      2026-06-25*
+      MCP server implemented locally in `@hubble.md/mcp-server` as the
+      post-launch RD12 standard-tier follow-up, with stdio tools for document get,
+      patch, and markdown export over the same Convex client/backend API. Verified
+      `@hubble.md/mcp-server` typecheck/build, `pnpm typecheck`, and
+      `pnpm build:desktop`. Unmerged. — *Owner: Codex · Started:
+      2026-06-25 · MCP Landed: 2026-06-29*
 - [~] Read-only markdown projection writer on disk. Implemented locally as
       `writeLiveDocumentProjections`, writing live document markdown into
       `.hubble/projections/live-documents` so agents can read projected files
@@ -851,6 +857,15 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       settings panel surfaces the diagnostics. External monitoring/alert vendor
       wiring is deferred until a release owner chooses the sink.
       — *Owner: Codex · Started: 2026-06-28 · Landed: 2026-06-28*
+- [~] **RD12 MCP server for the patch API.** Post-launch standard-tier slice landed
+      locally in `tasks/RD12-mcp-server-for-patch-api.md`: added
+      `@hubble.md/mcp-server` with a `hubble-mcp` stdio server exposing
+      `hubble_get_document`, `hubble_patch_document`, and
+      `hubble_export_markdown`; the tools reuse the existing Convex
+      client/backend document API so permission, revision, markdown-cap, and
+      attribution checks remain server-side. Verified focused sync/mcp builds,
+      `pnpm typecheck`, and `pnpm build:desktop`.
+      — *Owner: Codex · Started: 2026-06-29 · Landed: 2026-06-29*
 - [~] Offline edit + merge on reconnect — two flavors (Decision 6): in-editor (CRDT
       local buffer/replay) and external-file (watcher queues edits, flushes on
       reconnect via the reconcile path). Decision: **no Yjs fork** — keep
@@ -892,6 +907,13 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-29 — Codex — Landed RD12 post-launch standard-tier MCP server:
+  added `@hubble.md/mcp-server` with a `hubble-mcp` stdio entrypoint and tools
+  for Live Document get, patch, and markdown export. The server reuses the
+  existing Convex client/backend API and optional auth-token configuration, so
+  document permission, revision, markdown-cap, and attribution checks stay on the
+  production `documents.applyPatch` path. Verified focused sync/mcp builds,
+  `pnpm typecheck`, and `pnpm build:desktop`.
 - 2026-06-28 — Codex — Landed RD11 standard-tier monitoring /
   observability: added local synced-folder telemetry to `getSyncedFolderStatus`
   for reconciles, backstops, read-only rejects, errors, queued offline events, and

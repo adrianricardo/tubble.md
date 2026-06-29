@@ -39,6 +39,20 @@ export type ReplaceRangeIntent = {
 	markdown: string;
 };
 
+/** Patch intents accepted by the Live Document agent API. */
+export type AgentPatchIntent =
+	| { kind: "replace-document"; markdown: string }
+	| { kind: "append-markdown"; markdown: string }
+	| { kind: "insert-after-heading"; heading: string; markdown: string }
+	| ReplaceRangeIntent
+	| {
+			kind: "markdown-diff";
+			baseMarkdown: string;
+			from: number;
+			to: number;
+			markdown: string;
+	  };
+
 /** Result of applying a document patch. */
 export type DocumentPatchResult = {
 	documentId: string;
@@ -111,7 +125,7 @@ export interface SyncBackend {
 	applyDocumentPatch(args: {
 		documentId: string;
 		baseRevision: number;
-		intent: ReplaceRangeIntent;
+		intent: AgentPatchIntent;
 		actor?: string;
 	}): Promise<DocumentPatchResult>;
 

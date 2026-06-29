@@ -36,7 +36,7 @@ on.
 | RD9 | Packaged desktop release | **standard** | RD5, RD6, RD8, RD10 | electron-vite production build, sign/notarize, auto-update channel (`UpdatesSection` already exists), install smoke. Must follow the gates (RD5/RD6), security (RD8), and the flag-gated merge (RD10) — never ship ahead of them. |
 | RD10 | Rebase/merge `spike/prosemirror-sync` → fork `main` behind a feature flag | **premier** | RD1, RD2, RD3–RD8 | ~30 commits; flag-gate the Live-Document/synced-folder surfaces; CI green; keep legacy file-authoritative paths untouched (ADR-0009). Includes RD1 (reactive sync) + RD2 (shared-with-me) since "full production" ships both. |
 | RD11 | Monitoring / observability / on-call | **standard** | RD10 | Convex dashboards, renderer error surfacing, reconcile-failure + backstop-rate alerts. |
-| RD12 | MCP server for the patch API (Stage 4 deferred) | **standard** | Post-launch | **Post-launch follow-up, not a launch gate.** Protocol/auth/security integration (not mechanical) → at least standard. The `hubble cloud document get/patch/reconcile` CLI already covers headless agents for launch. |
+| RD12 | MCP server for the patch API (Stage 4 deferred) | **standard** | Post-launch | **Landed locally 2026-06-29.** `@hubble.md/mcp-server` exposes stdio tools for Live Document get, patch, and markdown export through the existing Convex client/backend path. The `hubble cloud document get/patch/reconcile` CLI remains available for headless agents. |
 
 ## Sequencing & gates
 
