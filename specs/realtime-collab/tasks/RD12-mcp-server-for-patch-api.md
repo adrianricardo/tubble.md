@@ -26,6 +26,10 @@ out to `hubble cloud document ...`.
 - Broadened the shared `SyncBackend.applyDocumentPatch` type from the reconciler's
   `replace-range` intent to the full agent patch-intent union already accepted by
   Convex.
+- Added `scripts/mcp-server-smoke.mjs`, an authenticated hosted smoke that launches
+  `packages/mcp-server/dist/index.js` over MCP stdio, imports a timestamped Live
+  Document, calls get/patch/export tools, and verifies the patch advances the
+  revision.
 
 ## Acceptance
 
@@ -40,6 +44,7 @@ out to `hubble cloud document ...`.
 pnpm --filter @hubble.md/sync build
 pnpm --filter @hubble.md/mcp-server typecheck
 pnpm --filter @hubble.md/mcp-server build
+CONVEX_URL=<url> AUTH_TOKEN=<jwt> node scripts/mcp-server-smoke.mjs
 pnpm typecheck
 pnpm build:desktop
 ```
@@ -48,5 +53,3 @@ pnpm build:desktop
 
 - Add a packaged MCP config once the release owner decides where Hubble should
   publish agent-facing integrations.
-- Add an end-to-end MCP client smoke against a hosted deployment with an
-  authenticated token.

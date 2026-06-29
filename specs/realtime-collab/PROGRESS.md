@@ -863,8 +863,11 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       `hubble_get_document`, `hubble_patch_document`, and
       `hubble_export_markdown`; the tools reuse the existing Convex
       client/backend document API so permission, revision, markdown-cap, and
-      attribution checks remain server-side. Verified focused sync/mcp builds,
-      `pnpm typecheck`, and `pnpm build:desktop`.
+      attribution checks remain server-side. Follow-up added
+      `scripts/mcp-server-smoke.mjs` to launch the built MCP server over stdio
+      against a hosted authenticated deployment, call get/patch/export tools, and
+      verify the patch advances the revision. Verified focused sync/mcp builds,
+      script syntax, `pnpm typecheck`, and `pnpm build:desktop`.
       — *Owner: Codex · Started: 2026-06-29 · Landed: 2026-06-29*
 - [~] Offline edit + merge on reconnect — two flavors (Decision 6): in-editor (CRDT
       local buffer/replay) and external-file (watcher queues edits, flushes on
@@ -907,6 +910,12 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-29 — Codex — Added the RD12 hosted MCP client smoke:
+  `scripts/mcp-server-smoke.mjs` launches the built `hubble-mcp` server over MCP
+  stdio, imports a timestamped Live Document through the existing Convex client,
+  calls `hubble_get_document`, `hubble_patch_document`, and
+  `hubble_export_markdown`, then fails unless the MCP patch advances the revision
+  and the exported markdown contains the patch marker.
 - 2026-06-29 — Codex — Landed RD12 post-launch standard-tier MCP server:
   added `@hubble.md/mcp-server` with a `hubble-mcp` stdio entrypoint and tools
   for Live Document get, patch, and markdown export. The server reuses the
