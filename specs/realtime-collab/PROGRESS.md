@@ -191,7 +191,16 @@ depth, and recent events, and Settings surfaces those diagnostics. External aler
 plumbing remains a post-release service-choice follow-up. **RD12 landed locally
 2026-06-29** as the post-launch standard-tier MCP follow-up: `@hubble.md/mcp-server`
 now exposes stdio tools for Live Document get, patch, and markdown export through
-the existing Convex client/backend permission path.
+the existing Convex client/backend permission path. **RD11 ops runbook follow-up
+landed locally 2026-06-29**: `OPERATIONS.md` now records the vendor-neutral
+support workflow, escalation thresholds, safe user actions, and future alert
+wiring points for the local synced-folder telemetry.
+
+**Current pickup state:** RD1-RD12 are landed locally. There is no unchecked
+ready-to-deploy slice left in this plan. The remaining named follow-ups are
+operator/product-choice gated: external monitoring sink selection, packaged MCP
+integration publication, production notarization/release tag, production backfill
+policy, app-shell offline cache, and large-document storage/revision redesign.
 
 Useful RD5 files to inspect first: `specs/realtime-collab/SPIKE.md`,
 `packages/sync-backend/convex/prosemirror.ts`,
@@ -854,8 +863,11 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
       now records local telemetry counters for reconciles, backstops, read-only
       rejects, sync errors, and queued offline watcher events; synced-folder
       status includes recent event timestamps/reasons; and the desktop Cloud Sync
-      settings panel surfaces the diagnostics. External monitoring/alert vendor
-      wiring is deferred until a release owner chooses the sink.
+      settings panel surfaces the diagnostics. Follow-up added `OPERATIONS.md`
+      with vendor-neutral triage steps, escalation thresholds, safe user actions,
+      and the alert signals to wire once a release owner chooses the external
+      monitoring sink. External monitoring/alert vendor wiring is still deferred
+      until that sink is chosen.
       — *Owner: Codex · Started: 2026-06-28 · Landed: 2026-06-28*
 - [~] **RD12 MCP server for the patch API.** Post-launch standard-tier slice landed
       locally in `tasks/RD12-mcp-server-for-patch-api.md`: added
@@ -914,6 +926,12 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-29 — Codex — Added the RD11 operations runbook follow-up:
+  `OPERATIONS.md` documents the v1 synced-folder support workflow around local
+  telemetry, including first triage, escalation thresholds, safe user actions,
+  things not to delete, and future external-alert wiring points. Updated the
+  README and START HERE pickup state to make clear RD1-RD12 are landed locally
+  and the remaining named follow-ups require operator/product choices.
 - 2026-06-29 — Codex — Added the RD12 hosted MCP client smoke:
   `scripts/mcp-server-smoke.mjs` launches the built `hubble-mcp` server over MCP
   stdio, imports a timestamped Live Document through the existing Convex client,

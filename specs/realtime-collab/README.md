@@ -14,6 +14,8 @@ and source of truth for what is done, in flight, blocked, and next.
 - **`DECISIONS.md`** — concise decision log and reasoning for the fork.
 - **`SPIKE.md`** — `@convex-dev/prosemirror-sync` spike findings and remaining
   validation.
+- **`OPERATIONS.md`** — vendor-neutral v1 support runbook for synced-folder
+  telemetry, triage, and alert follow-up.
 
 ## Current Direction
 
