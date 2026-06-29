@@ -140,7 +140,6 @@ export const listWorkspaces = query({
 		);
 		return workspaces.filter(
 			(workspace) =>
-				workspace.ownerId === undefined ||
 				workspace.ownerId === userId ||
 				memberWorkspaceIds.has(workspace._id),
 		);

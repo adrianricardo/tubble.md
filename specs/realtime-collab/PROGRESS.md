@@ -926,6 +926,12 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-29 — Codex — Fixed a desktop Cloud Sync connection blocker found during
+  the two-machine smoke setup: authenticated `sync.listWorkspaces` results now
+  exclude legacy anonymous workspaces that downstream workspace-member checks
+  reject, preventing the app from listing a workspace and then failing
+  materialization with `folders.list` `Unauthorized`. Verified focused synced
+  folder tests, `@hubble.md/convex-client` typecheck, and `pnpm build:desktop`.
 - 2026-06-29 — Codex — Added the RD11 operations runbook follow-up:
   `OPERATIONS.md` documents the v1 synced-folder support workflow around local
   telemetry, including first triage, escalation thresholds, safe user actions,
