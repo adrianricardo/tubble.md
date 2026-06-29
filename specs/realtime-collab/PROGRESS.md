@@ -922,7 +922,9 @@ Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
   and the exported markdown contains the patch marker. Hosted verification passed
   on `strong-setter-709` with document `kn756w6xs8147tp4ahzb4se6js89jxmv`
   advancing revision `1 -> 2`; the MCP server now routes console output to stderr
-  so backend warnings do not corrupt stdout protocol frames.
+  so backend warnings do not corrupt stdout protocol frames. Reuse note: no smoke
+  tokens/passwords were saved; future runs should sign in through the app or mint a
+  fresh throwaway password-auth account and pass the current JWT as `AUTH_TOKEN`.
 - 2026-06-29 — Codex — Landed RD12 post-launch standard-tier MCP server:
   added `@hubble.md/mcp-server` with a `hubble-mcp` stdio entrypoint and tools
   for Live Document get, patch, and markdown export. The server reuses the

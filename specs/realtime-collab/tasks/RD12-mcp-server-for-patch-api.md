@@ -56,6 +56,15 @@ password-auth smoke account: document `kn756w6xs8147tp4ahzb4se6js89jxmv`
 advanced revision `1 -> 2` through `hubble_patch_document`, and
 `hubble_export_markdown` returned the patch marker.
 
+Auth repeatability note: do not save smoke JWTs or passwords. The passing run
+minted a fresh password-auth account through `auth.signIn` with
+`flow: "signUp"`, used the returned JWT only in memory, and discarded it. Cached
+desktop JWTs in local app storage were expired and should not be treated as a
+reusable smoke-test credential. Future agents should either sign in through the
+app and pass the current JWT as `AUTH_TOKEN`, or create a new throwaway
+password-auth smoke account and pipe the returned token directly into
+`scripts/mcp-server-smoke.mjs`.
+
 ## Follow-Up
 
 - Add a packaged MCP config once the release owner decides where Hubble should
