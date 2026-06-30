@@ -77,13 +77,43 @@ private workspace from the signup callback. `OpenWorkspaceScreen` rewritten to a
 `useQuery`/`useMutation` and is the post-auth landing until P3's dashboard
 (auto-selects the single personal workspace). `?test=1` stays an anonymous bypass.
 
-**Next step:** **Runtime-smoke P2 before P3** — `pnpm --filter @hubble.md/www dev`,
-sign up a fresh account, confirm: personal workspace materializes, you land in it,
-and authed file/doc queries return data (token threading works). Then start **P3
-Dashboard**: build A1f aggregate queries (cross-workspace recents + global search,
-spanning owned/member workspaces + `docShares`), then the Home surface at `/`
-(Recents · Private [`workspaces.personal`] · Teams · Shared-with-me) replacing the
-`OpenWorkspaceScreen` redirect, and make Live Documents the primary navigable object.
+**Next step (ordered — stopped here at user request to document before continuing):**
+
+1. **Set up Convex backend test infra** (does not exist yet — no `convex-test`,
+   no vitest config, no `*.test.ts` under `packages/sync-backend`). Add dev deps
+   `convex-test`, `vitest`, `@edge-runtime/vm`; add `packages/sync-backend/vitest.config.ts`
+   with `environment: "edge-runtime"`; add a `test` script. Pattern: `convexTest(schema,
+   import.meta.glob("./**/*.ts"))` per the Convex testing guidelines. NOTE: the auth
+   `afterUserCreatedOrUpdated` callback isn't trivially invokable from `convex-test`;
+   test the **helpers directly** by exercising the exported mutations and by calling
+   the resolution path via a thin test harness, or test `resolveInvitesForUser` /
+   `ensurePersonalWorkspace` logic through the public mutations that touch the same
+   tables.
+
+2. **Write backend tests (P1/P2 logic):**
+   - `resolveInvitesForUser`: workspace invite + doc invite by email → on resolve,
+     a `members` row / `docShares` row appears and the `invites` row is consumed.
+     Idempotent on repeat.
+   - `ensurePersonalWorkspace`: first call creates one `personal` workspace + owner
+     membership; second call is a no-op (no duplicate); name collisions get suffixed.
+   - `inviteWorkspaceMember`: existing user → `members` row (`status:"added"`);
+     unknown email → pending `invites` row (`status:"invited"`). Non-owner/admin →
+     Unauthorized. Only owner can grant `owner`.
+   - `setWorkspaceMemberRole` / `removeWorkspaceMember`: last-owner demote/remove
+     guards throw; admin cannot remove an owner.
+   - `setUserShareByEmail`: unknown email creates a document invite (no throw);
+     known email creates the `docShares` row.
+   - `sync.listWorkspaces`: anonymous caller never sees an owned workspace.
+
+3. **Browser smoke of P2** (human, owed): `pnpm --filter @hubble.md/www dev`, sign up
+   a fresh account → personal workspace provisions → you land in it → authed file/doc
+   queries return data (confirms JWT threading). Two-account share/invite resolves on
+   the invitee's signup.
+
+4. **Then P3 Dashboard:** A1f aggregate queries (cross-workspace recents + global
+   search over owned/member workspaces + `docShares`), then the Home surface at `/`
+   (Recents · Private [`workspaces.personal`] · Teams · Shared-with-me) replacing the
+   `OpenWorkspaceScreen` redirect, and make Live Documents the primary navigable object.
 
 **Files changed (P2, uncommitted until this turn's commit):**
 `packages/sync-backend/convex/{schema.ts,members.ts,auth.ts,_generated/api.d.ts}`;
@@ -106,6 +136,9 @@ vite-env.d.ts,auth/AuthScreens.tsx(new)}`; `apps/www/src/screens/OpenWorkspaceSc
   intended (auth-first; the flag/legacy path is retired in P7/D1).
 
 ## Status log
+- 2026-06-30: **Paused after P2 at user request.** P1 (`b5a650a`) + P2 (`39895d8`)
+  committed on `v1-release`; all build/typecheck/codegen green; P2 runtime smoke +
+  backend tests owed (see Handoff → Next step). Resume at Next-step #1.
 - 2026-06-30: plan written, route = Phased. Starting **P1**.
 - 2026-06-30: **P1 backend foundation landed (uncommitted, on `main`).**
   - B2b: `sync.listWorkspaces` no longer leaks owned workspaces to anonymous
