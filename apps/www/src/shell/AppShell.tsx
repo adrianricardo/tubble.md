@@ -1,20 +1,14 @@
-import { ConvexAuthProvider, useAuthActions } from "@convex-dev/auth/react";
+import { useAuthToken } from "@convex-dev/auth/react";
 import { createConvexSubscriber } from "@hubble.md/convex-client";
 import { withMarkdownExtension } from "@hubble.md/editor";
 import { api } from "@hubble.md/sync-backend";
 import type { Id } from "@hubble.md/sync-backend/types";
 import { AppShellFrame, Modal } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
-import {
-	Authenticated,
-	AuthLoading,
-	ConvexReactClient,
-	Unauthenticated,
-	useMutation,
-	useQuery,
-} from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TestIdentity } from "../App";
+import { SignOutButton } from "../auth/AuthScreens";
 import { saveWorkspace } from "../connection/connection";
 import { realtimeCollabEnabled } from "../realtimeFlag";
 import {
@@ -65,16 +59,27 @@ export function AppShell({
 	const [newNoteName, setNewNoteName] = useState<string | null>(null);
 	const [newNoteSubmitted, setNewNoteSubmitted] = useState(false);
 	const newNoteInputRef = useRef<HTMLInputElement>(null);
-	const convexClient = useMemo(() => new ConvexReactClient(url), [url]);
+	// Auth is provided at the router root (App.tsx). The standalone store/sync
+	// clients aren't React-context clients, so they need the JWT threaded in
+	// explicitly. Test-bootstrap (?test=1) sessions are anonymous (no token).
+	const authToken = useAuthToken();
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: snapshot reloads only when workspace identity changes; file route changes load below
+	// biome-ignore lint/correctness/useExhaustiveDependencies: snapshot reloads on workspace identity or auth-token change; file route changes load below
 	useEffect(() => {
-		void loadWorkspaceSnapshot(url, workspaceId, filePath).then((loaded) => {
+		// Wait for the JWT before hitting authed workspace queries (skip the wait
+		// for anonymous test sessions).
+		if (!testIdentity && !authToken) return;
+		void loadWorkspaceSnapshot(
+			url,
+			workspaceId,
+			filePath,
+			authToken ?? undefined,
+		).then((loaded) => {
 			if (!loaded) return;
 			saveWorkspace(workspaceId);
 			onWorkspaceLoaded(workspaceId);
 		});
-	}, [url, workspaceId]);
+	}, [url, workspaceId, authToken]);
 
 	useEffect(() => {
 		if (workspace.snapshot?.id !== workspaceId) return;
@@ -95,10 +100,10 @@ export function AppShell({
 		};
 	}, []);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: subscription owns its lifecycle by url+workspaceId
+	// biome-ignore lint/correctness/useExhaustiveDependencies: subscription owns its lifecycle by url+workspaceId+authToken
 	useEffect(() => {
 		if (!workspace.snapshot) return;
-		const subscriber = createConvexSubscriber(url);
+		const subscriber = createConvexSubscriber(url, authToken ?? undefined);
 		const unsubscribe = subscriber.onFilesChanged(
 			workspace.snapshot.id,
 			() => {
@@ -122,7 +127,7 @@ export function AppShell({
 			unsubscribeAssets();
 			void subscriber.close();
 		};
-	}, [url, workspace.snapshot]);
+	}, [url, workspace.snapshot, authToken]);
 
 	useEffect(() => {
 		if (newNoteName !== null) {
@@ -220,33 +225,19 @@ export function AppShell({
 			onSubmitNewNote={submitNewNote}
 			onSetNewNoteName={setNewNoteName}
 			onReloadWorkspace={() => {
-				void loadWorkspaceSnapshot(url, workspaceId, filePath);
+				void loadWorkspaceSnapshot(
+					url,
+					workspaceId,
+					filePath,
+					authToken ?? undefined,
+				);
 			}}
 			realtimeCollabEnabled={realtimeCollabEnabled}
 		/>
 	);
 
-	if (!realtimeCollabEnabled) return shellContent;
-
-	return (
-		<ConvexAuthProvider client={convexClient}>
-			{testIdentity ? (
-				shellContent
-			) : (
-				<>
-					<AuthLoading>
-						<AuthStatus message="Checking session…" />
-					</AuthLoading>
-					<Unauthenticated>
-						<SignInScreen />
-					</Unauthenticated>
-					<Authenticated>
-						{shellContent}
-					</Authenticated>
-				</>
-			)}
-		</ConvexAuthProvider>
-	);
+	// Auth gating + the Convex provider now live at the router root (App.tsx).
+	return shellContent;
 }
 
 function AppShellContent({
@@ -421,126 +412,6 @@ function AppShellContent({
 					</div>
 				)}
 		</AppShellFrame>
-	);
-}
-
-function SignInScreen() {
-	const { signIn } = useAuthActions();
-	const [mode, setMode] = useState<"signIn" | "signUp">("signIn");
-	const [error, setError] = useState<string | null>(null);
-	const [pending, setPending] = useState(false);
-
-	const submit = async (event: React.FormEvent<HTMLFormElement>) => {
-		event.preventDefault();
-		setError(null);
-		setPending(true);
-		const formData = new FormData(event.currentTarget);
-		formData.set("flow", mode);
-		try {
-			await signIn("password", formData);
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Sign in failed");
-		} finally {
-			setPending(false);
-		}
-	};
-
-	return (
-		<main className="flex h-dvh items-center justify-center bg-background text-foreground [padding-block:1.5rem] [padding-inline:1.5rem]">
-			<form
-				onSubmit={submit}
-				className="w-full max-w-sm rounded-sm border border-border bg-card [padding-block:1rem] [padding-inline:1rem]"
-			>
-				<h1 className="text-base font-semibold text-foreground">
-					{mode === "signIn" ? "Sign in to Hubble" : "Create your account"}
-				</h1>
-				<label
-					htmlFor="auth-email"
-					className="mt-4 block text-sm font-medium text-foreground"
-				>
-					Email
-				</label>
-				<input
-					id="auth-email"
-					name="email"
-					type="email"
-					required
-					autoComplete="email"
-					className="mt-2 w-full rounded-sm border border-border bg-background text-sm outline-none focus:border-ring [padding-block:0.5rem] [padding-inline:0.625rem]"
-				/>
-				{mode === "signUp" && (
-					<>
-						<label
-							htmlFor="auth-name"
-							className="mt-3 block text-sm font-medium text-foreground"
-						>
-							Name
-						</label>
-						<input
-							id="auth-name"
-							name="name"
-							type="text"
-							required
-							autoComplete="name"
-							className="mt-2 w-full rounded-sm border border-border bg-background text-sm outline-none focus:border-ring [padding-block:0.5rem] [padding-inline:0.625rem]"
-						/>
-					</>
-				)}
-				<label
-					htmlFor="auth-password"
-					className="mt-3 block text-sm font-medium text-foreground"
-				>
-					Password
-				</label>
-				<input
-					id="auth-password"
-					name="password"
-					type="password"
-					required
-					autoComplete={mode === "signIn" ? "current-password" : "new-password"}
-					className="mt-2 w-full rounded-sm border border-border bg-background text-sm outline-none focus:border-ring [padding-block:0.5rem] [padding-inline:0.625rem]"
-				/>
-				{error && <p className="mt-3 text-sm text-destructive">{error}</p>}
-				<button
-					type="submit"
-					disabled={pending}
-					className="mt-4 w-full rounded-sm bg-primary text-sm font-medium text-primary-foreground disabled:opacity-60 [padding-block:0.5rem] [padding-inline:0.75rem]"
-				>
-					{pending ? "Working…" : mode === "signIn" ? "Sign in" : "Sign up"}
-				</button>
-				<button
-					type="button"
-					onClick={() => {
-						setError(null);
-						setMode(mode === "signIn" ? "signUp" : "signIn");
-					}}
-					className="mt-3 w-full rounded-sm text-sm text-muted-foreground hover:bg-sidebar-accent [padding-block:0.5rem] [padding-inline:0.75rem]"
-				>
-					{mode === "signIn" ? "Create an account" : "Sign in instead"}
-				</button>
-			</form>
-		</main>
-	);
-}
-
-function SignOutButton() {
-	const { signOut } = useAuthActions();
-	return (
-		<button
-			type="button"
-			onClick={() => void signOut()}
-			className="rounded-sm text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-foreground [padding-block:0.25rem] [padding-inline:0.5rem]"
-		>
-			Sign out
-		</button>
-	);
-}
-
-function AuthStatus({ message }: { message: string }) {
-	return (
-		<main className="flex h-dvh items-center justify-center bg-background text-foreground">
-			<p className="text-sm text-muted-foreground">{message}</p>
-		</main>
 	);
 }
 

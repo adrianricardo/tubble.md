@@ -23,6 +23,10 @@ export function saveWorkspace(id: string): void {
 	localStorage.setItem(WORKSPACE_ID_KEY, id);
 }
 
+export function readWorkspaceId(): string | null {
+	return localStorage.getItem(WORKSPACE_ID_KEY);
+}
+
 export function clearWorkspace(): void {
 	localStorage.removeItem(WORKSPACE_ID_KEY);
 }

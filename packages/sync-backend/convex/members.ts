@@ -225,6 +225,51 @@ export async function resolveInvitesForUser(
 	}
 }
 
+async function uniqueWorkspaceName(
+	ctx: MutationCtx,
+	base: string,
+): Promise<string> {
+	const trimmed = base.trim() || "My space";
+	for (let attempt = 0; attempt < 50; attempt++) {
+		const candidate = attempt === 0 ? trimmed : `${trimmed} ${attempt + 1}`;
+		const existing = await ctx.db
+			.query("workspaces")
+			.withIndex("by_name", (q) => q.eq("name", candidate))
+			.unique();
+		if (!existing) return candidate;
+	}
+	// Extremely unlikely fallback: disambiguate with a timestamp suffix.
+	return `${trimmed} ${Date.now()}`;
+}
+
+// A1d: guarantee every account has a private home workspace. Idempotent — runs
+// from the signup callback on every sign-in but only provisions once.
+export async function ensurePersonalWorkspace(
+	ctx: MutationCtx,
+	userId: Id<"users">,
+): Promise<void> {
+	const owned = await ctx.db
+		.query("workspaces")
+		.withIndex("by_owner", (q) => q.eq("ownerId", userId))
+		.collect();
+	if (owned.some((workspace) => workspace.personal)) return;
+	const user = await ctx.db.get(userId);
+	const base = (user?.name || user?.email || "My").trim();
+	const name = await uniqueWorkspaceName(ctx, `${base}'s space`);
+	const workspaceId = await ctx.db.insert("workspaces", {
+		name,
+		ownerId: userId,
+		personal: true,
+		createdAt: Date.now(),
+	});
+	await ctx.db.insert("members", {
+		workspaceId,
+		userId,
+		role: "owner",
+		createdAt: Date.now(),
+	});
+}
+
 export const inviteWorkspaceMember = mutation({
 	args: {
 		workspaceId: v.id("workspaces"),

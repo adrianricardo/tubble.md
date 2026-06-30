@@ -8,8 +8,13 @@ export default defineSchema({
 	workspaces: defineTable({
 		name: v.string(),
 		ownerId: v.optional(v.id("users")),
+		// True for the auto-provisioned per-account "private" workspace (A1d). The
+		// dashboard surfaces this as the user's Private space, distinct from Teams.
+		personal: v.optional(v.boolean()),
 		createdAt: v.number(),
-	}).index("by_name", ["name"]),
+	})
+		.index("by_name", ["name"])
+		.index("by_owner", ["ownerId"]),
 
 	members: defineTable({
 		workspaceId: v.id("workspaces"),

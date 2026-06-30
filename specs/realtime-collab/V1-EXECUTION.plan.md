@@ -51,6 +51,60 @@ to a Sonnet sub-agent with a path-scoped brief returning a short summary.
   Convex via `npx convex codegen`; `pnpm build:desktop` when desktop touched.
   (`pnpm check` is Biome only — not load-bearing.)
 
+## Progress
+
+| ID | Status | Owner/session | Last update | Notes |
+|----|--------|---------------|-------------|-------|
+| P1 Backend foundation | done | opus / session-1 | 2026-06-30 | Committed `b5a650a` on `v1-release`. invites table, member mutations, B2b leak fix. codegen + typecheck green. |
+| P2 Web auth + routing | done (typecheck/build only) | opus / session-1 | 2026-06-30 | Root `ConvexAuthProvider` + auth gate + env-baked URL in `App.tsx`; `ConnectScreen` deleted; auth screens extracted to `auth/AuthScreens.tsx`; JWT threaded into store/subscriber clients; A1d personal-workspace auto-provision. typecheck+build green. **Runtime smoke still owed** (sign-in → provision → land → authed queries). |
+| P3 Dashboard surface | next | — | — | Includes A1f aggregate queries (relocated from P1). Depends on P2. |
+| P4 Production presence | pending | — | — | A3 launch-critical; un-gate presence from `testIdentity`. Depends on P2. |
+| P5 Completeness | pending | — | — | A5 auto-snapshot + @mention picker, B1c member UI, A4 onboarding. Delegable. |
+| P6 Hardening | pending | — | — | B2 permission regression suite, B3 session edges, D6 cap UX. |
+| P7 Launch gate | pending | — | — | C1/C2 QA, D1 flag delete (LAST), D2 merge, D3/D4 deploy, D5 ops, D7 signup cap. |
+
+## Handoff
+
+**Current state:** P1 committed (`b5a650a`) and P2 implemented on branch
+`v1-release`. P2: the web app is now auth-first — a single root
+`ConvexReactClient` from `VITE_CONVEX_URL`, `ConvexAuthProvider` + auth gate at the
+router root (`App.tsx`), `ConnectScreen` deleted (URL baked in), `SignInScreen`/
+`SignOutButton`/`AuthStatus` moved to `apps/www/src/auth/AuthScreens.tsx`, `AppShell`
+no longer creates its own provider/client and threads the JWT (`useAuthToken()`)
+into the standalone store/subscriber clients (`store/actions.ts`,
+`createConvexSubscriber`). A1d: `members.ensurePersonalWorkspace` auto-provisions a
+private workspace from the signup callback. `OpenWorkspaceScreen` rewritten to authed
+`useQuery`/`useMutation` and is the post-auth landing until P3's dashboard
+(auto-selects the single personal workspace). `?test=1` stays an anonymous bypass.
+
+**Next step:** **Runtime-smoke P2 before P3** — `pnpm --filter @hubble.md/www dev`,
+sign up a fresh account, confirm: personal workspace materializes, you land in it,
+and authed file/doc queries return data (token threading works). Then start **P3
+Dashboard**: build A1f aggregate queries (cross-workspace recents + global search,
+spanning owned/member workspaces + `docShares`), then the Home surface at `/`
+(Recents · Private [`workspaces.personal`] · Teams · Shared-with-me) replacing the
+`OpenWorkspaceScreen` redirect, and make Live Documents the primary navigable object.
+
+**Files changed (P2, uncommitted until this turn's commit):**
+`packages/sync-backend/convex/{schema.ts,members.ts,auth.ts,_generated/api.d.ts}`;
+`apps/www/src/{App.tsx,shell/AppShell.tsx,store/actions.ts,connection/connection.ts,
+vite-env.d.ts,auth/AuthScreens.tsx(new)}`; `apps/www/src/screens/OpenWorkspaceScreen.tsx`
+(rewritten); `apps/www/src/screens/ConnectScreen.tsx` (deleted);
+`apps/www/.env.example` (+ `.env.local`, gitignored). The pre-existing
+`withTestSearch` App.tsx change is subsumed by the rewrite.
+
+**Checks run:** `npx convex codegen` → exit 0 (schema personal/by_owner + callbacks).
+`pnpm --filter @hubble.md/www typecheck` → 0. `pnpm --filter @hubble.md/www build`
+→ 0. `pnpm typecheck` (11 packages) → green. No runtime/browser smoke yet.
+
+**Open questions / risks:**
+- P2 is type/build-verified only; the auth happy-path + token threading need a
+  runtime smoke (above) before being trusted in P3.
+- Standalone clients use a static JWT snapshot; token refresh re-runs the AppShell
+  effects (reconnect), acceptable for v1.
+- Forcing auth at the root now gates the legacy non-realtime file path too; that is
+  intended (auth-first; the flag/legacy path is retired in P7/D1).
+
 ## Status log
 - 2026-06-30: plan written, route = Phased. Starting **P1**.
 - 2026-06-30: **P1 backend foundation landed (uncommitted, on `main`).**
@@ -70,3 +124,18 @@ to a Sonnet sub-agent with a path-scoped brief returning a short summary.
     across all packages green.
   - **Not committed** (on default branch `main` — branch before committing).
 - Next: **P2 Web auth + routing** (premier) — depends only on landed P1.
+- 2026-06-30: **P2 blast-radius finding (verified in code).** The release plan's
+  A1b ("move ConvexAuthProvider up to root") undersizes P2. `url` is threaded past
+  the React provider into standalone clients: `AppShell` builds
+  `new ConvexReactClient(url)` (`:68`) AND the store/subscriber layer builds its own
+  `createConvexBackend(url)` / `createConvexSubscriber(url, authToken?)` /
+  `ConvexHttpClient(url)` (`store/actions.ts:30,66,68`) — all called **without an
+  auth token today**. They work now only against legacy/anonymous workspaces. Auth-
+  first owned workspaces require the signed-in Convex Auth JWT threaded into those
+  standalone clients (`createConvexBackend`/`createConvexSubscriber` already accept
+  `authToken`; the web app just never supplies it). So P2 scope = root provider lift
+  **+ auth-token threading into the store/subscriber layer** + ConnectScreen removal
+  + A1d personal-workspace auto-provision. Files: `App.tsx`, `main.tsx`,
+  `shell/AppShell.tsx`, `store/actions.ts`, `connection/connection.ts`, possibly
+  `packages/convex-client`. Recommended token source: `useAuthToken()` from
+  `@convex-dev/auth/react` (root provider owns the session) passed into store init.

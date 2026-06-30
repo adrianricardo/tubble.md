@@ -1,154 +1,117 @@
+import { ConvexAuthProvider } from "@convex-dev/auth/react";
+import {
+	Authenticated,
+	AuthLoading,
+	ConvexReactClient,
+	Unauthenticated,
+} from "convex/react";
 import { useState } from "react";
 import {
 	BrowserRouter,
 	Navigate,
 	Route,
 	Routes,
-	useLocation,
 	useNavigate,
 	useParams,
 } from "react-router";
-import { disconnect, readConnection } from "./connection/connection";
-import { ConnectScreen } from "./screens/ConnectScreen";
+import { AuthStatus, SignInScreen } from "./auth/AuthScreens";
+import { clearWorkspace, readWorkspaceId, saveWorkspace } from "./connection/connection";
 import { OpenWorkspaceScreen } from "./screens/OpenWorkspaceScreen";
 import { realtimeCollabEnabled } from "./realtimeFlag";
 import { AppShell } from "./shell/AppShell";
-import { workspaceStore } from "./store/state";
 
 export type TestIdentity = {
 	userId: string;
 	name: string;
 };
 
-type Connection = {
-	url: string;
-	workspaceId: string | null;
-	testIdentity: TestIdentity | null;
-};
-
 const TEST_IDENTITY_STORAGE_KEY = "hubble.testIdentity";
 
-function initialConnection(): Connection | null {
-	const testConnection = readTestBootstrap();
-	if (testConnection) return testConnection;
-	const storedConnection = readConnection();
-	return storedConnection ? { ...storedConnection, testIdentity: null } : null;
-}
+// The product app talks to a single, build-time Convex deployment. The old
+// "paste your Convex URL" ConnectScreen is gone (A1a). The test bootstrap url is
+// a dev fallback so ?test=1 keeps working when only VITE_TEST_CONVEX_URL is set.
+const CONVEX_URL =
+	import.meta.env.VITE_CONVEX_URL ?? import.meta.env.VITE_TEST_CONVEX_URL ?? "";
 
-// Agent test bootstrap: navigating to /?test=1 skips the connect + workspace
-// screens by reading VITE_TEST_CONVEX_URL / VITE_TEST_WORKSPACE_ID from
-// apps/www/.env.local. Without the query param the env vars are inert, so
-// human dev sessions are unaffected.
-function readTestBootstrap(): Connection | null {
-	const params = new URLSearchParams(window.location.search);
-	if (params.get("test") !== "1") return null;
-	const url = import.meta.env.VITE_TEST_CONVEX_URL;
-	const workspaceId = import.meta.env.VITE_TEST_WORKSPACE_ID;
-	if (!url || !workspaceId) {
-		console.warn(
-			"?test=1 set but VITE_TEST_CONVEX_URL / VITE_TEST_WORKSPACE_ID are missing — falling back to normal routing.",
-		);
-		return null;
-	}
-	return { url, workspaceId, testIdentity: readTestIdentity(params) };
-}
+const convexClient = CONVEX_URL ? new ConvexReactClient(CONVEX_URL) : null;
 
 export default function App() {
+	if (!convexClient) {
+		return <AuthStatus message="VITE_CONVEX_URL is not configured." />;
+	}
 	return (
-		<BrowserRouter>
-			<AppRoutes />
-		</BrowserRouter>
+		<ConvexAuthProvider client={convexClient}>
+			<BrowserRouter>
+				<AppRoutes />
+			</BrowserRouter>
+		</ConvexAuthProvider>
 	);
 }
 
 function AppRoutes() {
-	const [connection, setConnection] = useState<Connection | null>(
-		initialConnection,
+	// ?test=1 stays an anonymous bypass for the realtime POC (see A3 — replaced by
+	// real signed-in presence in a later phase). Everything else is auth-gated.
+	const [testIdentity, setTestIdentity] = useState<TestIdentity | null>(
+		readTestIdentity,
 	);
+
+	if (isTestBootstrap()) {
+		if (!testIdentity) {
+			return (
+				<TestIdentityGate
+					onSelected={(identity) => {
+						writeTestIdentity(identity);
+						setTestIdentity(identity);
+					}}
+				/>
+			);
+		}
+		return <RoutedApp testIdentity={testIdentity} />;
+	}
+
+	return (
+		<>
+			<AuthLoading>
+				<AuthStatus message="Checking session…" />
+			</AuthLoading>
+			<Unauthenticated>
+				<SignInScreen />
+			</Unauthenticated>
+			<Authenticated>
+				<RoutedApp testIdentity={null} />
+			</Authenticated>
+		</>
+	);
+}
+
+function RoutedApp({ testIdentity }: { testIdentity: TestIdentity | null }) {
 	const navigate = useNavigate();
-	const location = useLocation();
-
-	const handleDisconnect = () => {
-		disconnect();
-		setConnection(null);
-		navigate("/", { replace: true });
-	};
-
-	const handleConnected = (url: string) => {
-		setConnection({
-			url,
-			workspaceId: getWorkspaceIdFromPath(location.pathname),
-			testIdentity: null,
-		});
-	};
-
-	const handleWorkspaceLoaded = (workspaceId: string) => {
-		setConnection((current) =>
-			current ? { ...current, workspaceId } : current,
-		);
-	};
-
-	const handleTestIdentitySelected = (identity: TestIdentity) => {
-		writeTestIdentity(identity);
-		setConnection((current) =>
-			current ? { ...current, testIdentity: identity } : current,
-		);
-	};
-
 	return (
 		<Routes>
 			<Route
 				path="/"
 				element={
 					<HomeRoute
-						connection={connection}
-						onConnected={handleConnected}
+						testIdentity={testIdentity}
 						onSelected={(workspaceId) => {
-							handleWorkspaceLoaded(workspaceId);
-							navigate(workspaceRoute(workspaceId));
+							navigate(withTestSearch(workspaceRoute(workspaceId)));
 						}}
-						onTestIdentitySelected={handleTestIdentitySelected}
-						onDisconnect={handleDisconnect}
 					/>
 				}
 			/>
 			<Route
 				path="/w/:workspaceId"
-				element={
-					<WorkspaceRoute
-						connection={connection}
-						filePath={null}
-						onConnected={handleConnected}
-						onTestIdentitySelected={handleTestIdentitySelected}
-						onWorkspaceLoaded={handleWorkspaceLoaded}
-						onDisconnect={handleDisconnect}
-					/>
-				}
+				element={<WorkspaceRoute testIdentity={testIdentity} filePath={null} />}
 			/>
 			<Route
 				path="/w/:workspaceId/f/*"
-				element={
-					<WorkspaceRoute
-						connection={connection}
-						onConnected={handleConnected}
-						onTestIdentitySelected={handleTestIdentitySelected}
-						onWorkspaceLoaded={handleWorkspaceLoaded}
-						onDisconnect={handleDisconnect}
-					/>
-				}
+				element={<WorkspaceRoute testIdentity={testIdentity} />}
 			/>
 			{realtimeCollabEnabled ? (
 				<Route
 					path="/w/:workspaceId/d/:documentId"
 					element={
-						<WorkspaceRoute
-							connection={connection}
-							filePath={null}
-							onConnected={handleConnected}
-							onTestIdentitySelected={handleTestIdentitySelected}
-							onWorkspaceLoaded={handleWorkspaceLoaded}
-							onDisconnect={handleDisconnect}
-						/>
+						<WorkspaceRoute testIdentity={testIdentity} filePath={null} />
 					}
 				/>
 			) : null}
@@ -158,64 +121,38 @@ function AppRoutes() {
 }
 
 function HomeRoute({
-	connection,
-	onConnected,
+	testIdentity,
 	onSelected,
-	onTestIdentitySelected,
-	onDisconnect,
 }: {
-	connection: Connection | null;
-	onConnected: (url: string) => void;
+	testIdentity: TestIdentity | null;
 	onSelected: (workspaceId: string) => void;
-	onTestIdentitySelected: (identity: TestIdentity) => void;
-	onDisconnect: () => void;
 }) {
-	if (!connection) {
-		return <ConnectScreen onConnected={onConnected} />;
+	// Test bootstrap jumps straight to the configured workspace.
+	if (testIdentity) {
+		const workspaceId = import.meta.env.VITE_TEST_WORKSPACE_ID;
+		if (workspaceId) {
+			return (
+				<Navigate to={withTestSearch(workspaceRoute(workspaceId))} replace />
+			);
+		}
 	}
 
-	if (connection.workspaceId && !connection.testIdentity && isTestBootstrap()) {
-		return <TestIdentityGate onSelected={onTestIdentitySelected} />;
+	// Returning users go to their last workspace; otherwise pick/create one
+	// (auto-selects when the auto-provisioned personal workspace is the only one).
+	const lastWorkspaceId = readWorkspaceId();
+	if (lastWorkspaceId) {
+		return <Navigate to={workspaceRoute(lastWorkspaceId)} replace />;
 	}
 
-	if (connection.workspaceId) {
-		const lastOpenedPath =
-			workspaceStore.get().lastOpenedPaths[connection.workspaceId];
-		return (
-			<Navigate
-				to={
-					lastOpenedPath
-						? workspaceFileRoute(connection.workspaceId, lastOpenedPath)
-						: workspaceRoute(connection.workspaceId)
-				}
-				replace
-			/>
-		);
-	}
-
-	return (
-		<OpenWorkspaceScreen
-			url={connection.url}
-			onSelected={onSelected}
-			onDisconnect={onDisconnect}
-		/>
-	);
+	return <OpenWorkspaceScreen onSelected={onSelected} />;
 }
 
 function WorkspaceRoute({
-	connection,
+	testIdentity,
 	filePath,
-	onConnected,
-	onTestIdentitySelected,
-	onWorkspaceLoaded,
-	onDisconnect,
 }: {
-	connection: Connection | null;
+	testIdentity: TestIdentity | null;
 	filePath?: string | null;
-	onConnected: (url: string) => void;
-	onTestIdentitySelected: (identity: TestIdentity) => void;
-	onWorkspaceLoaded: (workspaceId: string) => void;
-	onDisconnect: () => void;
 }) {
 	const params = useParams();
 	const navigate = useNavigate();
@@ -226,33 +163,30 @@ function WorkspaceRoute({
 
 	if (!workspaceId) return <Navigate to="/" replace />;
 
-	if (!connection) {
-		return <ConnectScreen onConnected={onConnected} />;
-	}
-
-	if (!connection.testIdentity && isTestBootstrap()) {
-		return <TestIdentityGate onSelected={onTestIdentitySelected} />;
-	}
-
 	return (
 		<AppShell
-			url={connection.url}
+			url={CONVEX_URL}
 			workspaceId={workspaceId}
 			filePath={routeFilePath}
 			documentId={documentId}
-			testIdentity={connection.testIdentity}
+			testIdentity={testIdentity}
 			onSelectFile={(path) => {
-				navigate(workspaceFileRoute(workspaceId, path));
+				navigate(withTestSearch(workspaceFileRoute(workspaceId, path)));
 			}}
 			onSelectDocument={(id) => {
 				if (!realtimeCollabEnabled) return;
-				navigate(workspaceDocumentRoute(workspaceId, id));
+				navigate(withTestSearch(workspaceDocumentRoute(workspaceId, id)));
 			}}
 			onSwitch={(id) => {
-				navigate(workspaceRoute(id));
+				navigate(withTestSearch(workspaceRoute(id)));
 			}}
-			onWorkspaceLoaded={onWorkspaceLoaded}
-			onDisconnect={onDisconnect}
+			onWorkspaceLoaded={(id) => {
+				saveWorkspace(id);
+			}}
+			onDisconnect={() => {
+				clearWorkspace();
+				navigate("/");
+			}}
 		/>
 	);
 }
@@ -275,16 +209,20 @@ function workspaceDocumentRoute(
 	return `${workspaceRoute(workspaceId)}/d/${encodeURIComponent(documentId)}`;
 }
 
-function getWorkspaceIdFromPath(pathname: string): string | null {
-	const match = /^\/w\/([^/]+)/.exec(pathname);
-	return match ? decodeURIComponent(match[1]) : null;
-}
-
 function isTestBootstrap(): boolean {
 	return new URLSearchParams(window.location.search).get("test") === "1";
 }
 
-function readTestIdentity(params: URLSearchParams): TestIdentity | null {
+// In test-bootstrap mode, re-attach the current query string (?test=1&testUser=…)
+// to in-app navigation targets so the address-bar URL stays copy-pasteable into
+// a second browser/machine. Outside test mode this is a no-op.
+function withTestSearch(path: string): string {
+	if (!isTestBootstrap()) return path;
+	return `${path}${window.location.search}`;
+}
+
+function readTestIdentity(): TestIdentity | null {
+	const params = new URLSearchParams(window.location.search);
 	const queryName = params.get("testUser")?.trim();
 	if (queryName) {
 		const identity = identityFromName(queryName);
