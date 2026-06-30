@@ -34,6 +34,7 @@ const LIVE_DOCUMENT_MARKDOWN_MAX_BYTES = 256 * 1024;
 const textEncoder = new TextEncoder();
 
 type DocumentRole = "owner" | "editor" | "commenter" | "viewer";
+type WorkspaceRole = "owner" | "admin" | "member";
 type LinkScope = "workspace" | "public";
 type PatchIntent =
 	| { kind: "replace-document"; markdown: string }
@@ -682,6 +683,105 @@ function searchSnippet(markdown: string, query: string): string {
 	return markdown.slice(start, end).trim();
 }
 
+async function accessibleWorkspaces(ctx: QueryCtx): Promise<
+	Array<{
+		_id: Id<"workspaces">;
+		name: string;
+		personal?: boolean;
+		createdAt: number;
+		role: WorkspaceRole;
+	}>
+> {
+	const userId = await getAuthUserId(ctx);
+	if (!userId) return [];
+
+	const workspaces = await ctx.db.query("workspaces").collect();
+	const memberships = await ctx.db
+		.query("members")
+		.withIndex("by_user", (q) => q.eq("userId", userId))
+		.collect();
+	const membershipByWorkspace = new Map(
+		memberships.map((member) => [member.workspaceId, member.role]),
+	);
+
+	return workspaces
+		.map((workspace) => {
+			const membershipRole = membershipByWorkspace.get(workspace._id);
+			const role =
+				workspace.ownerId === userId
+					? "owner"
+					: membershipRole !== undefined
+						? membershipRole
+						: null;
+			if (role === null) return null;
+			return {
+				_id: workspace._id,
+				name: workspace.name,
+				personal: workspace.personal,
+				createdAt: workspace.createdAt,
+				role,
+			};
+		})
+		.filter((workspace) => workspace !== null);
+}
+
+async function readableWorkspaceDocuments(
+	ctx: QueryCtx,
+	workspaces: Awaited<ReturnType<typeof accessibleWorkspaces>>,
+) {
+	const results = [];
+	for (const workspace of workspaces) {
+		const documents = await ctx.db
+			.query("documents")
+			.withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
+			.collect();
+		for (const document of documents) {
+			if (document.deletedAt !== undefined) continue;
+			const role = await documentRole(ctx, document._id);
+			if (role === null) continue;
+			results.push({
+				...document,
+				workspaceName: workspace.name,
+				workspacePersonal: workspace.personal === true,
+				role,
+				canWrite: canWriteRole(role),
+			});
+		}
+	}
+	return results;
+}
+
+async function directSharedDocuments(ctx: QueryCtx) {
+	const userId = await getAuthUserId(ctx);
+	if (!userId) return [];
+
+	const shares = await ctx.db
+		.query("docShares")
+		.withIndex("by_user", (q) => q.eq("userId", userId))
+		.collect();
+	const results = [];
+	for (const share of shares) {
+		const document = await ctx.db.get(share.documentId);
+		if (!document || document.deletedAt !== undefined) continue;
+
+		const wsRole = await workspaceRole(ctx, document.workspaceId);
+		if (wsRole !== null) continue;
+
+		const role = await documentRole(ctx, document._id);
+		if (role === null) continue;
+		const workspace = await ctx.db.get(document.workspaceId);
+		if (!workspace) continue;
+		results.push({
+			...document,
+			workspaceName: workspace.name,
+			workspacePersonal: workspace.personal === true,
+			role,
+			canWrite: canWriteRole(role),
+		});
+	}
+	return results;
+}
+
 function mentionTokens(body: string): string[] {
 	const matches = body.matchAll(/@([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+|\w+)/g);
 	return [
@@ -1077,48 +1177,94 @@ export const listWithMarkdown = query({
 export const listSharedWithMe = query({
 	args: {},
 	handler: async (ctx) => {
-		const userId = await getAuthUserId(ctx);
-		if (!userId) return [];
-
-		// Fetch all direct user-share rows for this user via the new by_user index.
-		// Link-scope shares (workspace / public) have userId = undefined and are
-		// excluded automatically by the index equality match.
-		const shares = await ctx.db
-			.query("docShares")
-			.withIndex("by_user", (q) => q.eq("userId", userId))
-			.collect();
-
 		const results = [];
-		for (const share of shares) {
-			const document = await ctx.db.get(share.documentId);
-			// Filter out non-existent or trashed documents, consistent with listWithMarkdown.
-			if (!document || document.deletedAt !== undefined) continue;
-
-			// Only include documents from workspaces the user is NOT a member of.
-			// Workspace members already receive these documents through listWithMarkdown;
-			// returning them here too would cause double-listing in the Shared-with-me area.
-			const wsRole = await workspaceRole(ctx, document.workspaceId);
-			if (wsRole !== null) continue;
-
+		for (const document of await directSharedDocuments(ctx)) {
 			const projection = await projectMarkdown(ctx, document._id);
-			const role = await documentRole(ctx, document._id);
-			// documentRole resolves the share row we already know exists, so null
-			// would be a data-integrity anomaly; skip to be safe.
-			if (role === null) continue;
-			const workspace = await ctx.db.get(document.workspaceId);
-			if (!workspace) continue;
-
 			results.push({
 				...document,
-				workspaceName: workspace.name,
 				markdown: projection.markdown,
 				version: projection.version,
-				role,
-				canWrite: canWriteRole(role),
 			});
 		}
+		return results.sort((a, b) => b.updatedAt - a.updatedAt);
+	},
+});
 
-		// Return newest-first, matching listWithMarkdown's sort order.
+export const dashboard = query({
+	args: {
+		recentLimit: v.optional(v.number()),
+		sharedLimit: v.optional(v.number()),
+	},
+	handler: async (ctx, { recentLimit, sharedLimit }) => {
+		const workspaces = await accessibleWorkspaces(ctx);
+		const workspaceDocuments = await readableWorkspaceDocuments(
+			ctx,
+			workspaces,
+		);
+		const sharedWithMe = await directSharedDocuments(ctx);
+		const allDocuments = [...workspaceDocuments, ...sharedWithMe].sort(
+			(a, b) => b.updatedAt - a.updatedAt,
+		);
+		const maxRecents = Math.max(1, Math.min(recentLimit ?? 8, 24));
+		const maxShared = Math.max(1, Math.min(sharedLimit ?? 6, 24));
+
+		return {
+			workspaces: workspaces.sort((a, b) => {
+				if (a.personal !== b.personal) return a.personal ? -1 : 1;
+				return a.name.localeCompare(b.name);
+			}),
+			recents: allDocuments.slice(0, maxRecents),
+			sharedWithMe: sharedWithMe
+				.sort((a, b) => b.updatedAt - a.updatedAt)
+				.slice(0, maxShared),
+		};
+	},
+});
+
+export const searchAll = query({
+	args: {
+		query: v.string(),
+		limit: v.optional(v.number()),
+	},
+	handler: async (ctx, { query, limit }) => {
+		const needle = query.trim().toLowerCase();
+		if (!needle) return [];
+
+		const workspaces = await accessibleWorkspaces(ctx);
+		const workspaceDocuments = await readableWorkspaceDocuments(
+			ctx,
+			workspaces,
+		);
+		const sharedWithMe = await directSharedDocuments(ctx);
+		const documentsById = new Map(
+			[...workspaceDocuments, ...sharedWithMe].map((document) => [
+				document._id,
+				document,
+			]),
+		);
+		const maxResults = Math.max(1, Math.min(limit ?? 20, 50));
+		const results = [];
+
+		for (const document of documentsById.values()) {
+			const projection = await projectMarkdown(ctx, document._id);
+			const haystack = `${document.title}\n${document.path ?? ""}\n${document.workspaceName}\n${projection.markdown}`;
+			if (!haystack.toLowerCase().includes(needle)) continue;
+			results.push({
+				documentId: document._id,
+				workspaceId: document.workspaceId,
+				workspaceName: document.workspaceName,
+				title: document.title,
+				path: document.path,
+				updatedAt: document.updatedAt,
+				updatedBy: document.updatedBy,
+				revision: projection.version ?? 0,
+				role: document.role,
+				canWrite: document.canWrite,
+				snippet: searchSnippet(projection.markdown, query.trim()),
+			});
+			if (results.length >= maxResults) break;
+		}
+
 		return results.sort((a, b) => b.updatedAt - a.updatedAt);
 	},
 });

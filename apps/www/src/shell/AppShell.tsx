@@ -430,6 +430,7 @@ function LiveDocumentView({
 	const suggestions = useQuery(api.documents.listSuggestions, {
 		documentId: documentId as Id<"documents">,
 	});
+	const currentViewer = useQuery(api.viewer.me, testIdentity ? "skip" : {});
 	const markEdited = useMutation(api.documents.markEdited);
 	const lastEditMarkRef = useRef(0);
 	const pendingSuggestions =
@@ -443,7 +444,7 @@ function LiveDocumentView({
 		lastEditMarkRef.current = now;
 		void markEdited({
 			documentId: documentId as Id<"documents">,
-			actor: testIdentity?.name ?? "Local collaborator",
+			actor: testIdentity?.name,
 		});
 	}, [documentId, markEdited, testIdentity?.name]);
 
@@ -479,13 +480,12 @@ function LiveDocumentView({
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			{testIdentity && (
-				<LivePocIdentityBar
-					workspaceId={workspaceId}
-					docId={syncDocId}
-					identity={testIdentity}
-				/>
-			)}
+			<LivePresenceBar
+				workspaceId={workspaceId}
+				docId={syncDocId}
+				testIdentity={testIdentity}
+				currentViewer={currentViewer}
+			/>
 			<div className="border-b border-border bg-muted/30">
 				<div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground [padding-block:0.5rem] [padding-inline:0.75rem]">
 					<span className="font-medium text-foreground">{document.title}</span>
@@ -1017,19 +1017,58 @@ function LivePocIdentityBar({
 		() => providedDocId ?? `poc:${workspaceId}:${path ?? ""}`,
 		[providedDocId, workspaceId, path],
 	);
+	return (
+		<LivePresenceBar
+			workspaceId={workspaceId}
+			docId={docId}
+			testIdentity={identity}
+			currentViewer={null}
+		/>
+	);
+}
+
+function LivePresenceBar({
+	workspaceId,
+	docId,
+	testIdentity,
+	currentViewer,
+}: {
+	workspaceId: string;
+	docId: string;
+	testIdentity: TestIdentity | null;
+	currentViewer:
+		| {
+				_id: Id<"users">;
+				name?: string;
+				email?: string;
+		  }
+		| null
+		| undefined;
+}) {
 	const convexWorkspaceId = workspaceId as Id<"workspaces">;
 	const heartbeat = useMutation(api.pocIdentity.heartbeat);
 	const activeUsers = useQuery(api.pocIdentity.listActive, { docId });
+	const currentUserId = testIdentity?.userId ?? currentViewer?._id;
+	const currentName =
+		testIdentity?.name ??
+		currentViewer?.name ??
+		currentViewer?.email ??
+		"Collaborator";
 
 	useEffect(() => {
 		let cancelled = false;
 		const beat = () => {
 			if (cancelled) return;
-			void heartbeat({
-				workspaceId: convexWorkspaceId,
-				docId,
-				userId: identity.userId,
-				name: identity.name,
+			const payload = testIdentity
+				? {
+						workspaceId: convexWorkspaceId,
+						docId,
+						userId: testIdentity.userId,
+						name: testIdentity.name,
+					}
+				: { workspaceId: convexWorkspaceId, docId };
+			void heartbeat(payload).catch((error) => {
+				console.error("Presence heartbeat failed:", error);
 			});
 		};
 		beat();
@@ -1038,16 +1077,20 @@ function LivePocIdentityBar({
 			cancelled = true;
 			window.clearInterval(interval);
 		};
-	}, [convexWorkspaceId, docId, heartbeat, identity.name, identity.userId]);
+	}, [convexWorkspaceId, docId, heartbeat, testIdentity]);
 
 	const collaborators = activeUsers?.map((user) =>
-		user.userId === identity.userId ? `${user.name} (you)` : user.name,
-	) ?? [`${identity.name} (you)`];
+		user.userId === currentUserId ? `${user.name} (you)` : user.name,
+	) ?? [`${currentName} (you)`];
 
 	return (
 		<div className="border-b border-border bg-muted/40">
 			<div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground [padding-block:0.5rem] [padding-inline:0.75rem]">
-				<span>POC identity: {identity.name}</span>
+				<span>
+					{testIdentity
+						? `POC identity: ${testIdentity.name}`
+						: "Live presence"}
+				</span>
 				<span>{collaborators.join(", ")}</span>
 			</div>
 		</div>

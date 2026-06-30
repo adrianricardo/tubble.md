@@ -15,9 +15,14 @@ import {
 	useParams,
 } from "react-router";
 import { AuthStatus, SignInScreen } from "./auth/AuthScreens";
-import { clearWorkspace, readWorkspaceId, saveWorkspace } from "./connection/connection";
-import { OpenWorkspaceScreen } from "./screens/OpenWorkspaceScreen";
+import {
+	clearWorkspace,
+	readWorkspaceId,
+	saveWorkspace,
+} from "./connection/connection";
 import { realtimeCollabEnabled } from "./realtimeFlag";
+import { DashboardScreen } from "./screens/DashboardScreen";
+import { OpenWorkspaceScreen } from "./screens/OpenWorkspaceScreen";
 import { AppShell } from "./shell/AppShell";
 
 export type TestIdentity = {
@@ -96,6 +101,11 @@ function RoutedApp({ testIdentity }: { testIdentity: TestIdentity | null }) {
 						onSelected={(workspaceId) => {
 							navigate(withTestSearch(workspaceRoute(workspaceId)));
 						}}
+						onOpenDocument={(workspaceId, documentId) => {
+							navigate(
+								withTestSearch(workspaceDocumentRoute(workspaceId, documentId)),
+							);
+						}}
 					/>
 				}
 			/>
@@ -123,9 +133,11 @@ function RoutedApp({ testIdentity }: { testIdentity: TestIdentity | null }) {
 function HomeRoute({
 	testIdentity,
 	onSelected,
+	onOpenDocument,
 }: {
 	testIdentity: TestIdentity | null;
 	onSelected: (workspaceId: string) => void;
+	onOpenDocument: (workspaceId: string, documentId: string) => void;
 }) {
 	// Test bootstrap jumps straight to the configured workspace.
 	if (testIdentity) {
@@ -137,8 +149,17 @@ function HomeRoute({
 		}
 	}
 
-	// Returning users go to their last workspace; otherwise pick/create one
-	// (auto-selects when the auto-provisioned personal workspace is the only one).
+	if (realtimeCollabEnabled) {
+		return (
+			<DashboardScreen
+				onOpenDocument={onOpenDocument}
+				onOpenWorkspace={onSelected}
+			/>
+		);
+	}
+
+	// Legacy flag-off flow: returning users go to their last workspace; otherwise
+	// pick/create one.
 	const lastWorkspaceId = readWorkspaceId();
 	if (lastWorkspaceId) {
 		return <Navigate to={workspaceRoute(lastWorkspaceId)} replace />;

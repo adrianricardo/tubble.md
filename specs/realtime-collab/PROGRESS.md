@@ -196,7 +196,14 @@ landed locally 2026-06-29**: `OPERATIONS.md` now records the vendor-neutral
 support workflow, escalation thresholds, safe user actions, and future alert
 wiring points for the local synced-folder telemetry.
 
-**Current pickup state:** RD1-RD12 are landed locally. There is no unchecked
+**Current pickup state:** V1 release execution is continuing from
+`V1-EXECUTION.plan.md`. **P4 Production presence landed locally 2026-06-30**:
+signed-in presence/cursors now derive identity from Convex Auth, authorize through
+document/workspace permissions, show active collaborators in Live Documents, and
+preserve the `?test=1` anonymous bootstrap path. Next phase: **P5 Completeness**
+(version auto-snapshot, @mention picker, member-management UI, onboarding).
+
+Prior RD pickup state: RD1-RD12 are landed locally. There is no unchecked
 ready-to-deploy slice left in this plan. The remaining named follow-ups are
 operator/product-choice gated: external monitoring sink selection, packaged MCP
 integration publication, production notarization/release tag, production backfill
@@ -926,6 +933,25 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-06-30 — Codex — Continued V1 release P4 production presence: authenticated
+  presence heartbeats now derive the viewer identity server-side, authorize Live
+  Document presence through document roles and POC presence through workspace
+  membership, return stable collaborator colors, and reject anonymous spoofing for
+  owned documents. The web editor now publishes signed-in cursor heartbeats,
+  filters the local viewer through `viewer.me`, and shows live collaborators in
+  the Live Document header while preserving `?test=1` identity bootstrap. Added
+  focused presence regression tests. Verified codegen, sync-backend tests, web
+  typecheck/build, repo typecheck, desktop build, and touched-file Biome; browser
+  visual smoke remains blocked by the in-app browser tool initialization error.
+- 2026-06-30 — Codex — Continued V1 release P3 dashboard: added
+  `documents.dashboard` and `documents.searchAll` aggregate queries spanning
+  accessible personal/team workspaces plus direct document shares; added the
+  authenticated Home dashboard with Recents, Private, Teams, Shared with me,
+  global search, and primary Live Document creation. Added a backend dashboard
+  aggregation regression test and removed an unused `members.ts` validator that
+  blocked `pnpm build:desktop`. Verified codegen, backend tests, web
+  typecheck/build, repo typecheck, desktop build, and touched-file Biome; browser
+  visual smoke remains owed because the in-app browser tool failed to initialize.
 - 2026-06-29 — Codex — Fixed a desktop Cloud Sync connection blocker found during
   the two-machine smoke setup: authenticated `sync.listWorkspaces` results now
   exclude legacy anonymous workspaces that downstream workspace-member checks

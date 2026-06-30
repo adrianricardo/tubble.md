@@ -79,3 +79,101 @@ describe("setUserShareByEmail", () => {
 		expect(shares).toHaveLength(0);
 	});
 });
+
+describe("dashboard", () => {
+	test("returns owned/team recents plus direct shares outside member workspaces", async () => {
+		const t = convexTest(schema, modules);
+		const { ownerId, memberId, sharedWorkspaceId, sharedDocumentId } =
+			await t.run(async (ctx) => {
+				const ownerId = await ctx.db.insert("users", {
+					email: "owner@example.com",
+					name: "Owner",
+				});
+				const memberId = await ctx.db.insert("users", {
+					email: "member@example.com",
+					name: "Member",
+				});
+				const personalWorkspaceId = await ctx.db.insert("workspaces", {
+					name: "Owner's space",
+					ownerId,
+					personal: true,
+					createdAt: 1,
+				});
+				const teamWorkspaceId = await ctx.db.insert("workspaces", {
+					name: "Team",
+					ownerId,
+					createdAt: 2,
+				});
+				await ctx.db.insert("members", {
+					workspaceId: teamWorkspaceId,
+					userId: ownerId,
+					role: "owner",
+					createdAt: 2,
+				});
+				await ctx.db.insert("documents", {
+					workspaceId: personalWorkspaceId,
+					title: "Private Doc",
+					createdAt: 10,
+					updatedAt: 10,
+				});
+				await ctx.db.insert("documents", {
+					workspaceId: teamWorkspaceId,
+					title: "Team Doc",
+					createdAt: 20,
+					updatedAt: 20,
+				});
+
+				const sharedWorkspaceId = await ctx.db.insert("workspaces", {
+					name: "Partner",
+					ownerId: memberId,
+					createdAt: 3,
+				});
+				const sharedDocumentId = await ctx.db.insert("documents", {
+					workspaceId: sharedWorkspaceId,
+					title: "Shared Doc",
+					createdAt: 30,
+					updatedAt: 30,
+				});
+				await ctx.db.insert("docShares", {
+					documentId: sharedDocumentId,
+					userId: ownerId,
+					role: "viewer",
+					createdAt: 30,
+					updatedAt: 30,
+				});
+
+				return { ownerId, memberId, sharedWorkspaceId, sharedDocumentId };
+			});
+
+		const result = await asUser(t, ownerId).query(api.documents.dashboard, {
+			recentLimit: 10,
+			sharedLimit: 10,
+		});
+
+		expect(result.workspaces.map((workspace) => workspace.name)).toEqual([
+			"Owner's space",
+			"Team",
+		]);
+		expect(result.recents.map((document) => document.title)).toEqual([
+			"Shared Doc",
+			"Team Doc",
+			"Private Doc",
+		]);
+		expect(result.sharedWithMe).toHaveLength(1);
+		expect(result.sharedWithMe[0]).toMatchObject({
+			_id: sharedDocumentId,
+			workspaceId: sharedWorkspaceId,
+			workspaceName: "Partner",
+			role: "viewer",
+		});
+
+		const otherResult = await asUser(t, memberId).query(
+			api.documents.dashboard,
+			{},
+		);
+		expect(otherResult.sharedWithMe).toHaveLength(0);
+		expect(otherResult.recents.map((document) => document.title)).toEqual([
+			"Shared Doc",
+		]);
+	});
+});

@@ -3,8 +3,8 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import {
 	type MutationCtx,
-	type QueryCtx,
 	mutation,
+	type QueryCtx,
 	query,
 } from "./_generated/server";
 import {
@@ -17,13 +17,6 @@ const workspaceRoleValidator = v.union(
 	v.literal("owner"),
 	v.literal("admin"),
 	v.literal("member"),
-);
-
-const documentRoleValidator = v.union(
-	v.literal("owner"),
-	v.literal("editor"),
-	v.literal("commenter"),
-	v.literal("viewer"),
 );
 
 type AnyCtx = MutationCtx | QueryCtx;
@@ -363,9 +356,7 @@ export const listWorkspaceInvites = query({
 		await requireWorkspaceManage(ctx, workspaceId);
 		return ctx.db
 			.query("invites")
-			.withIndex("by_workspace_email", (q) =>
-				q.eq("workspaceId", workspaceId),
-			)
+			.withIndex("by_workspace_email", (q) => q.eq("workspaceId", workspaceId))
 			.collect();
 	},
 });
