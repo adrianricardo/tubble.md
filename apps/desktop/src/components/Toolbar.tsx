@@ -33,10 +33,12 @@ export function Toolbar({
 	scrollContainer,
 	showSidebarBadge = false,
 	leftSlot,
+	sessionSlot,
 }: {
 	scrollContainer: HTMLDivElement | null;
 	showSidebarBadge?: boolean;
 	leftSlot?: ReactNode;
+	sessionSlot?: ReactNode;
 }) {
 	const workspacePath = useStoreValue(workspacePathStore);
 	const sidebarOpen = useStoreValue(sidebarOpenStore);
@@ -57,9 +59,12 @@ export function Toolbar({
 				void renameCurrentMarkdownFile(nextName)
 			}
 			rightSlot={
-				workspacePath && currentPath ? (
-					<NoteActionsMenu path={currentPath} />
-				) : undefined
+				<div className="flex items-center justify-end gap-1">
+					{sessionSlot}
+					{workspacePath && currentPath ? (
+						<NoteActionsMenu path={currentPath} />
+					) : null}
+				</div>
 			}
 		/>
 	);

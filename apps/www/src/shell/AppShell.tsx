@@ -3,7 +3,7 @@ import { createConvexSubscriber } from "@hubble.md/convex-client";
 import { withMarkdownExtension } from "@hubble.md/editor";
 import { api } from "@hubble.md/sync-backend";
 import type { Id } from "@hubble.md/sync-backend/types";
-import { AppShellFrame, Modal } from "@hubble.md/ui";
+import { AppShellFrame, Modal, UserBadge } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -340,6 +340,7 @@ function AppShellContent({
 					sessionSlot={
 						<div className="flex items-center gap-1">
 							<WorkspaceMembersButton workspaceId={workspace.snapshot.id} />
+							<CurrentUserBadge testIdentity={testIdentity} />
 							{!testIdentity ? <SignOutButton /> : undefined}
 						</div>
 					}
@@ -458,6 +459,19 @@ function AppShellContent({
 				)}
 		</AppShellFrame>
 	);
+}
+
+function CurrentUserBadge({
+	testIdentity,
+}: {
+	testIdentity: TestIdentity | null;
+}) {
+	const viewer = useQuery(api.viewer.me, testIdentity ? "skip" : {});
+	if (testIdentity) {
+		return <UserBadge user={{ name: testIdentity.name }} />;
+	}
+	if (!viewer) return null;
+	return <UserBadge user={viewer} />;
 }
 
 function LiveDocumentAccessError({ error }: { error: Error }) {

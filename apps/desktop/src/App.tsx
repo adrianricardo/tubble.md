@@ -1,7 +1,7 @@
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { wikiDisplayNameForTarget } from "@hubble.md/editor";
 import { api } from "@hubble.md/sync-backend";
-import { Button, EditorView, type WikiTarget } from "@hubble.md/ui";
+import { Button, EditorView, UserBadge, type WikiTarget } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
 import {
 	Authenticated,
@@ -407,6 +407,7 @@ function AppContent() {
 				leftSlot={
 					cloudEnabled ? <CloudCreateButton /> : <LocalFileCreateButton />
 				}
+				sessionSlot={cloudEnabled ? <DesktopUserBadge /> : undefined}
 			/>
 			<div className="flex min-h-0 flex-1 overflow-hidden">
 				<Sidebar
@@ -525,6 +526,25 @@ function CloudCreateButton() {
 			</Authenticated>
 		</>
 	);
+}
+
+function DesktopUserBadge() {
+	return (
+		<>
+			<AuthLoading>
+				<div className="h-7 w-28 rounded-sm border border-border bg-muted/40" />
+			</AuthLoading>
+			<Authenticated>
+				<AuthenticatedDesktopUserBadge />
+			</Authenticated>
+		</>
+	);
+}
+
+function AuthenticatedDesktopUserBadge() {
+	const viewer = useQuery(api.viewer.me, {});
+	if (!viewer) return null;
+	return <UserBadge user={viewer} />;
 }
 
 function AuthenticatedCloudCreateButton() {

@@ -26,7 +26,6 @@ export function DashboardScreen({ onOpenDocument, onOpenWorkspace }: Props) {
 	const [debouncedSearch, setDebouncedSearch] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const firstRunCreateRef = useRef(false);
 
 	useEffect(() => {
 		if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -51,30 +50,6 @@ export function DashboardScreen({ onOpenDocument, onOpenWorkspace }: Props) {
 	const createTarget = privateWorkspace ?? fallbackWorkspace;
 	const teams =
 		dashboard?.workspaces.filter((workspace) => !workspace.personal) ?? [];
-
-	useEffect(() => {
-		if (!dashboard || !privateWorkspace || firstRunCreateRef.current) return;
-		const hasReachableDocuments =
-			dashboard.recents.length > 0 || dashboard.sharedWithMe.length > 0;
-		if (hasReachableDocuments) return;
-		firstRunCreateRef.current = true;
-		setCreating(true);
-		setError(null);
-		void createDocument({
-			workspaceId: privateWorkspace._id,
-			title: "Welcome to Hubble",
-		})
-			.then((documentId) => {
-				onOpenDocument(privateWorkspace._id, documentId);
-			})
-			.catch((err) => {
-				setError(describeError(categorizeError(err)));
-				firstRunCreateRef.current = false;
-			})
-			.finally(() => {
-				setCreating(false);
-			});
-	}, [createDocument, dashboard, onOpenDocument, privateWorkspace]);
 
 	const handleCreate = async () => {
 		if (!createTarget) return;

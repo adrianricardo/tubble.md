@@ -222,6 +222,15 @@ local Markdown creation elsewhere. Verified focused Biome and `pnpm
 build:desktop`; Electron CDP smoke confirmed the primary create action and sidebar
 hierarchy in the running desktop renderer.
 
+**User/session + data reset follow-up landed locally 2026-07-01:** web and desktop
+now show the signed-in account in the main toolbar with a compact avatar/name/email
+badge. The web dashboard no longer auto-creates a "Welcome to Hubble" document so
+an empty cloud workspace can stay empty. Hosted dev deployment `strong-setter-709`
+was exported to `/tmp/hubble-convex-reset/strong-setter-709-before-reset.zip`,
+then reset: Live Documents, legacy files/assets, shares, folders, comments,
+revisions, notifications, presence, and ProseMirror component state were cleared;
+empty personal spaces were recreated for existing users.
+
 Prior RD pickup state: RD1-RD12 are landed locally. There is no unchecked
 ready-to-deploy slice left in this plan. The remaining named follow-ups are
 operator/product-choice gated: external monitoring sink selection, packaged MCP
@@ -952,6 +961,13 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-07-01 — Codex — Added a shared toolbar user badge and wired it into web
+  and desktop so the active account is visible from both surfaces. Removed the
+  web dashboard's automatic "Welcome to Hubble" document creation so fresh
+  workspaces can remain empty. Reset hosted dev deployment `strong-setter-709`
+  after exporting a snapshot backup: cleared Live Documents, connected workspace
+  content, shares, comments, revisions, presence, legacy sync rows, and
+  ProseMirror component state; recreated empty personal spaces for existing users.
 - 2026-07-01 — Codex — Implemented the desktop cloud-first IA plan: added
   Live Documents home/sidebar hierarchy in Convex-enabled desktop builds, kept
   local folders as optional synced/local Markdown support, made toolbar/Cmd+N
