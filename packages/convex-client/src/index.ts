@@ -95,7 +95,15 @@ export function createConvexBackend(
 			}));
 		},
 		async getSharedWithMe() {
-			const documents = await client.query(api.documents.listSharedWithMe, {});
+			// RB1 changed `listSharedWithMe` to a subtree shape (top-most shared
+			// folder nodes + per-document shares). RB4 will consume the nested
+			// structure; until then the desktop mirror stays flat, so flatten every
+			// subtree document plus the per-doc shares into the existing projection.
+			const shared = await client.query(api.documents.listSharedWithMe, {});
+			const documents = [
+				...shared.documents,
+				...shared.folders.flatMap((folder) => folder.documents),
+			];
 			return documents.map((document) => ({
 				_id: document._id,
 				workspaceId: document.workspaceId,

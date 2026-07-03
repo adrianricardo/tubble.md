@@ -33,10 +33,19 @@ export default defineSchema({
 		email: v.string(),
 		workspaceId: v.optional(v.id("workspaces")),
 		documentId: v.optional(v.id("documents")),
+		folderId: v.optional(v.id("folders")),
 		workspaceRole: v.optional(
 			v.union(v.literal("owner"), v.literal("admin"), v.literal("member")),
 		),
 		documentRole: v.optional(
+			v.union(
+				v.literal("owner"),
+				v.literal("editor"),
+				v.literal("commenter"),
+				v.literal("viewer"),
+			),
+		),
+		folderRole: v.optional(
 			v.union(
 				v.literal("owner"),
 				v.literal("editor"),
@@ -49,7 +58,8 @@ export default defineSchema({
 	})
 		.index("by_email", ["email"])
 		.index("by_workspace_email", ["workspaceId", "email"])
-		.index("by_document_email", ["documentId", "email"]),
+		.index("by_document_email", ["documentId", "email"])
+		.index("by_folder_email", ["folderId", "email"]),
 
 	launchSignupDays: defineTable({
 		day: v.string(),
@@ -88,6 +98,11 @@ export default defineSchema({
 		workspaceId: v.id("workspaces"),
 		parentId: v.optional(v.id("folders")),
 		name: v.string(),
+		// Repo-link display metadata (D11). The cloud stores only what the folder
+		// is anchored to for display; the local mount path is per-machine desktop
+		// config and is never stored in Convex.
+		repoName: v.optional(v.string()),
+		repoRemoteUrl: v.optional(v.string()),
 		createdBy: v.optional(v.string()),
 		createdAt: v.number(),
 		updatedAt: v.number(),
@@ -95,6 +110,29 @@ export default defineSchema({
 	})
 		.index("by_workspace", ["workspaceId", "updatedAt"])
 		.index("by_workspace_parent", ["workspaceId", "parentId"]),
+
+	// Folder-level ACL entries (D12, Google Drive semantics). A folder share is
+	// NOT a workspace membership; a role on a folder inherits down its subtree,
+	// resolved at authorization time in permissions.ts. `userId` XOR `linkScope`
+	// ("public" only — a workspace-scoped folder link adds nothing a member
+	// doesn't already have). Link shares are capped below owner in the mutations.
+	folderShares: defineTable({
+		folderId: v.id("folders"),
+		userId: v.optional(v.id("users")),
+		linkScope: v.optional(v.literal("public")),
+		role: v.union(
+			v.literal("owner"),
+			v.literal("editor"),
+			v.literal("commenter"),
+			v.literal("viewer"),
+		),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_folder", ["folderId"])
+		.index("by_folder_user", ["folderId", "userId"])
+		.index("by_folder_link", ["folderId", "linkScope"])
+		.index("by_user", ["userId"]),
 
 	docShares: defineTable({
 		documentId: v.id("documents"),

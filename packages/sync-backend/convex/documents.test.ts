@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import { register as registerProsemirrorSync } from "@convex-dev/prosemirror-sync/test";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api } from "./_generated/api";
@@ -6,6 +7,14 @@ import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
+
+// Register the prosemirror-sync component so markdown projection/patch paths
+// run in-process instead of throwing "Component ... is not registered".
+function testInstance() {
+	const t = convexTest(schema, modules);
+	registerProsemirrorSync(t);
+	return t;
+}
 
 function asUser(t: ReturnType<typeof convexTest>, userId: Id<"users">) {
 	return t.withIdentity({ subject: `${userId}|session` });
@@ -35,7 +44,7 @@ async function setupOwnedDocument(t: ReturnType<typeof convexTest>) {
 
 describe("setUserShareByEmail", () => {
 	test("known email creates a docShares row", async () => {
-		const t = convexTest(schema, modules);
+		const t = testInstance();
 		const { ownerId, documentId } = await setupOwnedDocument(t);
 		const targetId = await t.run((ctx) =>
 			ctx.db.insert("users", { email: "target@example.com" }),
@@ -59,7 +68,7 @@ describe("setUserShareByEmail", () => {
 	});
 
 	test("unknown email creates a document invite without throwing", async () => {
-		const t = convexTest(schema, modules);
+		const t = testInstance();
 		const { ownerId, documentId } = await setupOwnedDocument(t);
 
 		const result = await asUser(t, ownerId).mutation(
@@ -82,7 +91,7 @@ describe("setUserShareByEmail", () => {
 
 describe("dashboard", () => {
 	test("returns owned/team recents plus direct shares outside member workspaces", async () => {
-		const t = convexTest(schema, modules);
+		const t = testInstance();
 		const { ownerId, memberId, sharedWorkspaceId, sharedDocumentId } =
 			await t.run(async (ctx) => {
 				const ownerId = await ctx.db.insert("users", {
@@ -180,7 +189,7 @@ describe("dashboard", () => {
 
 describe("markEdited auto-snapshot", () => {
 	test("throttles autosave when a recent revision already exists", async () => {
-		const t = convexTest(schema, modules);
+		const t = testInstance();
 		const { ownerId, documentId } = await setupOwnedDocument(t);
 		await t.run((ctx) =>
 			ctx.db.insert("revisions", {
@@ -205,7 +214,7 @@ describe("markEdited auto-snapshot", () => {
 
 describe("Live Document cap UX", () => {
 	test("importMarkdown rejects oversized documents with product copy", async () => {
-		const t = convexTest(schema, modules);
+		const t = testInstance();
 		const { ownerId, workspaceId } = await t.run(async (ctx) => {
 			const ownerId = await ctx.db.insert("users", {
 				email: "owner@example.com",
@@ -234,7 +243,7 @@ describe("Live Document cap UX", () => {
 
 describe("listMentionCandidates", () => {
 	test("returns workspace members and direct document shares", async () => {
-		const t = convexTest(schema, modules);
+		const t = testInstance();
 		const { ownerId, documentId } = await setupOwnedDocument(t);
 		const { memberId, sharedId } = await t.run(async (ctx) => {
 			const document = await ctx.db.get(documentId);
@@ -344,7 +353,7 @@ describe("permission regressions", () => {
 	}
 
 	test("workspace members can open documents in that workspace", async () => {
-		const t = convexTest(schema, modules);
+		const t = testInstance();
 		const { workspaceMemberId, documentId } = await setupSharedDocument(t);
 
 		await expect(
@@ -353,7 +362,7 @@ describe("permission regressions", () => {
 	});
 
 	test("viewer and commenter roles cannot apply editable document patches", async () => {
-		const t = convexTest(schema, modules);
+		const t = testInstance();
 		const { commenterId, viewerId, documentId } = await setupSharedDocument(t);
 		const patchArgs = {
 			documentId,
@@ -370,7 +379,7 @@ describe("permission regressions", () => {
 	});
 
 	test("commenters can comment, viewers cannot create comments or suggestions", async () => {
-		const t = convexTest(schema, modules);
+		const t = testInstance();
 		const { commenterId, viewerId, documentId } = await setupSharedDocument(t);
 
 		await asUser(t, commenterId).mutation(api.documents.createCommentThread, {
@@ -396,7 +405,7 @@ describe("permission regressions", () => {
 	});
 
 	test("public viewer links do not grant write access", async () => {
-		const t = convexTest(schema, modules);
+		const t = testInstance();
 		const { ownerId, strangerId, documentId } = await setupSharedDocument(t);
 		await asUser(t, ownerId).mutation(api.documents.setLinkShare, {
 			documentId,
@@ -419,7 +428,7 @@ describe("permission regressions", () => {
 	});
 
 	test("trash listing uses deleted-document roles, not broad workspace membership", async () => {
-		const t = convexTest(schema, modules);
+		const t = testInstance();
 		const { ownerId, viewerId, documentId, workspaceId } =
 			await setupSharedDocument(t);
 		const workspaceMemberId = await t.run(async (ctx) => {
@@ -453,5 +462,131 @@ describe("permission regressions", () => {
 		expect(ownerTrash.map((document) => document._id)).toEqual([documentId]);
 		expect(viewerTrash.map((document) => document._id)).toEqual([documentId]);
 		expect(memberTrash.map((document) => document._id)).toEqual([documentId]);
+	});
+});
+
+describe("inherited folder roles across surfaces", () => {
+	// Guest (no membership) with a single folderShares row on `rootFolderId`,
+	// and a document nested one level deeper. Exercises the shared permission
+	// seam through prosemirror sync, comments, and trash.
+	async function setupInherited(
+		t: ReturnType<typeof convexTest>,
+		role: "editor" | "commenter" | "viewer",
+	) {
+		return await t.run(async (ctx) => {
+			const ownerId = await ctx.db.insert("users", {
+				email: "owner@example.com",
+				name: "Owner",
+			});
+			const guestId = await ctx.db.insert("users", {
+				email: "guest@example.com",
+				name: "Guest",
+			});
+			const strangerId = await ctx.db.insert("users", {
+				email: "stranger@example.com",
+				name: "Stranger",
+			});
+			const workspaceId = await ctx.db.insert("workspaces", {
+				name: "Team",
+				ownerId,
+				createdAt: 1,
+			});
+			const rootFolderId = await ctx.db.insert("folders", {
+				workspaceId,
+				name: "Root",
+				createdAt: 1,
+				updatedAt: 1,
+			});
+			const childFolderId = await ctx.db.insert("folders", {
+				workspaceId,
+				parentId: rootFolderId,
+				name: "Child",
+				createdAt: 1,
+				updatedAt: 1,
+			});
+			const documentId = await ctx.db.insert("documents", {
+				workspaceId,
+				folderId: childFolderId,
+				title: "Nested Doc",
+				createdAt: 1,
+				updatedAt: 1,
+			});
+			await ctx.db.insert("folderShares", {
+				folderId: rootFolderId,
+				userId: guestId,
+				role,
+				createdAt: 1,
+				updatedAt: 1,
+			});
+			return { ownerId, guestId, strangerId, workspaceId, documentId };
+		});
+	}
+
+	test("prosemirror read honors inherited role; stranger is denied", async () => {
+		const t = testInstance();
+		const { guestId, strangerId, documentId } = await setupInherited(
+			t,
+			"viewer",
+		);
+		const id = `document:${documentId}`;
+		await expect(
+			asUser(t, guestId).query(api.prosemirror.getSnapshot, { id }),
+		).resolves.toBeDefined();
+		await expect(
+			asUser(t, strangerId).query(api.prosemirror.getSnapshot, { id }),
+		).rejects.toThrow(/Unauthorized/);
+	});
+
+	test("inherited editor can write; inherited viewer cannot", async () => {
+		const t = testInstance();
+		const editor = await setupInherited(t, "editor");
+		// rename is write-gated (requireDocumentWrite) without needing a snapshot.
+		await expect(
+			asUser(t, editor.guestId).mutation(api.documents.rename, {
+				documentId: editor.documentId,
+				title: "Renamed",
+			}),
+		).resolves.toBeNull();
+
+		const viewer = await setupInherited(t, "viewer");
+		await expect(
+			asUser(t, viewer.guestId).mutation(api.documents.rename, {
+				documentId: viewer.documentId,
+				title: "Nope",
+			}),
+		).rejects.toThrow(/Unauthorized/);
+	});
+
+	test("inherited commenter can comment; inherited viewer cannot", async () => {
+		const t = testInstance();
+		const commenter = await setupInherited(t, "commenter");
+		await expect(
+			asUser(t, commenter.guestId).mutation(
+				api.documents.createCommentThread,
+				{ documentId: commenter.documentId, anchor: null, body: "hi" },
+			),
+		).resolves.toBeDefined();
+
+		const viewer = await setupInherited(t, "viewer");
+		await expect(
+			asUser(t, viewer.guestId).mutation(api.documents.createCommentThread, {
+				documentId: viewer.documentId,
+				anchor: null,
+				body: "no",
+			}),
+		).rejects.toThrow(/Unauthorized/);
+	});
+
+	test("trash honors inherited role", async () => {
+		const t = testInstance();
+		const { ownerId, guestId, workspaceId, documentId } = await setupInherited(
+			t,
+			"editor",
+		);
+		await asUser(t, ownerId).mutation(api.documents.remove, { documentId });
+		const guestTrash = await asUser(t, guestId).query(api.documents.listTrash, {
+			workspaceId,
+		});
+		expect(guestTrash.map((d) => d._id)).toEqual([documentId]);
 	});
 });

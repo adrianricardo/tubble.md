@@ -116,6 +116,66 @@ async function applyDocumentShareRole(
 	});
 }
 
+export async function applyFolderShareRole(
+	ctx: MutationCtx,
+	args: {
+		folderId: Id<"folders">;
+		userId: Id<"users">;
+		role: DocumentRole;
+	},
+): Promise<void> {
+	const existing = await ctx.db
+		.query("folderShares")
+		.withIndex("by_folder_user", (q) =>
+			q.eq("folderId", args.folderId).eq("userId", args.userId),
+		)
+		.unique();
+	const now = Date.now();
+	if (existing) {
+		await ctx.db.patch(existing._id, { role: args.role, updatedAt: now });
+		return;
+	}
+	await ctx.db.insert("folderShares", {
+		folderId: args.folderId,
+		userId: args.userId,
+		role: args.role,
+		createdAt: now,
+		updatedAt: now,
+	});
+}
+
+export async function upsertFolderInvite(
+	ctx: MutationCtx,
+	args: {
+		folderId: Id<"folders">;
+		email: string;
+		role: DocumentRole;
+		invitedBy?: Id<"users">;
+	},
+): Promise<Id<"invites">> {
+	const email = normalizeEmail(args.email);
+	const existing = await ctx.db
+		.query("invites")
+		.withIndex("by_folder_email", (q) =>
+			q.eq("folderId", args.folderId).eq("email", email),
+		)
+		.unique();
+	if (existing) {
+		await ctx.db.patch(existing._id, {
+			folderRole: args.role,
+			invitedBy: args.invitedBy,
+		});
+		return existing._id;
+	}
+	return ctx.db.insert("invites", {
+		email,
+		folderId: args.folderId,
+		folderRole: args.role,
+		invitedBy: args.invitedBy,
+		createdAt: Date.now(),
+	});
+}
+
 export async function upsertWorkspaceInvite(
 	ctx: MutationCtx,
 	args: {
@@ -211,6 +271,15 @@ export async function resolveInvitesForUser(
 					documentId: invite.documentId,
 					userId,
 					role: invite.documentRole,
+				});
+			}
+		} else if (invite.folderId && invite.folderRole) {
+			const folder = await ctx.db.get(invite.folderId);
+			if (folder) {
+				await applyFolderShareRole(ctx, {
+					folderId: invite.folderId,
+					userId,
+					role: invite.folderRole,
 				});
 			}
 		}

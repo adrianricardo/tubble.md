@@ -180,8 +180,82 @@ create docs inside it, and nothing outside it.
 **Verify:** `npx convex codegen` · `pnpm --filter @hubble.md/sync-backend test`
 · `pnpm typecheck` · `pnpm --filter @hubble.md/www build` · `pnpm build:desktop`.
 
-**Handoff for RB2/RB4 (fill in on completion):** exact exported names + arg/return
-shapes of the new queries/mutations, and the `listSharedWithMe` return type.
+**Handoff for RB2/RB4 (completed 2026-07-03):**
+
+*Roles:* `DocumentRole = "owner" | "editor" | "commenter" | "viewer"`. User
+folder shares may use any of the four; **link shares are capped at
+editor/commenter/viewer** (never owner).
+
+*Permissions seam (`convex/permissions.ts`):*
+- `folderRole(ctx, folderId, options?: { cache?: FolderRoleCache }) → Promise<DocumentRole|null>`
+  — Drive-style ancestor walk (additive role-max, cycle guard, depth cap
+  `FOLDER_INHERITANCE_DEPTH_CAP = 64`). `FolderRoleCache = Map<Id<"folders">, DocumentRole|null>`.
+- `documentRole(ctx, documentId, options?: { includeDeleted?; folderCache? })` now folds in
+  `folderRole(document.folderId)` for every identity (incl. anonymous public-folder-link visitors).
+  This is the ONLY seam — `prosemirror.ts` read/write hooks, comments, trash all flow through it.
+
+*Folder share + repo-link mutations (`convex/folders.ts`); auth = workspace
+owner/admin OR inherited folder `owner`, except `setFolderRepoLink` = any folder editor:*
+- `setFolderUserShare({ folderId, userId, role: DocumentRole }) → null`
+- `setFolderUserShareByEmail({ folderId, email, role: DocumentRole }) → { status: "shared"; userId } | { status: "invited"; userId: null }` (unknown email → pending folder invite, resolved at signup)
+- `removeFolderUserShare({ folderId, userId }) → null`
+- `setFolderLinkShare({ folderId, role: "editor"|"commenter"|"viewer" }) → null` (linkScope is always `"public"`)
+- `clearFolderLinkShare({ folderId }) → null`
+- `listFolderShares({ folderId }) → Array<folderShares row & { user: Doc<"users">|null }>`
+- `setFolderRepoLink({ folderId, repoName?, repoRemoteUrl? }) → null` (display metadata only; local path never stored)
+
+*Guest-safe folder CRUD (`convex/folders.ts`); guests need inherited `editor`+, moves that escape the shared subtree are denied:*
+- `create({ workspaceId, parentId?, name, actor? }) → Id<"folders">`
+- `rename({ folderId, name }) → null`
+- `move({ folderId, parentId? }) → null` (new; cycle-safe; guest → root denied)
+- `remove({ folderId }) → null`, `restoreRemoved({ folderId }) → null`
+- `moveDocument({ documentId, folderId? }) → null` (guest → root/foreign-folder denied)
+
+*Guest read paths:*
+- `folders.listSubtree({ folderId }) → { folder: { _id, name, workspaceId, parentId, repoName, repoRemoteUrl }, role, canWrite, folders: Array<{ _id, name, parentId, relativePath }>, documents: Array<{ _id, title, path, folderId, updatedAt, updatedBy, relativePath }> } | null` (authorized by `folderRole`)
+- `documents.listFolderWithMarkdown({ folderId }) → SharedSubtreeDocument[]` (subtree docs with markdown, authorized by `folderRole`)
+- `documents.searchFolder({ folderId, query, limit? }) → Array<{ documentId, folderId, title, path, updatedAt, updatedBy, revision, snippet }>`
+
+*`documents.create` (folder-aware + optional content — RB5's `BRAIN.md` seam):*
+- `create({ workspaceId, folderId?, title, path?, markdown?, actor? }) → Id<"documents">`
+  — auth = workspace member OR inherited `editor`+ on `folderId`; folder-scoped
+  creates get NO extra share row (inherit, D12); `markdown` seeded via the Live
+  Document import path.
+
+*`documents.listSharedWithMe()` — NEW subtree return shape* (was a flat doc array):
+```
+{
+  folders: Array<{                    // top-most folders shared directly to the user
+    folderId: Id<"folders">, name, workspaceId, workspaceName,
+    parentId: Id<"folders">|null, role: DocumentRole,
+    repoName: string|null, repoRemoteUrl: string|null,
+    folders:  Array<{ _id, name, parentId: Id|null, relativePath }>,   // descendants
+    documents: SharedSubtreeDocument[],
+  }>,
+  documents: SharedSubtreeDocument[], // legacy per-document shares (relativePath "")
+}
+// SharedSubtreeDocument = {
+//   _id, workspaceId, workspaceName, folderId: Id<"folders">|null, title,
+//   path: string|null, markdown, version: number|null, role: DocumentRole|null,
+//   canWrite: boolean, updatedAt, deletedAt?, relativePath: string
+// }
+```
+`relativePath` is the doc's containing-folder path relative to the shared root
+("" for a root-level or per-doc share). RB4 materializes each `folders[]` node as
+a nested subtree; RB2 renders top-most folders in "Shared with me".
+
+*Desktop adapter kept green (no RB4 work done here):*
+`packages/convex-client/src/index.ts` `getSharedWithMe()` flattens
+`{ documents, folders[].documents }` back into the existing flat
+`SharedLiveDocumentProjection[]`; `packages/sync/src/backend.ts` interface is
+UNCHANGED (still returns the flat projection) — RB4 upgrades both to consume the
+nested shape.
+
+*Schema (`convex/schema.ts`):* new `folderShares` table (`by_folder`,
+`by_folder_user`, `by_folder_link`, `by_user`); `folders.repoName?/repoRemoteUrl?`;
+`invites.folderId?/folderRole?` + `by_folder_email` index. Folder invites resolve
+in `auth.ts` → `members.resolveInvitesForUser` (helpers `upsertFolderInvite`,
+`applyFolderShareRole`).
 
 ### RB2 — Web guest experience *(standard; parallel with RB3–RB5)*
 
@@ -432,7 +506,7 @@ RB7 (needs everything; operator-gated pieces last)
 
 | ID | Status | Owner/session | Last update | Notes |
 |----|--------|---------------|-------------|-------|
-| RB1 | pending | - | - | Gate phase. Fill API-shape handoff on completion. |
+| RB1 | done | opus sub-agent (orchestrator: fable) | 2026-07-03 | Gate phase. API shape locked in Handoff below. All verify commands green; 52 backend tests pass. |
 | RB2 | pending | - | - | Starts after RB1. Parallel track A. |
 | RB3 | pending | - | - | Starts after RB1. Parallel track B. |
 | RB4 | pending | - | - | Same session/track as RB3. |

@@ -1,13 +1,208 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import {
+	type MutationCtx,
+	mutation,
+	type QueryCtx,
+	query,
+} from "./_generated/server";
 import { currentActorName } from "./authIdentity";
-import { requireDocumentWrite, requireWorkspaceMember } from "./permissions";
+import {
+	findUserIdByEmail,
+	normalizeEmail,
+	upsertFolderInvite,
+} from "./members";
+import {
+	type DocumentRole,
+	FOLDER_INHERITANCE_DEPTH_CAP,
+	folderRole,
+	requireDocumentWrite,
+	requireWorkspaceMember,
+	workspaceRole,
+} from "./permissions";
+
+type AnyCtx = MutationCtx | QueryCtx;
+
+const documentRoleValidator = v.union(
+	v.literal("owner"),
+	v.literal("editor"),
+	v.literal("commenter"),
+	v.literal("viewer"),
+);
+
+// Link shares are capped BELOW owner: an inherited folder owner can manage
+// shares, so a public "owner" link would leak a management capability.
+const linkRoleValidator = v.union(
+	v.literal("editor"),
+	v.literal("commenter"),
+	v.literal("viewer"),
+);
 
 function normalizeFolderName(name: string) {
 	const trimmed = name.trim();
 	if (!trimmed) throw new Error("Folder name is required");
 	return trimmed;
 }
+
+// ---------------------------------------------------------------------------
+// Authorization helpers (guest-aware, D12)
+// ---------------------------------------------------------------------------
+
+/** True if the current identity is any member of the folder's workspace. */
+async function isWorkspaceMember(
+	ctx: AnyCtx,
+	workspaceId: Id<"workspaces">,
+): Promise<boolean> {
+	return (await workspaceRole(ctx, workspaceId)) !== null;
+}
+
+/** Workspace owner/admin, or an inherited folder `owner`, may manage shares. */
+async function requireFolderManage(ctx: AnyCtx, folder: Doc<"folders">) {
+	const wsRole = await workspaceRole(ctx, folder.workspaceId);
+	if (wsRole === "owner" || wsRole === "admin") return;
+	if ((await folderRole(ctx, folder._id)) === "owner") return;
+	throw new Error("Unauthorized");
+}
+
+/** Any workspace member, or an inherited folder `editor`+, may write. */
+async function requireFolderWrite(ctx: AnyCtx, folder: Doc<"folders">) {
+	if (await isWorkspaceMember(ctx, folder.workspaceId)) return;
+	const role = await folderRole(ctx, folder._id);
+	if (role === "editor" || role === "owner") return;
+	throw new Error("Unauthorized");
+}
+
+// ---------------------------------------------------------------------------
+// Subtree collection (shared with documents.ts guest read paths)
+// ---------------------------------------------------------------------------
+
+/**
+ * Collect the active folder subtree rooted at `rootFolderId`: descendant
+ * folders (excluding the root) and every active document in the root or any
+ * descendant. Cycle-safe. Used by guest read paths and share resolution.
+ */
+export async function collectFolderSubtree(
+	ctx: AnyCtx,
+	rootFolderId: Id<"folders">,
+): Promise<{
+	root: Doc<"folders"> | null;
+	descendants: Array<Doc<"folders">>;
+	documents: Array<Doc<"documents">>;
+}> {
+	const root = await ctx.db.get(rootFolderId);
+	if (!root) return { root: null, descendants: [], documents: [] };
+
+	const allFolders = await ctx.db
+		.query("folders")
+		.withIndex("by_workspace", (q) => q.eq("workspaceId", root.workspaceId))
+		.collect();
+	const childrenByParent = new Map<string, Array<Doc<"folders">>>();
+	for (const folder of allFolders) {
+		if (folder.deletedAt !== undefined) continue;
+		const key = folder.parentId ?? "__root__";
+		const list = childrenByParent.get(key);
+		if (list) list.push(folder);
+		else childrenByParent.set(key, [folder]);
+	}
+
+	const inSubtree = new Set<Id<"folders">>([rootFolderId]);
+	const descendants: Array<Doc<"folders">> = [];
+	const queue: Array<Id<"folders">> = [rootFolderId];
+	while (queue.length > 0) {
+		const parent = queue.shift();
+		if (!parent) break;
+		for (const child of childrenByParent.get(parent) ?? []) {
+			if (inSubtree.has(child._id)) continue; // cycle guard
+			inSubtree.add(child._id);
+			descendants.push(child);
+			queue.push(child._id);
+		}
+	}
+
+	const documents: Array<Doc<"documents">> = [];
+	for (const folderId of inSubtree) {
+		const docs = await ctx.db
+			.query("documents")
+			.withIndex("by_workspace_folder", (q) =>
+				q.eq("workspaceId", root.workspaceId).eq("folderId", folderId),
+			)
+			.collect();
+		for (const doc of docs) {
+			if (doc.deletedAt === undefined) documents.push(doc);
+		}
+	}
+
+	return { root, descendants, documents };
+}
+
+/**
+ * Path of `folderId` relative to `rootFolderId` (exclusive of the root),
+ * built from folder names joined by "/". Returns "" when folderId === root.
+ */
+export function folderRelativePath(
+	folderId: Id<"folders">,
+	rootFolderId: Id<"folders">,
+	folderById: Map<Id<"folders">, Doc<"folders">>,
+): string {
+	const segments: string[] = [];
+	let current: Id<"folders"> | undefined = folderId;
+	let depth = 0;
+	while (current && current !== rootFolderId && depth < FOLDER_INHERITANCE_DEPTH_CAP) {
+		const folder = folderById.get(current);
+		if (!folder) break;
+		segments.unshift(folder.name);
+		current = folder.parentId;
+		depth++;
+	}
+	return segments.join("/");
+}
+
+/** True if any ancestor of `folder` (excluding itself) is in `folderIds`. */
+export async function hasAncestorIn(
+	ctx: AnyCtx,
+	folder: Doc<"folders">,
+	folderIds: Set<Id<"folders">>,
+): Promise<boolean> {
+	const seen = new Set<Id<"folders">>([folder._id]);
+	let current = folder.parentId;
+	let depth = 0;
+	while (current && depth < FOLDER_INHERITANCE_DEPTH_CAP) {
+		if (seen.has(current)) break; // cycle guard
+		if (folderIds.has(current)) return true;
+		seen.add(current);
+		const parent: Doc<"folders"> | null = await ctx.db.get(current);
+		if (!parent) break;
+		current = parent.parentId;
+		depth++;
+	}
+	return false;
+}
+
+/** True if `candidateId` is `folderId` or one of its descendants (cycle-safe). */
+async function isSelfOrDescendant(
+	ctx: AnyCtx,
+	folderId: Id<"folders">,
+	candidateId: Id<"folders">,
+): Promise<boolean> {
+	const seen = new Set<Id<"folders">>();
+	let current: Id<"folders"> | undefined = candidateId;
+	let depth = 0;
+	while (current && depth < FOLDER_INHERITANCE_DEPTH_CAP) {
+		if (current === folderId) return true;
+		if (seen.has(current)) break; // cycle guard
+		seen.add(current);
+		const folder: Doc<"folders"> | null = await ctx.db.get(current);
+		if (!folder) break;
+		current = folder.parentId;
+		depth++;
+	}
+	return false;
+}
+
+// ---------------------------------------------------------------------------
+// Queries
+// ---------------------------------------------------------------------------
 
 export const list = query({
 	args: { workspaceId: v.id("workspaces") },
@@ -37,6 +232,87 @@ export const listTrash = query({
 	},
 });
 
+/**
+ * Guest-safe subtree listing, authorized by inherited `folderRole` rather than
+ * workspace membership. Returns the folder, the caller's resolved role, the
+ * descendant folders, and the active documents (metadata only — no markdown)
+ * with each item's path relative to the requested folder.
+ */
+export const listSubtree = query({
+	args: { folderId: v.id("folders") },
+	handler: async (ctx, { folderId }) => {
+		const role = await folderRole(ctx, folderId);
+		if (!role) throw new Error("Unauthorized");
+		const { root, descendants, documents } = await collectFolderSubtree(
+			ctx,
+			folderId,
+		);
+		if (!root || root.deletedAt !== undefined) return null;
+
+		const folderById = new Map<Id<"folders">, Doc<"folders">>();
+		folderById.set(root._id, root);
+		for (const folder of descendants) folderById.set(folder._id, folder);
+
+		const canWrite = role === "owner" || role === "editor";
+		return {
+			folder: {
+				_id: root._id,
+				name: root.name,
+				workspaceId: root.workspaceId,
+				parentId: root.parentId ?? null,
+				repoName: root.repoName ?? null,
+				repoRemoteUrl: root.repoRemoteUrl ?? null,
+			},
+			role,
+			canWrite,
+			folders: descendants
+				.map((folder) => ({
+					_id: folder._id,
+					name: folder.name,
+					parentId: folder.parentId ?? null,
+					relativePath: folderRelativePath(folder._id, root._id, folderById),
+				}))
+				.sort((a, b) => a.relativePath.localeCompare(b.relativePath)),
+			documents: documents
+				.map((doc) => ({
+					_id: doc._id,
+					title: doc.title,
+					path: doc.path ?? null,
+					folderId: doc.folderId ?? null,
+					updatedAt: doc.updatedAt,
+					updatedBy: doc.updatedBy,
+					relativePath: doc.folderId
+						? folderRelativePath(doc.folderId, root._id, folderById)
+						: "",
+				}))
+				.sort((a, b) => b.updatedAt - a.updatedAt),
+		};
+	},
+});
+
+export const listFolderShares = query({
+	args: { folderId: v.id("folders") },
+	handler: async (ctx, { folderId }) => {
+		const folder = await ctx.db.get(folderId);
+		if (!folder) throw new Error("Folder not found");
+		await requireFolderManage(ctx, folder);
+		const shares = await ctx.db
+			.query("folderShares")
+			.withIndex("by_folder", (q) => q.eq("folderId", folderId))
+			.collect();
+		return Promise.all(
+			shares.map(async (share) => ({
+				...share,
+				user: share.userId ? await ctx.db.get(share.userId) : null,
+			})),
+		);
+	},
+});
+
+// ---------------------------------------------------------------------------
+// Mutations — folder CRUD (guest-aware)
+// ---------------------------------------------------------------------------
+
 export const create = mutation({
 	args: {
 		workspaceId: v.id("workspaces"),
@@ -45,14 +321,22 @@ export const create = mutation({
 		actor: v.optional(v.string()),
 	},
 	handler: async (ctx, { workspaceId, parentId, name, actor }) => {
-		await requireWorkspaceMember(ctx, workspaceId);
 		if (parentId) {
 			const parent = await ctx.db.get(parentId);
-			if (!parent || parent.workspaceId !== workspaceId) {
+			if (
+				!parent ||
+				parent.deletedAt !== undefined ||
+				parent.workspaceId !== workspaceId
+			) {
 				throw new Error("Parent folder not found");
 			}
+			// Members can create anywhere; guests need editor+ on the parent.
+			await requireFolderWrite(ctx, parent);
+		} else {
+			await requireWorkspaceMember(ctx, workspaceId);
 		}
 		const now = Date.now();
+		// Created folders inherit their parent's shares (D12) — no extra ACL rows.
 		return ctx.db.insert("folders", {
 			workspaceId,
 			parentId,
@@ -74,11 +358,53 @@ export const rename = mutation({
 		if (!folder || folder.deletedAt !== undefined) {
 			throw new Error("Folder not found");
 		}
-		await requireWorkspaceMember(ctx, folder.workspaceId);
+		await requireFolderWrite(ctx, folder);
 		await ctx.db.patch(folderId, {
 			name: normalizeFolderName(name),
 			updatedAt: Date.now(),
 		});
+	},
+});
+
+export const move = mutation({
+	args: {
+		folderId: v.id("folders"),
+		parentId: v.optional(v.id("folders")),
+	},
+	handler: async (ctx, { folderId, parentId }) => {
+		const folder = await ctx.db.get(folderId);
+		if (!folder || folder.deletedAt !== undefined) {
+			throw new Error("Folder not found");
+		}
+		const member = await isWorkspaceMember(ctx, folder.workspaceId);
+		await requireFolderWrite(ctx, folder);
+
+		if (parentId) {
+			if (parentId === folderId) throw new Error("Cannot move a folder into itself");
+			const parent = await ctx.db.get(parentId);
+			if (
+				!parent ||
+				parent.deletedAt !== undefined ||
+				parent.workspaceId !== folder.workspaceId
+			) {
+				throw new Error("Parent folder not found");
+			}
+			if (await isSelfOrDescendant(ctx, folderId, parentId)) {
+				throw new Error("Cannot move a folder into its own subtree");
+			}
+		}
+
+		if (!member) {
+			// Guests cannot move content out of the subtree shared with them:
+			// moving to workspace root, or into a folder they cannot write, escapes.
+			if (!parentId) throw new Error("Unauthorized");
+			const destRole = await folderRole(ctx, parentId);
+			if (destRole !== "owner" && destRole !== "editor") {
+				throw new Error("Unauthorized");
+			}
+		}
+
+		await ctx.db.patch(folderId, { parentId, updatedAt: Date.now() });
 	},
 });
 
@@ -87,7 +413,7 @@ export const remove = mutation({
 	handler: async (ctx, { folderId }) => {
 		const folder = await ctx.db.get(folderId);
 		if (!folder || folder.deletedAt !== undefined) return;
-		await requireWorkspaceMember(ctx, folder.workspaceId);
+		await requireFolderWrite(ctx, folder);
 		await ctx.db.patch(folderId, {
 			deletedAt: Date.now(),
 			updatedAt: Date.now(),
@@ -100,7 +426,7 @@ export const restoreRemoved = mutation({
 	handler: async (ctx, { folderId }) => {
 		const folder = await ctx.db.get(folderId);
 		if (!folder || folder.deletedAt === undefined) return;
-		await requireWorkspaceMember(ctx, folder.workspaceId);
+		await requireFolderWrite(ctx, folder);
 		await ctx.db.patch(folderId, {
 			deletedAt: undefined,
 			updatedAt: Date.now(),
@@ -119,6 +445,7 @@ export const moveDocument = mutation({
 		if (!document || document.deletedAt !== undefined) {
 			throw new Error("Document not found");
 		}
+		const member = await isWorkspaceMember(ctx, document.workspaceId);
 		if (folderId) {
 			const folder = await ctx.db.get(folderId);
 			if (
@@ -129,8 +456,172 @@ export const moveDocument = mutation({
 				throw new Error("Folder not found");
 			}
 		}
+		if (!member) {
+			// Guest: destination must stay within a subtree they can write.
+			if (!folderId) throw new Error("Unauthorized");
+			const destRole = await folderRole(ctx, folderId);
+			if (destRole !== "owner" && destRole !== "editor") {
+				throw new Error("Unauthorized");
+			}
+		}
 		await ctx.db.patch(documentId, {
 			folderId,
+			updatedAt: Date.now(),
+		});
+	},
+});
+
+// ---------------------------------------------------------------------------
+// Mutations — folder sharing + repo-link metadata
+// ---------------------------------------------------------------------------
+
+async function ensureFolderShare(
+	ctx: MutationCtx,
+	args: {
+		folderId: Id<"folders">;
+		userId?: Id<"users">;
+		linkScope?: "public";
+		role: DocumentRole;
+	},
+) {
+	const now = Date.now();
+	const existing =
+		args.userId !== undefined
+			? await ctx.db
+					.query("folderShares")
+					.withIndex("by_folder_user", (q) =>
+						q.eq("folderId", args.folderId).eq("userId", args.userId),
+					)
+					.unique()
+			: args.linkScope !== undefined
+				? await ctx.db
+						.query("folderShares")
+						.withIndex("by_folder_link", (q) =>
+							q.eq("folderId", args.folderId).eq("linkScope", args.linkScope),
+						)
+						.unique()
+				: null;
+	if (existing) {
+		await ctx.db.patch(existing._id, { role: args.role, updatedAt: now });
+		return existing._id;
+	}
+	return ctx.db.insert("folderShares", {
+		folderId: args.folderId,
+		userId: args.userId,
+		linkScope: args.linkScope,
+		role: args.role,
+		createdAt: now,
+		updatedAt: now,
+	});
+}
+
+export const setFolderUserShare = mutation({
+	args: {
+		folderId: v.id("folders"),
+		userId: v.id("users"),
+		role: documentRoleValidator,
+	},
+	handler: async (ctx, { folderId, userId, role }) => {
+		const folder = await ctx.db.get(folderId);
+		if (!folder) throw new Error("Folder not found");
+		await requireFolderManage(ctx, folder);
+		await ensureFolderShare(ctx, { folderId, userId, role });
+	},
+});
+
+export const setFolderUserShareByEmail = mutation({
+	args: {
+		folderId: v.id("folders"),
+		email: v.string(),
+		role: documentRoleValidator,
+	},
+	handler: async (ctx, { folderId, email, role }) => {
+		const folder = await ctx.db.get(folderId);
+		if (!folder) throw new Error("Folder not found");
+		await requireFolderManage(ctx, folder);
+		const normalizedEmail = normalizeEmail(email);
+		if (!normalizedEmail) throw new Error("Email is required");
+		const existingUserId = await findUserIdByEmail(ctx, normalizedEmail);
+		if (existingUserId) {
+			await ensureFolderShare(ctx, { folderId, userId: existingUserId, role });
+			return { status: "shared" as const, userId: existingUserId };
+		}
+		// No account yet: record a pending folder invite resolved at signup.
+		const invitedBy = (await getAuthUserId(ctx)) ?? undefined;
+		await upsertFolderInvite(ctx, {
+			folderId,
+			email: normalizedEmail,
+			role,
+			invitedBy,
+		});
+		return { status: "invited" as const, userId: null };
+	},
+});
+
+export const removeFolderUserShare = mutation({
+	args: {
+		folderId: v.id("folders"),
+		userId: v.id("users"),
+	},
+	handler: async (ctx, { folderId, userId }) => {
+		const folder = await ctx.db.get(folderId);
+		if (!folder) throw new Error("Folder not found");
+		await requireFolderManage(ctx, folder);
+		const existing = await ctx.db
+			.query("folderShares")
+			.withIndex("by_folder_user", (q) =>
+				q.eq("folderId", folderId).eq("userId", userId),
+			)
+			.unique();
+		if (existing) await ctx.db.delete(existing._id);
+	},
+});
+
+export const setFolderLinkShare = mutation({
+	args: {
+		folderId: v.id("folders"),
+		role: linkRoleValidator,
+	},
+	handler: async (ctx, { folderId, role }) => {
+		const folder = await ctx.db.get(folderId);
+		if (!folder) throw new Error("Folder not found");
+		await requireFolderManage(ctx, folder);
+		await ensureFolderShare(ctx, { folderId, linkScope: "public", role });
+	},
+});
+
+export const clearFolderLinkShare = mutation({
+	args: { folderId: v.id("folders") },
+	handler: async (ctx, { folderId }) => {
+		const folder = await ctx.db.get(folderId);
+		if (!folder) throw new Error("Folder not found");
+		await requireFolderManage(ctx, folder);
+		const existing = await ctx.db
+			.query("folderShares")
+			.withIndex("by_folder_link", (q) =>
+				q.eq("folderId", folderId).eq("linkScope", "public"),
+			)
+			.unique();
+		if (existing) await ctx.db.delete(existing._id);
+	},
+});
+
+export const setFolderRepoLink = mutation({
+	args: {
+		folderId: v.id("folders"),
+		repoName: v.optional(v.string()),
+		repoRemoteUrl: v.optional(v.string()),
+	},
+	handler: async (ctx, { folderId, repoName, repoRemoteUrl }) => {
+		const folder = await ctx.db.get(folderId);
+		if (!folder || folder.deletedAt !== undefined) {
+			throw new Error("Folder not found");
+		}
+		// Display metadata only (D11) — any folder-editor may set it.
+		await requireFolderWrite(ctx, folder);
+		await ctx.db.patch(folderId, {
+			repoName: repoName?.trim() || undefined,
+			repoRemoteUrl: repoRemoteUrl?.trim() || undefined,
 			updatedAt: Date.now(),
 		});
 	},

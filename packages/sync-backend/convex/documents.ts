@@ -8,7 +8,7 @@ import {
 import { Step, Transform } from "@tiptap/pm/transform";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
 	type MutationCtx,
 	mutation,
@@ -16,10 +16,17 @@ import {
 	query,
 } from "./_generated/server";
 import { currentActorName } from "./authIdentity";
+import {
+	collectFolderSubtree,
+	folderRelativePath,
+	hasAncestorIn,
+} from "./folders";
 import { findUserIdByEmail, upsertDocumentInvite } from "./members";
 import {
 	canWriteRole,
 	documentRole,
+	type FolderRoleCache,
+	folderRole,
 	requireDocumentComment,
 	requireDocumentOwner,
 	requireDocumentRead,
@@ -1270,19 +1277,250 @@ export const listWithMarkdown = query({
 	},
 });
 
+// One markdown-bearing document projection inside a shared subtree (or a
+// directly-shared document at the top level). `relativePath` is the containing
+// folder path relative to the shared root ("" for the root itself or a per-doc
+// share). Serves both the web guest dashboard (RB2) and desktop subtree
+// materialization (RB4).
+type SharedSubtreeDocument = {
+	_id: Id<"documents">;
+	workspaceId: Id<"workspaces">;
+	workspaceName: string;
+	folderId: Id<"folders"> | null;
+	title: string;
+	path: string | null;
+	markdown: string;
+	version: number | null;
+	role: DocumentRole | null;
+	canWrite: boolean;
+	updatedAt: number;
+	deletedAt?: number;
+	relativePath: string;
+};
+
+type SharedFolderNode = {
+	folderId: Id<"folders">;
+	name: string;
+	workspaceId: Id<"workspaces">;
+	workspaceName: string;
+	parentId: Id<"folders"> | null;
+	role: DocumentRole;
+	repoName: string | null;
+	repoRemoteUrl: string | null;
+	// Descendant folders, each with a path relative to this shared root.
+	folders: Array<{
+		_id: Id<"folders">;
+		name: string;
+		parentId: Id<"folders"> | null;
+		relativePath: string;
+	}>;
+	documents: SharedSubtreeDocument[];
+};
+
+async function buildSharedSubtreeDocument(
+	ctx: QueryCtx,
+	document: Doc<"documents">,
+	workspaceName: string,
+	relativePath: string,
+	folderCache: FolderRoleCache,
+): Promise<SharedSubtreeDocument> {
+	const projection = await projectMarkdown(ctx, document._id);
+	const role = await documentRole(ctx, document._id, { folderCache });
+	return {
+		_id: document._id,
+		workspaceId: document.workspaceId,
+		workspaceName,
+		folderId: document.folderId ?? null,
+		title: document.title,
+		path: document.path ?? null,
+		markdown: projection.markdown,
+		version: projection.version,
+		role,
+		canWrite: canWriteRole(role),
+		updatedAt: document.updatedAt,
+		deletedAt: document.deletedAt,
+		relativePath,
+	};
+}
+
+/**
+ * The subtree "Shared with me" shape (D12). Returns the top-most folders shared
+ * directly with the caller — each carrying its descendant folders + documents
+ * with resolved roles and relative paths — plus the legacy per-document shares.
+ */
 export const listSharedWithMe = query({
 	args: {},
-	handler: async (ctx) => {
-		const results = [];
+	handler: async (
+		ctx,
+	): Promise<{
+		folders: SharedFolderNode[];
+		documents: SharedSubtreeDocument[];
+	}> => {
+		const userId = await getAuthUserId(ctx);
+		const folderCache: FolderRoleCache = new Map();
+
+		// Per-document shares outside member workspaces (existing behavior).
+		const documents: SharedSubtreeDocument[] = [];
 		for (const document of await directSharedDocuments(ctx)) {
-			const projection = await projectMarkdown(ctx, document._id);
-			results.push({
-				...document,
-				markdown: projection.markdown,
-				version: projection.version,
-			});
+			documents.push(
+				await buildSharedSubtreeDocument(
+					ctx,
+					document,
+					document.workspaceName,
+					"",
+					folderCache,
+				),
+			);
+		}
+		documents.sort((a, b) => b.updatedAt - a.updatedAt);
+
+		const folders: SharedFolderNode[] = [];
+		if (userId) {
+			const shares = await ctx.db
+				.query("folderShares")
+				.withIndex("by_user", (q) => q.eq("userId", userId))
+				.collect();
+			const sharedFolderIds = new Set(shares.map((share) => share.folderId));
+			for (const share of shares) {
+				const root = await ctx.db.get(share.folderId);
+				if (!root || root.deletedAt !== undefined) continue;
+				// Only surface the top-most shared node: skip if an ancestor is also
+				// directly shared to this user (inheritance already covers it).
+				if (await hasAncestorIn(ctx, root, sharedFolderIds)) continue;
+				const role = await folderRole(ctx, root._id, { cache: folderCache });
+				if (!role) continue;
+				const workspace = await ctx.db.get(root.workspaceId);
+				const workspaceName = workspace?.name ?? "Shared";
+
+				const { descendants, documents: subtreeDocs } =
+					await collectFolderSubtree(ctx, root._id);
+				const folderById = new Map<Id<"folders">, Doc<"folders">>();
+				folderById.set(root._id, root);
+				for (const folder of descendants) folderById.set(folder._id, folder);
+
+				const nodeDocuments: SharedSubtreeDocument[] = [];
+				for (const doc of subtreeDocs) {
+					const relativePath = doc.folderId
+						? folderRelativePath(doc.folderId, root._id, folderById)
+						: "";
+					nodeDocuments.push(
+						await buildSharedSubtreeDocument(
+							ctx,
+							doc,
+							workspaceName,
+							relativePath,
+							folderCache,
+						),
+					);
+				}
+				nodeDocuments.sort((a, b) => b.updatedAt - a.updatedAt);
+
+				folders.push({
+					folderId: root._id,
+					name: root.name,
+					workspaceId: root.workspaceId,
+					workspaceName,
+					parentId: root.parentId ?? null,
+					role,
+					repoName: root.repoName ?? null,
+					repoRemoteUrl: root.repoRemoteUrl ?? null,
+					folders: descendants
+						.map((folder) => ({
+							_id: folder._id,
+							name: folder.name,
+							parentId: folder.parentId ?? null,
+							relativePath: folderRelativePath(
+								folder._id,
+								root._id,
+								folderById,
+							),
+						}))
+						.sort((a, b) => a.relativePath.localeCompare(b.relativePath)),
+					documents: nodeDocuments,
+				});
+			}
+		}
+
+		return { folders, documents };
+	},
+});
+
+/**
+ * Folder-scoped guest variant of `listWithMarkdown`: every active document in
+ * the shared subtree with markdown + resolved role. Authorized by inherited
+ * `folderRole` rather than workspace membership.
+ */
+export const listFolderWithMarkdown = query({
+	args: { folderId: v.id("folders") },
+	handler: async (ctx, { folderId }) => {
+		const rootRole = await folderRole(ctx, folderId);
+		if (!rootRole) throw new Error("Unauthorized");
+		const folderCache: FolderRoleCache = new Map();
+		const { root, descendants, documents } = await collectFolderSubtree(
+			ctx,
+			folderId,
+		);
+		if (!root || root.deletedAt !== undefined) return [];
+		const workspace = await ctx.db.get(root.workspaceId);
+		const workspaceName = workspace?.name ?? "Shared";
+		const folderById = new Map<Id<"folders">, Doc<"folders">>();
+		folderById.set(root._id, root);
+		for (const folder of descendants) folderById.set(folder._id, folder);
+
+		const results: SharedSubtreeDocument[] = [];
+		for (const doc of documents) {
+			const relativePath = doc.folderId
+				? folderRelativePath(doc.folderId, root._id, folderById)
+				: "";
+			results.push(
+				await buildSharedSubtreeDocument(
+					ctx,
+					doc,
+					workspaceName,
+					relativePath,
+					folderCache,
+				),
+			);
 		}
 		return results.sort((a, b) => b.updatedAt - a.updatedAt);
+	},
+});
+
+/**
+ * Folder-scoped guest search: covers exactly the caller's shared subtree.
+ * Authorized by inherited `folderRole`.
+ */
+export const searchFolder = query({
+	args: {
+		folderId: v.id("folders"),
+		query: v.string(),
+		limit: v.optional(v.number()),
+	},
+	handler: async (ctx, { folderId, query, limit }) => {
+		const rootRole = await folderRole(ctx, folderId);
+		if (!rootRole) throw new Error("Unauthorized");
+		const needle = query.trim().toLowerCase();
+		if (!needle) return [];
+		const { root, documents } = await collectFolderSubtree(ctx, folderId);
+		if (!root || root.deletedAt !== undefined) return [];
+		const results = [];
+		for (const document of documents) {
+			const projection = await projectMarkdown(ctx, document._id);
+			const haystack = `${document.title}\n${document.path ?? ""}\n${projection.markdown}`;
+			if (!haystack.toLowerCase().includes(needle)) continue;
+			results.push({
+				documentId: document._id,
+				folderId: document.folderId ?? null,
+				title: document.title,
+				path: document.path,
+				updatedAt: document.updatedAt,
+				updatedBy: document.updatedBy,
+				revision: projection.version ?? 0,
+				snippet: searchSnippet(projection.markdown, query.trim()),
+			});
+			if (results.length >= (limit ?? 20)) break;
+		}
+		return results;
 	},
 });
 
@@ -1508,16 +1746,46 @@ export const rejectSuggestion = mutation({
 export const create = mutation({
 	args: {
 		workspaceId: v.id("workspaces"),
+		folderId: v.optional(v.id("folders")),
 		title: v.string(),
 		path: v.optional(v.string()),
+		// Optional initial content, converted through the Live Document import
+		// path. This is also the seam RB5's `BRAIN.md` seeding calls.
+		markdown: v.optional(v.string()),
 		actor: v.optional(v.string()),
 	},
-	handler: async (ctx, { workspaceId, title, path, actor }) => {
-		await requireWorkspaceMember(ctx, workspaceId);
+	handler: async (ctx, { workspaceId, folderId, title, path, markdown, actor }) => {
+		let isMember = (await workspaceRole(ctx, workspaceId)) !== null;
+		if (folderId) {
+			const folder = await ctx.db.get(folderId);
+			if (
+				!folder ||
+				folder.deletedAt !== undefined ||
+				folder.workspaceId !== workspaceId
+			) {
+				throw new Error("Folder not found");
+			}
+			if (!isMember) {
+				// Guest create (D12): requires inherited editor+ on the folder.
+				const role = await folderRole(ctx, folderId);
+				if (role !== "owner" && role !== "editor") {
+					throw new Error("Unauthorized");
+				}
+			}
+		} else {
+			await requireWorkspaceMember(ctx, workspaceId);
+			isMember = true;
+		}
+
+		if (markdown !== undefined) {
+			assertLiveDocumentMarkdownWithinCap(markdown);
+		}
+
 		const now = Date.now();
 		const resolvedActor = await currentActorName(ctx, actor);
 		const documentId = await ctx.db.insert("documents", {
 			workspaceId,
+			folderId,
 			title: normalizeTitle(title),
 			path: path?.trim() || undefined,
 			createdBy: resolvedActor,
@@ -1525,7 +1793,15 @@ export const create = mutation({
 			updatedBy: resolvedActor,
 			updatedAt: now,
 		});
-		await ensureCurrentUserOwnerShare(ctx, documentId);
+		// Docs created inside a shared folder inherit its shares (D12) — no extra
+		// ACL row. Root-level member creates keep the creator's owner share so the
+		// document remains reachable outside any folder.
+		if (!folderId) {
+			await ensureCurrentUserOwnerShare(ctx, documentId);
+		}
+		if (markdown !== undefined && markdown.length > 0) {
+			await replaceLiveDocumentMarkdown(ctx, documentId, markdown);
+		}
 		return documentId;
 	},
 });
