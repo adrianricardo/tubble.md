@@ -618,16 +618,22 @@ Status values: pending, in-progress, blocked, done.
 
 ## Handoff
 
-Current state: plan written 2026-07-03; no implementation started. Working tree
-has uncommitted desktop-native-live-documents changes — commit/stash before RB1.
-Next step: dispatch RB1 (premier tier) with this file + `REPO-BRAIN-VISION.md`
-+ `REPO-BRAIN-RATIONALE.md` D11–D15 as context.
-Files changed: —
-Checks run: —
-Open questions: RB3 multi-root choice (engine-per-mount vs true multi-root) is
-decided in-phase by the premier RB3 session, first, with a record-why
-requirement; Cowork "Work in Cowork" launch button (VISION open Q1) stays out
-of scope unless RB6 finds it trivial.
+Current state: all code phases RB1–RB6 done and committed per phase on
+`v1-release` (545b198 RB1 · e318038 RB2 · 16ef8dc RB3–RB5 · 51e0d13 RB6 ·
+cc4564d RB7 prep). RB7 is done-pending-operator: regression gaps filled,
+runbook + launch checklist written, no deploy performed.
+Next step: operator executes the RB7 handoff checklist in order — two-machine
+repo-first QA, owed browser smokes, D3 prod Convex, D4 web deploy (+ fix guest
+download URL, currently points at `bholmesdev/hubble.md`), D5 ops sink, C3
+notarization + release tag, D7 signup-cap check, final copy pass.
+Files changed: see per-phase commits above.
+Checks run (final, 2026-07-05): backend 55 tests · sync 32 tests · desktop
+electron 60 tests · pnpm typecheck · www build · build:desktop — all green.
+`pnpm check` remains known-red on pre-existing formatting drift (not a gate).
+Open questions: RB3 multi-root resolved → engine-instance-per-mount (RB3
+handoff records why); Cowork "Work in Cowork" button stayed out of scope;
+`listMentionCandidates` does not list folderShares users — product-scope call,
+not an auth bug, deferred; guest download URL repoint owed before launch.
 
 > Peer-reviewed 2026-07-03 (Codex second opinion, 11 findings); corrections
 > merged: session shape clarified, RB3 → premier (single-root is baked into the
