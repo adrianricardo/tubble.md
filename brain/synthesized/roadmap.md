@@ -15,12 +15,15 @@
 
 1. **Track A — Brain/doc system** ✅ in place (this directory). Ongoing: file new
    material per `RESOLVER.md`; keep `current-vision.md` honest.
-2. **Track B — hubble-init skill.** Design in `/specs/hubble-init/DESIGN.md`. Build the
-   skill iteratively *in this repo* so it can be modified as we go; dry-run first.
+2. **Track B — hubble-init skill.** Design in `/specs/hubble-init/DESIGN.md`. Skill
+   drafted 2026-07-09 (`.claude/skills/hubble-init/SKILL.md`, dry-run only); iterate it
+   in-repo via dogfood runs (records in `/specs/hubble-init/runs/`).
 3. **Track C — Dogfood the split.** Target state: this brain splits — mechanics/build
    docs stay in git, strategy/vision moves to Hubble cloud — driven by the interactive
    init flow on `brain/` as the first corpus. **Two gates:** (1) triage logic feels good
-   (dry-runs) — still open; (2) no-data-loss — **✅ verified 2026-07-09** live on dev
+   (dry-runs) — in progress; first dry run on `brain/` done 2026-07-09, three defaults
+   extracted (see decision log), more runs wanted (e.g. `specs/realtime-collab/archive/`
+   as stress corpus); (2) no-data-loss — **✅ verified 2026-07-09** live on dev
    (every agent/file write snapshots first; wipe, restore, and trash all recover;
    nothing prunes history). Caveats: ~60s live-typing granularity, prod re-run pending,
    pre-move commit still required. Evidence:

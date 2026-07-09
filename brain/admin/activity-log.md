@@ -6,6 +6,11 @@
   Rewrote specs README; added banner to REPO-BRAIN-VISION.md; wrote
   `/specs/hubble-init/DESIGN.md`; added brain pointer to repo CLAUDE.md. Storyboard
   already at v1.1 (agent-init) from earlier in the session.
+- 2026-07-09 — First hubble-init dry run (Track B → C gate 1). Drafted
+  `.claude/skills/hubble-init/SKILL.md` (dry-run only), ran it on `brain/`, captured
+  Adrian's triage answers, folded three new defaults back into the skill. Run record:
+  `specs/hubble-init/runs/2026-07-09-brain-first-dry-run.md`; decision-log entry added;
+  source: `sources/2026-07-09-first-init-dry-run-triage-answers.md`.
 - 2026-07-09 — Version-history verification run (code audit + live dev-deployment
   test): no-data-loss gate for the split dogfood is now ✅ with caveats. Wrote
   specs/hubble-init/VERIFICATION-version-history.md; updated roadmap + open-questions.

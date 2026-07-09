@@ -2,6 +2,18 @@
 
 Newest first. Cite sources; keep entries short.
 
+## 2026-07-09 — Init-triage defaults set by first dry run (skill v1 drafted)
+**Decision:** the hubble-init skill exists (`.claude/skills/hubble-init/SKILL.md`,
+dry-run only) and its opening-proposal defaults are now: (1) **mixed strategy+build
+docs split by default** — strategy → cloud, engineering/build state → git (canonical
+cases: decision logs, roadmaps); (2) **one governance doc, git-side** — process/filing
+rules stay in git as a single file governing both sides, never duplicated to cloud
+(implies RESOLVER+BRAINKEEPER consolidate to one file at apply time); (3) **bookkeeping
+follows its corpus** (activity logs move with the brain). Adrian framed these as
+defaults for the generalized product, not repo one-offs.
+**Source:** `sources/2026-07-09-first-init-dry-run-triage-answers.md`; run record
+`/specs/hubble-init/runs/2026-07-09-brain-first-dry-run.md`.
+
 ## 2026-07-09 — Brain placement: in-repo now, split via dogfood soon
 **Decision:** the brain stays in this repo for now (git IS the change tracking until
 Hubble's own version history is trusted). The **eventual arrangement is a split** —
