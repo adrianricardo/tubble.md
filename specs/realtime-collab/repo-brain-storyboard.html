@@ -197,17 +197,18 @@
 
 <div class="wrap">
   <header class="hero">
-    <span class="eyebrow">v1 storyboard · repo-brain · all-cloud</span>
-    <h1>Link a repo to a <span class="grad">folder</span>.<br/>A teammate joins without ever touching git.</h1>
-    <p class="lede">The v1 happy path, scene by scene: a developer seeds a repo-linked folder with
-      the project's context, invites a non-technical, agent-native teammate who joins
-      <em>zero-install</em>, and the two co-create in real time. One cloud authority, one universal bridge, nothing in git.</p>
+    <span class="eyebrow">v1.1 storyboard · repo-brain · agent-init · all-cloud</span>
+    <h1><span class="grad">init</span> from your coding agent.<br/>A teammate joins without ever touching git.</h1>
+    <p class="lede">The happy path, scene by scene: a developer runs <b>init</b> from Claude Code / Codex
+      inside their repo, the agent triages which docs move to a repo-linked cloud folder and which stay
+      in git, the desktop app picks up syncing — then a non-technical, agent-native teammate joins
+      <em>zero-install</em> and the two co-create in real time. One cloud authority, one universal bridge, nothing in git.</p>
 
     <div class="legend">
       <div class="card"><h4><span class="dot brand"></span>Workspace</h4><p>Your top container — where membership lives. Holds folders.</p></div>
       <div class="card"><h4><span class="dot cloud"></span>Folders (nest &amp; share)</h4><p>Organize docs, link to a repo, and share with collaborators. A "brain" is just a repo-linked folder.</p></div>
       <div class="card"><h4><span class="dot ok"></span>Cloud-only docs</h4><p>Every doc lives in the cloud CRDT. Never in git → deletable, revocable, no permanent history to leak.</p></div>
-      <div class="card"><h4><span class="dot web"></span>Two surfaces</h4><p>Web = zero-install human editing. Desktop app = the local bridge that lets an agent work the docs as files.</p></div>
+      <div class="card"><h4><span class="dot web"></span>Two surfaces, one entry</h4><p>Web = zero-install human editing. Desktop app = the local bridge for agents. Entry = an init skill run from Claude Code / Codex.</p></div>
     </div>
   </header>
 </div>
@@ -220,30 +221,20 @@
   <section class="scene">
     <div class="narr">
       <div class="num">1</div>
-      <h3>Link a repo to a folder</h3>
-      <p class="say">From inside their repo, the dev creates a folder in Hubble and links the repo to it. Informally, that's "making a brain" — but there's no new concept: it's a folder with a repo attached.</p>
-      <div class="tags"><span class="tag">apps/desktop</span><span class="tag cloud">repo-linked folder</span></div>
+      <h3>Run <em>init</em> from the coding agent</h3>
+      <p class="say">The dev is already in their repo, inside Claude Code or Codex. They run the Hubble init skill against a context directory (here <code>brain/</code>). The agent scans the repo for durable, prose-shaped context — no desktop UI to open first, no new tool to learn.</p>
+      <div class="tags"><span class="tag">claude code · codex</span><span class="tag">hubble init skill</span><span class="tag cloud">repo-linked folder</span></div>
     </div>
     <div class="device">
-      <div class="titlebar"><div class="traffic"><i></i><i></i><i></i></div><span class="name">hubble · ~/code/orbital</span><span class="pill">signed in · dana</span></div>
-      <div class="screen">
-        <div class="app">
-          <div class="side">
-            <div class="brandrow"><span class="logo"></span><b>Dana's workspace</b></div>
-            <div class="sec">Folders</div>
-            <div class="row folder active"><span class="ic">📁</span> Orbital <span class="grow mini repo" style="color:var(--brand-soft)">↳ orbital</span></div>
-            <div class="row folder"><span class="ic">📁</span> Lander <span class="grow mini repo" style="color:var(--brand-soft)">↳ lander</span></div>
-            <div class="row"><span class="ic">＋</span> <span style="color:var(--brand-soft)">New folder…</span></div>
-          </div>
-          <div class="main">
-            <div class="doctitle"><h5>Link a repo to <span style="color:var(--cloud)">Orbital</span></h5></div>
-            <div class="prose">
-              <p>Attach <b style="color:var(--text)">github.com/dana/orbital</b> to this folder. Its context lives here — in the cloud, never committed back.</p>
-              <p class="mini" style="color:var(--muted)">Any number of folders can link to a repo. No "brain" entity — just folders with a repo attached.</p>
-            </div>
-            <div class="callout"><span class="ci">🔗</span><p><b>The repo is the anchor, not the storage.</b> Nobody you invite clones it or sees git.</p></div>
-          </div>
-        </div>
+      <div class="titlebar"><div class="traffic"><i></i><i></i><i></i></div><span class="name">claude code — ~/code/orbital</span><span class="pill">agent · local</span></div>
+      <div class="screen term" style="padding-inline:0;">
+        <div class="line"><span class="dim"># working dir: ~/code/orbital</span></div>
+        <div class="line"><span class="prompt">›</span> /hubble-init brain/</div>
+        <div class="line dim">scanning repo for durable context…</div>
+        <div class="line">found <span class="cloudc">brain/</span> (4 docs) · <span class="cloudc">specs/</span> (3) · <span class="cloudc">notes/pricing-bets.md</span></div>
+        <div class="line">found <span class="dim">README.md · CLAUDE.md · docs/adr/ (code-coupled)</span></div>
+        <div class="line"><span class="ok">✓</span> triage proposal ready — review below</div>
+        <div class="barin"><span class="chip">Claude</span> <span class="chip">hubble</span> <span class="chip">Auto</span> <span style="margin-inline-start:auto">orbital</span></div>
       </div>
     </div>
   </section>
@@ -252,37 +243,28 @@
   <section class="scene">
     <div class="narr">
       <div class="num">2</div>
-      <h3>Seed it — nested folders, a mix that grows</h3>
-      <p class="say">The dev fills the folder with context: some imported from the repo, some authored fresh. Nested folders keep it organized. Every doc is cloud-only — there's no regime to choose.</p>
-      <div class="tags"><span class="tag cloud">all cloud-only</span><span class="tag">nested folders</span></div>
+      <h3>Triage — what moves, what stays</h3>
+      <p class="say">The agent walks the dev through a split: <em>opinion, strategy, evolving prose</em> — anything a non-dev collaborator needs — moves to the cloud folder. <em>Code-coupled truth</em> — README, CLAUDE.md, ADRs, anything the codebase needs at clone time — stays in git. The dev edits the list and confirms.</p>
+      <div class="tags"><span class="tag cloud">move → cloud · revocable</span><span class="tag">keep → git · code-coupled</span></div>
     </div>
     <div class="device">
-      <div class="titlebar"><div class="traffic"><i></i><i></i><i></i></div><span class="name">hubble · Orbital</span><span class="pill">7 docs · cloud</span></div>
-      <div class="screen">
-        <div class="app">
-          <div class="side">
-            <div class="brandrow"><span class="logo"></span><b>Orbital</b></div>
-            <div class="sec">Strategy</div>
-            <div class="row folder"><span class="ic">📁</span> Strategy</div>
-            <div class="row indent active"><span class="ic">📄</span> positioning.md</div>
-            <div class="row indent"><span class="ic">📄</span> pricing-bets.md</div>
-            <div class="sec">Product</div>
-            <div class="row folder"><span class="ic">📁</span> Product</div>
-            <div class="row indent"><span class="ic">📄</span> q3-narrative.md</div>
-            <div class="sec">Implementation</div>
-            <div class="row folder"><span class="ic">📁</span> Implementation</div>
-            <div class="row indent"><span class="ic">📄</span> architecture.md</div>
-          </div>
-          <div class="main">
-            <div class="doctitle"><h5>positioning.md</h5><span class="badge cloud">cloud-only</span></div>
-            <div class="prose">
-              <p class="h">Who we're really for</p>
-              <p>The non-technical operator who already runs their day through an agent — but has no shared, trustworthy context to point it at.</p>
-              <p class="mini" style="color:var(--muted)">Cloud-only, like everything here. This is opinion, and opinion should be revocable.</p>
-            </div>
-          </div>
-        </div>
+      <div class="titlebar"><div class="traffic"><i></i><i></i><i></i></div><span class="name">claude code — triage proposal</span><span class="pill">confirm to apply</span></div>
+      <div class="screen term" style="padding-inline:0;">
+        <div class="line"><span class="cloudc">move → Hubble folder "Orbital" (cloud-only):</span></div>
+        <div class="line"><span class="ok">✓</span> brain/positioning.md <span class="dim">— opinion · evolves · share w/ non-devs</span></div>
+        <div class="line"><span class="ok">✓</span> brain/q3-narrative.md <span class="dim">— strategy · collaborative</span></div>
+        <div class="line"><span class="ok">✓</span> notes/pricing-bets.md <span class="dim">— sensitive · should be revocable</span></div>
+        <div class="line"><span class="ok">✓</span> specs/architecture.md <span class="dim">— living doc · agents read it</span></div>
+        <div class="line"><span class="dim">keep in git (code-coupled):</span></div>
+        <div class="line dim">· README.md — the repo's front door</div>
+        <div class="line dim">· CLAUDE.md — agent config, belongs to the clone</div>
+        <div class="line dim">· docs/adr/ — engineering record, wants line diffs</div>
+        <div class="line"><span class="prompt">›</span> confirm? <span class="dim">[enter = apply · e = edit list]</span></div>
       </div>
+    </div>
+    <div style="grid-column: 1 / -1;">
+      <div class="callout"><span class="ci">⚖️</span><p><b>The heuristic:</b> if it's opinion that evolves and someone without repo access needs it → <b style="color:var(--cloud)">cloud</b>. If the codebase itself needs it at clone/build time → <b>git</b>.</p></div>
+      <div class="callout ok"><span class="ci">🕰️</span><p><b>Honest scope:</b> files already committed keep their git history — moving stops <em>future</em> history, it doesn't erase the past. Brand-new docs get the full revocability guarantee from day one.</p></div>
     </div>
   </section>
 
@@ -290,6 +272,50 @@
   <section class="scene">
     <div class="narr">
       <div class="num">3</div>
+      <h3>The skill ensures the bridge, then hands off</h3>
+      <p class="say">Syncing needs the desktop app — it's the one watcher bridge. The skill checks for it, installs it if missing, signs the dev in, then opens it via deep link straight to the new workspace. The moved docs are now cloud-only, mounted back into the repo as a git-excluded projection, with a seeded BRAIN.md.</p>
+      <div class="tags"><span class="tag">ensure desktop installed</span><span class="tag">deep-link open</span><span class="tag cloud">mounted · git-excluded</span></div>
+    </div>
+    <div class="device">
+      <div class="titlebar"><div class="traffic"><i></i><i></i><i></i></div><span class="name">claude code — ~/code/orbital</span><span class="pill">handing off…</span></div>
+      <div class="screen term" style="padding-inline:0;">
+        <div class="line"><span class="ok">✓</span> moved 4 docs → <span class="cloudc">Orbital</span> (cloud) · originals removed from working tree</div>
+        <div class="line"><span class="ok">✓</span> mounted <span class="cloudc">~/code/orbital/Orbital/</span> · added to .git/info/exclude</div>
+        <div class="line"><span class="ok">✓</span> seeded <span class="cloudc">BRAIN.md</span> — folder purpose · doc index · how agents work here</div>
+        <div class="line"><span class="dim">! hubble desktop not found →</span> installing…</div>
+        <div class="line"><span class="ok">✓</span> hubble desktop installed · signed in as dana</div>
+        <div class="line"><span class="ok">✓</span> opening <span class="cloudc">hubble://folder/orbital</span> — your new workspace</div>
+      </div>
+      <div class="titlebar" style="border-block-start:1px solid var(--border-soft);"><div class="traffic"><i></i><i></i><i></i></div><span class="name">hubble · Orbital</span><span class="pill">synced ✓ · 5 docs</span></div>
+      <div class="screen">
+        <div class="app">
+          <div class="side">
+            <div class="brandrow"><span class="logo"></span><b>Orbital</b> <span class="grow mini" style="color:var(--brand-soft)">↳ orbital</span></div>
+            <div class="sec">Docs</div>
+            <div class="row indent"><span class="ic">🧠</span> BRAIN.md</div>
+            <div class="row indent active"><span class="ic">📄</span> positioning.md</div>
+            <div class="row indent"><span class="ic">📄</span> q3-narrative.md</div>
+            <div class="row indent"><span class="ic">📄</span> pricing-bets.md</div>
+            <div class="row indent"><span class="ic">📄</span> architecture.md</div>
+          </div>
+          <div class="main">
+            <div class="doctitle"><h5>positioning.md</h5><span class="badge cloud">cloud-only</span></div>
+            <div class="prose">
+              <p class="h">Who we're really for</p>
+              <p>The non-technical operator who already runs their day through an agent — but has no shared, trustworthy context to point it at.</p>
+              <p class="mini" style="color:var(--muted)">Moved from brain/ by the init skill. Cloud-only now — opinion, and opinion should be revocable.</p>
+            </div>
+            <div class="callout"><span class="ci">🔗</span><p><b>The repo is the anchor, not the storage.</b> Nobody you invite clones it or sees git.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE 4 -->
+  <section class="scene">
+    <div class="narr">
+      <div class="num">4</div>
       <h3>Why nothing is in git</h3>
       <p class="say">All-cloud isn't a limitation — it's the privacy guarantee. Anything in git has permanent history that can't be revoked. Keeping everything cloud-only makes "un-share and delete" behave like a Google Doc, with no asterisk.</p>
       <div class="tags"><span class="tag cloud">absolute revocability</span></div>
@@ -307,10 +333,10 @@
     </div>
   </section>
 
-  <!-- SCENE 4 -->
+  <!-- SCENE 5 -->
   <section class="scene">
     <div class="narr">
-      <div class="num">4</div>
+      <div class="num">5</div>
       <h3>Share the folder</h3>
       <p class="say">The dev shares the <em>folder</em> — and its whole subtree — with a link. Sharing is folder-level, so scope is automatic: Priya gets Orbital, never Lander. No repo access, no git, no clone.</p>
       <div class="tags"><span class="tag">folder-level share</span><span class="tag cloud">scoped subtree</span></div>
@@ -325,10 +351,10 @@
     </div>
   </section>
 
-  <!-- SCENE 5 -->
+  <!-- SCENE 6 -->
   <section class="scene">
     <div class="narr">
-      <div class="num">5</div>
+      <div class="num">6</div>
       <h3>The teammate lands — zero install</h3>
       <p class="say">Priya opens the link in a browser. She's immediately in the folder: reading, editing, and seeing Dana's live cursor. No download yet. The web is the complete human experience on its own.</p>
       <div class="tags"><span class="tag web">web · no install</span><span class="tag">live presence</span></div>
@@ -359,10 +385,10 @@
     </div>
   </section>
 
-  <!-- SCENE 6 -->
+  <!-- SCENE 7 -->
   <section class="scene">
     <div class="narr">
-      <div class="num">6</div>
+      <div class="num">7</div>
       <h3>Install the app to bring her agent in</h3>
       <p class="say">To let her own agent work the docs, Priya installs the Hubble desktop app — a consumer app, signed in from the same link. It materializes a gitignored synced folder of just her shared docs. Still no git, still no clone.</p>
       <div class="tags"><span class="tag">desktop app</span><span class="tag cloud">gitignored projection</span></div>
@@ -381,10 +407,10 @@
     </div>
   </section>
 
-  <!-- SCENE 7 -->
+  <!-- SCENE 8 -->
   <section class="scene">
     <div class="narr">
-      <div class="num">7</div>
+      <div class="num">8</div>
       <h3>She points Cowork at the folder</h3>
       <p class="say">Priya's local agent (Claude Cowork) runs on her own machine, pointed at the synced folder as its working directory — exactly like Claude Code. It reads the context, does a task, and writes files.</p>
       <div class="tags"><span class="tag">claude cowork · local</span><span class="tag cloud">edits files</span></div>
@@ -402,10 +428,10 @@
     </div>
   </section>
 
-  <!-- SCENE 8 -->
+  <!-- SCENE 9 -->
   <section class="scene">
     <div class="narr">
-      <div class="num">8</div>
+      <div class="num">9</div>
       <h3>The one bridge: the watcher reconciles</h3>
       <p class="say">The desktop app watches the <em>filesystem</em>, not any app. So a Cowork save and a TextEdit save are identical to it: diff against the base → scoped patch → merge into the cloud CRDT. This bridge is universal and can never be retired.</p>
       <div class="tags"><span class="tag">watcher</span><span class="tag">any editor · same path</span></div>
@@ -427,10 +453,10 @@
     </div>
   </section>
 
-  <!-- SCENE 9 -->
+  <!-- SCENE 10 -->
   <section class="scene">
     <div class="narr">
-      <div class="num">9</div>
+      <div class="num">10</div>
       <h3>It round-trips to the dev, live</h3>
       <p class="say">Dana sees Priya's agent's edit appear in real time on the web and on her own disk. Dana works the same cloud docs — projected to her own gitignored folder so her agent reads them too. Same folder, two people, two agents, one authority.</p>
       <div class="tags"><span class="tag web">live on web</span><span class="tag cloud">attributed</span></div>
@@ -460,7 +486,7 @@
     </div>
   </section>
 
-  <!-- SCENE 10 — MODEL -->
+  <!-- SCENE ✦ — MODEL -->
   <section class="scene">
     <div class="narr">
       <div class="num">✦</div>
@@ -489,12 +515,20 @@
 
 <div class="wrap">
   <footer>
-    <div class="kicker">HUBBLE · REPO-BRAIN VISION · v1 STORYBOARD · ALL-CLOUD · 2026-07-03</div>
+    <div class="kicker">HUBBLE · REPO-BRAIN VISION · v1.1 STORYBOARD · AGENT-INIT · ALL-CLOUD · 2026-07-09</div>
     <p style="margin-block:12px 0; max-inline-size:64ch;">
       Companion to <a href="REPO-BRAIN-VISION.md">REPO-BRAIN-VISION.md</a>.
       Model locked: <b style="color:var(--text)">Workspace ⊃ nested Folders ⊃ cloud Docs</b>;
       "brain" is informal for a repo-linked folder; everything is
       <b style="color:var(--cloud)">cloud-only</b>, nothing in git.
+    </p>
+    <p style="margin-block:12px 0; max-inline-size:64ch;">
+      <b style="color:var(--text)">Revision 2026-07-09:</b> the entry point moves from the desktop app
+      to an <b style="color:var(--brand-soft)">init skill run inside Claude Code / Codex</b> — agent-assisted
+      triage of what moves to the cloud folder vs. stays in git (scenes 1–3). This supersedes
+      REPO-BRAIN-VISION.md Decided #13 ("no agent-drafted seed flow in v1"); the vision doc still
+      needs a matching update. Requires: a <code>hubble-init</code> skill, an authenticated CLI/headless
+      repo-link path, desktop-app install detection, and a <code>hubble://</code> deep link.
     </p>
   </footer>
 </div>

@@ -1,5 +1,10 @@
 # Repo-Brain Collaboration — Vision Synthesis
 
+> ⚠ **2026-07-09:** the current vision now lives at `/brain/synthesized/current-vision.md`.
+> This doc remains the authoritative detail for Decided #1–15, **except #13** (manual-only
+> seeding), which is superseded by the agent-init entry point (`/specs/hubble-init/DESIGN.md`,
+> storyboard v1.1 scenes 1–3).
+
 > Captured 2026-07-02, revised 2026-07-03 from a discovery/interview session.
 > **Revised again 2026-07-03 (interview round 2):** the five build-blocking gaps
 > (repo-link mechanics, guest model, seeding, `BRAIN.md` lifecycle, sequencing)
