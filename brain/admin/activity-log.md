@@ -11,6 +11,10 @@
   Adrian's triage answers, folded three new defaults back into the skill. Run record:
   `specs/hubble-init/runs/2026-07-09-brain-first-dry-run.md`; decision-log entry added;
   source: `sources/2026-07-09-first-init-dry-run-triage-answers.md`.
+- 2026-07-09 — Progress contract installed: CLAUDE.md gained Progress-contract +
+  merged AGENTS.md content; AGENTS.md replaced with a symlink to CLAUDE.md (stale
+  PROGRESS.md pointer removed). DESIGN.md + SKILL.md updated (rule 8, apply-mode
+  seeding). Decision-log entry added.
 - 2026-07-09 — Second hubble-init dry run (archive stress corpus, 35 files). Three
   new defaults folded into the skill (no archive exemption; cloud holds strategy
   history; relocate-within-git verb). Run record:

@@ -2,6 +2,18 @@
 
 Newest first. Cite sources; keep entries short.
 
+## 2026-07-09 — Progress contract: roadmap.md, convention-only, AGENTS.md symlink; init installs it
+**Decision:** `brain/synthesized/roadmap.md` is the single source of "where the build
+is + what's next" (post-split its build-state half stays git-side per the mixed-docs
+rule). Updates are **convention-only** — every session that changes build/direction
+updates it before ending; a reconcile command was considered and rejected (add only if
+drift bites). `AGENTS.md` is now a **symlink to CLAUDE.md** (its unique content merged
+in; its old pointer to archived PROGRESS.md was live drift — the bug this fixes).
+**Product default:** hubble-init apply-mode seeds this contract in any repo
+(CLAUDE.md block + AGENTS.md symlink + roadmap if missing) — see DESIGN.md §Progress
+contract.
+**Source:** AskUserQuestion answers in the 2026-07-09 init-iteration session.
+
 ## 2026-07-09 — Archive triage defaults (second dry run, stress corpus)
 **Decision:** three more init defaults from the archive run: (4) **no archive
 exemption** — archived/executed docs follow the same content split rules; "archive"

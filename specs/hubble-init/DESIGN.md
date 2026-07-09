@@ -63,6 +63,24 @@ restore from Hubble's version history first. Until then, dry-run only.
 - Each dry-run's proposal gets saved under `specs/hubble-init/runs/YYYY-MM-DD-*.md` with
   notes on what the heuristic got wrong.
 
+## Progress contract (decided 2026-07-09 — product default)
+
+Init doesn't just triage; apply-mode **installs the progress contract** into any repo
+it runs in:
+
+1. A pointer block in the repo's CLAUDE.md (created if missing): the repo's roadmap
+   doc is the single source of "where the build is + what's next"; every session that
+   changes the build or direction updates it before ending. **Convention-only — no
+   separate progress command** (a reconcile command was considered and rejected
+   2026-07-09; add one only if drift actually bites).
+2. `AGENTS.md` as a **symlink to CLAUDE.md** so Codex and Claude Code read identical
+   instructions (if a real AGENTS.md exists, merge its unique content into CLAUDE.md
+   first — dogfood on this repo found the existing AGENTS.md pointing at an archived
+   progress tracker, exactly the drift this prevents).
+3. The roadmap/next-step doc itself, seeded if the repo has none. Post-split, the
+   build-state half of a roadmap stays git-side (learned rule 1), so the pointer
+   always resolves inside the repo.
+
 ## Gaps in the platform this needs (verified against code 2026-07-09)
 
 1. **Authenticated headless path.** `packages/cli` has `cloud create/connect/import/

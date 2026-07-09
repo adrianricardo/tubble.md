@@ -143,3 +143,9 @@ From `specs/hubble-init/runs/2026-07-09-archive-stress-run.md` (Adrian's calls):
 7. **Moving out of an indexed folder obligates the index.** If a proposal moves files
    that a local README/index enumerates, the proposal must include updating that index
    at apply time.
+8. **Apply-mode seeds the progress contract** (decided 2026-07-09, see DESIGN.md
+   §Progress contract): CLAUDE.md pointer block naming the roadmap doc as the single
+   "where we are + what's next" source (convention-only updates, no command);
+   AGENTS.md symlinked to CLAUDE.md (merge unique content first if a real file
+   exists); roadmap doc seeded if missing. In dry-run, *report* whether the repo
+   already satisfies the contract; write nothing.
