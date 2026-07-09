@@ -422,7 +422,12 @@ export const removeWorkspaceMember = mutation({
 export const listWorkspaceInvites = query({
 	args: { workspaceId: v.id("workspaces") },
 	handler: async (ctx, { workspaceId }) => {
-		await requireWorkspaceManage(ctx, workspaceId);
+		// Pending invites are manage-only data. Non-managers (plain members, or
+		// anyone without access) see an empty list rather than a thrown error:
+		// this is a live subscription, so throwing surfaces as an uncaught error
+		// in the client, and the members modal already treats invites as optional.
+		const role = await workspaceRole(ctx, workspaceId);
+		if (role !== "owner" && role !== "admin") return [];
 		return ctx.db
 			.query("invites")
 			.withIndex("by_workspace_email", (q) => q.eq("workspaceId", workspaceId))

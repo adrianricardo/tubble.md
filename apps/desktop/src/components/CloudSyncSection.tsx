@@ -228,10 +228,10 @@ function SignedInCloudSync({ deploymentUrl }: { deploymentUrl: string }) {
 	}, [authToken, deploymentUrl, status?.connected, status?.syncRoot]);
 
 	const workspaceSummary = useMemo(() => {
-		if (workspaces === undefined) return "Loading workspaces...";
-		if (workspaces.length === 0) return "No cloud workspaces yet";
-		if (workspaces.length === 1) return `Workspace: ${workspaces[0].name}`;
-		return `Workspaces: ${workspaces.map((workspace) => workspace.name).join(", ")}`;
+		if (workspaces === undefined) return "Loading spaces...";
+		if (workspaces.length === 0) return "No spaces yet";
+		if (workspaces.length === 1) return `Space: ${workspaces[0].name}`;
+		return `Spaces: ${workspaces.map((workspace) => workspace.name).join(", ")}`;
 	}, [workspaces]);
 
 	const connectInspectedRoot = async (
@@ -288,7 +288,7 @@ function SignedInCloudSync({ deploymentUrl }: { deploymentUrl: string }) {
 			return;
 		}
 		if (!selectedWorkspaceId) {
-			toast.error("Choose a target workspace first");
+			toast.error("Choose a target space first");
 			return;
 		}
 		setPendingAction("import");
@@ -507,7 +507,7 @@ function SignedInCloudSync({ deploymentUrl }: { deploymentUrl: string }) {
 							htmlFor="desktop-sync-import-workspace"
 							className="text-xs font-medium"
 						>
-							Import target workspace
+							Import target space
 						</label>
 						<select
 							id="desktop-sync-import-workspace"
@@ -517,9 +517,9 @@ function SignedInCloudSync({ deploymentUrl }: { deploymentUrl: string }) {
 							className="w-full rounded-sm border border-border bg-background text-sm outline-none focus:border-ring [padding-block:0.5rem] [padding-inline:0.625rem]"
 						>
 							{workspaces === undefined ? (
-								<option value="">Loading workspaces...</option>
+								<option value="">Loading spaces...</option>
 							) : workspaces.length === 0 ? (
-								<option value="">No workspaces available</option>
+								<option value="">No spaces available</option>
 							) : (
 								workspaces.map((workspace) => (
 									<option key={workspace._id} value={workspace._id}>

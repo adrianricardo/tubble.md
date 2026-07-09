@@ -39,6 +39,7 @@ import {
 	LOADING_DELAY_MS,
 	MAX_RECENT,
 	type SortMode,
+	selectedSpaceIdStore,
 	sidebarOpenStore,
 	switcherOpenStore,
 	viewerStore,
@@ -293,6 +294,10 @@ export function setSortMode(mode: SortMode) {
 
 export function setWorkspaceSwitcherOpen(isOpen: boolean) {
 	switcherOpenStore.set(isOpen);
+}
+
+export function setSelectedSpace(spaceId: string) {
+	selectedSpaceIdStore.set(spaceId);
 }
 
 export function setSidebarOpen(isOpen: boolean) {

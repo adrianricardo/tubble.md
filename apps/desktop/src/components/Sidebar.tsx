@@ -1,3 +1,4 @@
+import { FoldersSection, LiveDocumentsSection } from "@hubble.md/cloud-ui";
 import { api } from "@hubble.md/sync-backend";
 import {
 	Button,
@@ -36,17 +37,20 @@ import {
 	sidebarOpenStore,
 	workspaceStore,
 } from "../store/state";
+import { SpaceSwitcher, useSelectedSpace } from "./SpaceSwitcher";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 export function Sidebar({
 	cloudEnabled,
 	footer,
+	activeLiveDocumentId,
 	onOpenLiveDocument,
 	onOpenSettings,
 	onFocusedPathChange,
 }: {
 	cloudEnabled?: boolean;
 	footer?: ReactNode;
+	activeLiveDocumentId?: string | null;
 	onOpenLiveDocument?: (documentId: string) => void;
 	onOpenSettings?: () => void;
 	onFocusedPathChange?: (path: string | null) => void;
@@ -64,7 +68,7 @@ export function Sidebar({
 			<SidebarFrame onCollapse={collapseSidebar}>
 				{cloudEnabled ? (
 					<CloudSidebarSection
-						files={files}
+						activeLiveDocumentId={activeLiveDocumentId}
 						onOpenLiveDocument={onOpenLiveDocument}
 						onOpenSettings={onOpenSettings}
 						className="[border-block-end:1px_solid_var(--sidebar-border)]"
@@ -72,6 +76,7 @@ export function Sidebar({
 				) : null}
 				<div className="flex min-h-0 flex-1 flex-col items-start justify-center gap-3 [padding-inline:0.75rem] text-sm">
 					<div className="flex flex-col gap-1">
+						{cloudEnabled ? <OnThisComputerCaption /> : null}
 						<p className="font-medium text-sidebar-foreground">
 							No local folder selected
 						</p>
@@ -85,7 +90,9 @@ export function Sidebar({
 					</Button>
 				</div>
 				{footer ? (
-					<div className="border-t border-sidebar-border p-2">{footer}</div>
+					<div className="border-t border-sidebar-border [padding-block:0.5rem] [padding-inline:0.5rem]">
+						{footer}
+					</div>
 				) : null}
 			</SidebarFrame>
 		);
@@ -127,11 +134,20 @@ export function Sidebar({
 			currentPath={currentPath ?? null}
 			sortMode={sortMode}
 			storageScope={workspacePath}
-			header={<WorkspaceSwitcher />}
+			header={
+				cloudEnabled ? (
+					<div className="flex min-w-0 flex-col items-start">
+						<OnThisComputerCaption />
+						<WorkspaceSwitcher />
+					</div>
+				) : (
+					<WorkspaceSwitcher />
+				)
+			}
 			topSlot={
 				cloudEnabled ? (
 					<CloudSidebarSection
-						files={files}
+						activeLiveDocumentId={activeLiveDocumentId}
 						onOpenLiveDocument={onOpenLiveDocument}
 						onOpenSettings={onOpenSettings}
 						className="[border-block-end:1px_solid_var(--sidebar-border)]"
@@ -172,13 +188,24 @@ export function Sidebar({
 	);
 }
 
+// Desktop copy of the local-folder wayfinding rule: the sidebar's top row is
+// always "which space am I in?"; this caption marks where the answer switches
+// to "how does this space live on this machine?".
+function OnThisComputerCaption() {
+	return (
+		<span className="text-[10px] font-medium uppercase text-muted-foreground [padding-inline-start:0.5rem]">
+			On this computer
+		</span>
+	);
+}
+
 function CloudSidebarSection({
-	files,
+	activeLiveDocumentId,
 	onOpenLiveDocument,
 	onOpenSettings,
 	className,
 }: {
-	files: { path: string }[];
+	activeLiveDocumentId?: string | null;
 	onOpenLiveDocument?: (documentId: string) => void;
 	onOpenSettings?: () => void;
 	className?: string;
@@ -187,26 +214,19 @@ function CloudSidebarSection({
 		<div
 			className={`grid gap-2 [padding-block:0.625rem] [padding-inline:0.625rem] ${className ?? ""}`}
 		>
-			<div className="flex items-center justify-between gap-2">
-				<div className="flex min-w-0 items-center gap-1.5">
-					<MingcuteCloudLine className="size-3.5 shrink-0 text-muted-foreground" />
-					<span className="truncate text-[11px] font-medium uppercase text-muted-foreground">
-						Live Documents
-					</span>
-				</div>
-				<Authenticated>
-					<CloudSidebarCreateButton onOpenLiveDocument={onOpenLiveDocument} />
-				</Authenticated>
-			</div>
 			<AuthLoading>
-				<p className="text-[11px] text-sidebar-foreground/70">
-					Loading workspace…
-				</p>
+				<p className="text-[11px] text-sidebar-foreground/70">Loading space…</p>
 			</AuthLoading>
 			<Unauthenticated>
 				<div className="grid gap-2">
+					<div className="flex min-w-0 items-center gap-1.5">
+						<MingcuteCloudLine className="size-3.5 shrink-0 text-muted-foreground" />
+						<span className="truncate text-[11px] font-medium uppercase text-muted-foreground">
+							Live Documents
+						</span>
+					</div>
 					<p className="text-[11px] text-sidebar-foreground/70">
-						Sign in to see workspace documents.
+						Sign in to see your spaces and Live Documents.
 					</p>
 					{onOpenSettings ? (
 						<Button size="sm" variant="outline" onClick={onOpenSettings}>
@@ -216,8 +236,12 @@ function CloudSidebarSection({
 				</div>
 			</Unauthenticated>
 			<Authenticated>
+				<div className="flex items-center justify-between gap-2">
+					<SpaceSwitcher />
+					<CloudSidebarCreateButton onOpenLiveDocument={onOpenLiveDocument} />
+				</div>
 				<AuthenticatedCloudSidebarSection
-					files={files}
+					activeLiveDocumentId={activeLiveDocumentId}
 					onOpenLiveDocument={onOpenLiveDocument}
 				/>
 			</Authenticated>
@@ -230,22 +254,16 @@ function CloudSidebarCreateButton({
 }: {
 	onOpenLiveDocument?: (documentId: string) => void;
 }) {
-	const dashboard = useQuery(api.documents.dashboard, {
-		recentLimit: 1,
-		sharedLimit: 0,
-	});
+	const { space } = useSelectedSpace();
 	const createDocument = useMutation(api.documents.create);
 	const [creating, setCreating] = useState(false);
-	const workspace =
-		dashboard?.workspaces.find((item) => item.personal) ??
-		dashboard?.workspaces[0];
 
 	const createLiveDocument = async () => {
-		if (!workspace || creating) return;
+		if (!space || creating) return;
 		setCreating(true);
 		try {
 			const documentId = await createDocument({
-				workspaceId: workspace._id,
+				workspaceId: space._id,
 				title: "Untitled",
 			});
 			onOpenLiveDocument?.(documentId);
@@ -265,7 +283,7 @@ function CloudSidebarCreateButton({
 			size="icon-xs"
 			aria-label="New Live Document"
 			title="New Live Document"
-			disabled={!workspace || creating}
+			disabled={!space || creating}
 			onClick={() => void createLiveDocument()}
 		>
 			<MingcuteAddLine className="size-3.5" />
@@ -274,21 +292,26 @@ function CloudSidebarCreateButton({
 }
 
 function AuthenticatedCloudSidebarSection({
-	files,
+	activeLiveDocumentId,
 	onOpenLiveDocument,
 }: {
-	files: { path: string }[];
+	activeLiveDocumentId?: string | null;
 	onOpenLiveDocument?: (documentId: string) => void;
 }) {
-	const dashboard = useQuery(api.documents.dashboard, {
-		recentLimit: 5,
-		sharedLimit: 2,
-	});
-	const documents = dashboard
-		? [...dashboard.recents, ...dashboard.sharedWithMe].slice(0, 6)
-		: [];
+	const { spaces, space } = useSelectedSpace();
+	// Guest-safe query (D12): direct shares and folder shares live outside the
+	// member-gated space list.
+	const sharedWithMe = useQuery(api.documents.listSharedWithMe, {});
 
-	if (dashboard === undefined) {
+	const openDocument = (documentId: string) => {
+		if (onOpenLiveDocument) {
+			onOpenLiveDocument(documentId);
+			return;
+		}
+		toast("Live Document opening is unavailable in this window");
+	};
+
+	if (spaces === undefined) {
 		return (
 			<p className="text-[11px] text-sidebar-foreground/70">
 				Loading documents…
@@ -296,56 +319,57 @@ function AuthenticatedCloudSidebarSection({
 		);
 	}
 
-	if (documents.length === 0) {
-		return (
-			<p className="text-[11px] text-sidebar-foreground/70">
-				No Live Documents yet.
-			</p>
-		);
-	}
+	const sharedDocuments = sharedWithMe?.documents ?? [];
 
 	return (
-		<div className="grid gap-0.5">
-			{documents.map((document) => (
-				<button
-					key={document._id}
-					type="button"
-					className="min-w-0 truncate rounded-sm text-start text-[11px] text-sidebar-foreground hover:bg-sidebar-accent [padding-block:0.25rem] [padding-inline:0.375rem]"
-					title={document.title}
-					onClick={() => {
-						if (onOpenLiveDocument) {
-							onOpenLiveDocument(document._id);
-							return;
-						}
-						openLiveDocumentProjection(document, files);
-					}}
-				>
-					{document.title}
-				</button>
-			))}
+		<div className="grid gap-2">
+			{space ? (
+				<>
+					<FoldersSection
+						workspaceId={space._id}
+						selectedDocumentId={activeLiveDocumentId ?? null}
+						onSelectDocument={openDocument}
+					/>
+					<LiveDocumentsSection
+						workspaceId={space._id}
+						selectedDocumentId={activeLiveDocumentId ?? null}
+						onSelectDocument={openDocument}
+					/>
+				</>
+			) : null}
+			{sharedDocuments.length > 0 ? (
+				<div className="grid gap-0.5">
+					<span className="truncate text-[10px] font-medium uppercase text-muted-foreground">
+						Shared with me
+					</span>
+					{sharedDocuments.map((document) => (
+						<CloudDocumentRow
+							key={document._id}
+							title={document.title}
+							onOpen={() => openDocument(document._id)}
+						/>
+					))}
+				</div>
+			) : null}
 		</div>
 	);
 }
 
-function openLiveDocumentProjection(
-	document: { title: string; path?: string },
-	files: { path: string }[],
-) {
-	// Desktop edits Live Documents through the synced Markdown projection in this
-	// IA slice, so a cloud row can open only after the mirror has materialized it.
-	const candidates = [
-		document.path,
-		document.title.endsWith(".md") ? document.title : `${document.title}.md`,
-	].filter((path): path is string => Boolean(path));
-	const match = files.find((file) =>
-		candidates.some((candidate) => file.path.endsWith(candidate)),
+function CloudDocumentRow({
+	title,
+	onOpen,
+}: {
+	title: string;
+	onOpen: () => void;
+}) {
+	return (
+		<button
+			type="button"
+			className="min-w-0 truncate rounded-sm text-start text-[11px] text-sidebar-foreground hover:bg-sidebar-accent [padding-block:0.25rem] [padding-inline:0.375rem]"
+			title={title}
+			onClick={onOpen}
+		>
+			{title}
+		</button>
 	);
-	if (!match) {
-		toast("Connect a synced folder to edit this document locally", {
-			description:
-				"Live Document editing stays cloud-authoritative; the local file appears after sync.",
-		});
-		return;
-	}
-	void loadPath(match.path);
 }

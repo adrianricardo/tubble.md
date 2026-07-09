@@ -24,7 +24,7 @@ export function WelcomeScreen({
 				style={{ animationDelay: "0.15s" }}
 			>
 				{cloudEnabled
-					? "Sign in to your workspace for Live Documents, or add a local folder for file-based editing."
+					? "Sign in to your space for Live Documents, or add a local folder for file-based editing."
 					: "Pick a local folder to start writing."}
 			</p>
 			<div
@@ -32,7 +32,7 @@ export function WelcomeScreen({
 				style={{ animationDelay: "0.25s" }}
 			>
 				{cloudEnabled && onOpenSettings ? (
-					<Button onClick={onOpenSettings}>Open workspace settings</Button>
+					<Button onClick={onOpenSettings}>Open settings</Button>
 				) : null}
 				<Button
 					variant={cloudEnabled ? "outline" : "default"}

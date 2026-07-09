@@ -142,9 +142,11 @@ export const appStore = store<DesktopState>(getInitialState(), {
 export const workspaceStore = appStore.select("workspace");
 export const viewerStore = appStore.select("document");
 export const uiStore = appStore.select("ui");
+export const cloudStore = appStore.select("cloud");
 
 export const workspacePathStore = workspaceStore.select("workspacePath");
 export const recentWorkspacesStore = workspaceStore.select("recentWorkspaces");
 export const currentPathStore = viewerStore.select("currentPath");
 export const sidebarOpenStore = uiStore.select("sidebarOpen");
 export const switcherOpenStore = uiStore.select("isSwitcherOpen");
+export const selectedSpaceIdStore = cloudStore.select("selectedSpaceId");

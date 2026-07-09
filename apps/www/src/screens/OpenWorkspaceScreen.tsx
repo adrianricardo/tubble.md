@@ -55,7 +55,7 @@ export function OpenWorkspaceScreen({ onSelected, onDisconnect }: Props) {
 			<div className="flex w-full max-w-md flex-col gap-3 rounded-md border border-border bg-sidebar p-6">
 				<div className="flex items-start justify-between gap-3">
 					<h1 className="m-0 text-base font-semibold">
-						{empty ? "Name your Workspace" : "Open a Workspace"}
+						{empty ? "Name your space" : "Open a space"}
 					</h1>
 					{onDisconnect && (
 						<button
@@ -108,7 +108,7 @@ export function OpenWorkspaceScreen({ onSelected, onDisconnect }: Props) {
 							required
 							value={name}
 							onChange={(event) => setName(event.target.value)}
-							placeholder="Workspace name"
+							placeholder="Space name"
 							disabled={busy}
 							className="rounded-sm border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring"
 						/>
@@ -117,7 +117,7 @@ export function OpenWorkspaceScreen({ onSelected, onDisconnect }: Props) {
 							disabled={busy}
 							className="rounded-sm bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
 						>
-							{busy ? "Creating…" : "Create Workspace"}
+							{busy ? "Creating…" : "Create space"}
 						</button>
 					</form>
 				)}

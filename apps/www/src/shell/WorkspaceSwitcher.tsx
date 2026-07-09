@@ -81,7 +81,7 @@ export function WorkspaceSwitcher({
 						setCreateOpen(true);
 					}}
 				>
-					Create workspace
+					Create space
 				</WorkspaceSwitcherMenu.Item>
 				<WorkspaceSwitcherMenu.Item
 					onClick={() => {
@@ -95,7 +95,7 @@ export function WorkspaceSwitcher({
 			<Modal
 				open={createOpen}
 				onOpenChange={setCreateOpen}
-				title="Create workspace"
+				title="Create space"
 			>
 				<CreateWorkspaceForm
 					client={client}

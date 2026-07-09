@@ -17,10 +17,17 @@ type UiState = {
 	isSwitcherOpen: boolean;
 };
 
+type CloudState = {
+	// Cloud space (workspace doc) the sidebar/space switcher is scoped to.
+	// Resolution falls back to the personal space when this id is stale.
+	selectedSpaceId: string | null;
+};
+
 export type DesktopState = {
 	workspace: WorkspaceState;
 	document: DocumentState;
 	ui: UiState;
+	cloud: CloudState;
 };
 
 type Persisted = {
@@ -32,6 +39,7 @@ type Persisted = {
 	};
 	document?: { lastOpenedPath?: string | null };
 	ui?: { sidebarOpen?: boolean };
+	cloud?: { selectedSpaceId?: string | null };
 };
 
 export const STORAGE_KEY = "hubble-desktop-app";
@@ -73,6 +81,7 @@ export function getInitialState(): DesktopState {
 		workspace: hydrateWorkspace(p?.workspace),
 		document: emptyDoc(p?.document?.lastOpenedPath ?? null),
 		ui: { sidebarOpen: p?.ui?.sidebarOpen ?? false, isSwitcherOpen: false },
+		cloud: { selectedSpaceId: p?.cloud?.selectedSpaceId ?? null },
 	};
 }
 
@@ -89,6 +98,9 @@ export function serialize(state: DesktopState): Persisted {
 		},
 		ui: {
 			sidebarOpen: state.ui.sidebarOpen,
+		},
+		cloud: {
+			selectedSpaceId: state.cloud.selectedSpaceId,
 		},
 	};
 }

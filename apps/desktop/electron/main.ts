@@ -837,7 +837,7 @@ function buildMenu() {
 				{ type: "separator" },
 				{
 					id: "sync-workspace",
-					label: "Sync Workspace",
+					label: "Sync Folder",
 					enabled: menuState.hasWorkspace,
 					click: () => sendToRenderer("desktop:menu-sync-workspace"),
 				},

@@ -26,6 +26,7 @@
 		"@convex-dev/auth": "^0.0.94",
 		"@convex-dev/prosemirror-sync": "^0.2.4",
 		"@hubble.md/convex-client": "workspace:*",
+		"@hubble.md/cloud-ui": "workspace:*",
 		"@hubble.md/editor": "workspace:*",
 		"@hubble.md/sync": "workspace:*",
 		"@hubble.md/sync-backend": "workspace:*",

@@ -1,5 +1,6 @@
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { useTiptapSync } from "@convex-dev/prosemirror-sync/tiptap";
+import { DashboardScreen } from "@hubble.md/cloud-ui";
 import {
 	markdownToTiptapDoc,
 	parseMarkdownFrontMatter,
@@ -49,6 +50,7 @@ import {
 import { RepoLinkSection } from "./components/RepoLinkSection";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
+import { useSelectedSpace } from "./components/SpaceSwitcher";
 import { Toolbar } from "./components/Toolbar";
 import {
 	SidebarUpdateCallout,
@@ -79,6 +81,7 @@ import {
 	refreshFilesDebounced,
 	reloadFromDiskConflict,
 	savePathContent,
+	setSelectedSpace,
 	setSidebarOpen,
 	setWorkspaceSwitcherOpen,
 	updateEditorContent,
@@ -456,6 +459,7 @@ function AppContent() {
 			<div className="flex min-h-0 flex-1 overflow-hidden">
 				<Sidebar
 					cloudEnabled={cloudEnabled}
+					activeLiveDocumentId={activeLiveDocumentId}
 					onOpenLiveDocument={openLiveDocument}
 					onOpenSettings={openSettings}
 					onFocusedPathChange={setFocusedSidebarPath}
@@ -483,28 +487,27 @@ function AppContent() {
 					{state.status !== "loading" &&
 						state.status !== "error" &&
 						!state.currentPath &&
-						!activeLiveDocumentId && (
-							<div className="flex h-full items-center justify-center p-6">
-								{hasWorkspace ? (
-									<Button onClick={() => void openFilePicker()}>
-										Open file
-									</Button>
-								) : cloudEnabled ? (
-									<CloudWorkspaceHome
-										onOpenSettings={openSettings}
-										onOpenLiveDocument={openLiveDocument}
-										onCreateFolder={() => void createWorkspaceWithSidebar()}
-										onOpenFolder={() => void openWorkspaceWithSidebar()}
-									/>
-								) : (
-									<WelcomeScreen
-										cloudEnabled={false}
-										onCreateFolder={() => void createWorkspaceWithSidebar()}
-										onOpenFolder={() => void openWorkspaceWithSidebar()}
-									/>
-								)}
+						!activeLiveDocumentId &&
+						(hasWorkspace ? (
+							<div className="flex h-full items-center justify-center [padding-block:1.5rem] [padding-inline:1.5rem]">
+								<Button onClick={() => void openFilePicker()}>Open file</Button>
 							</div>
-						)}
+						) : cloudEnabled ? (
+							<CloudWorkspaceHome
+								onOpenSettings={openSettings}
+								onOpenLiveDocument={openLiveDocument}
+								onCreateFolder={() => void createWorkspaceWithSidebar()}
+								onOpenFolder={() => void openWorkspaceWithSidebar()}
+							/>
+						) : (
+							<div className="flex h-full items-center justify-center [padding-block:1.5rem] [padding-inline:1.5rem]">
+								<WelcomeScreen
+									cloudEnabled={false}
+									onCreateFolder={() => void createWorkspaceWithSidebar()}
+									onOpenFolder={() => void openWorkspaceWithSidebar()}
+								/>
+							</div>
+						))}
 					{activeLiveDocumentId && (
 						<LiveDocumentErrorBoundary key={activeLiveDocumentId}>
 							<LiveDocumentView
@@ -626,22 +629,16 @@ function AuthenticatedCloudCreateButton({
 }: {
 	onOpenLiveDocument: (documentId: string) => void;
 }) {
-	const dashboard = useQuery(api.documents.dashboard, {
-		recentLimit: 1,
-		sharedLimit: 0,
-	});
+	const { space } = useSelectedSpace();
 	const createDocument = useMutation(api.documents.create);
 	const [creating, setCreating] = useState(false);
-	const workspace =
-		dashboard?.workspaces.find((item) => item.personal) ??
-		dashboard?.workspaces[0];
 
 	const createLiveDocument = async () => {
-		if (!workspace || creating) return;
+		if (!space || creating) return;
 		setCreating(true);
 		try {
 			const documentId = await createDocument({
-				workspaceId: workspace._id,
+				workspaceId: space._id,
 				title: "Untitled",
 			});
 			onOpenLiveDocument(documentId);
@@ -661,7 +658,7 @@ function AuthenticatedCloudCreateButton({
 			size="icon-sm"
 			data-desktop-create-action="primary"
 			onClick={() => void createLiveDocument()}
-			disabled={!workspace || creating}
+			disabled={!space || creating}
 			aria-label="New Live Document"
 			title="New Live Document (⌘N)"
 		>
@@ -684,27 +681,33 @@ function CloudWorkspaceHome({
 	return (
 		<>
 			<AuthLoading>
-				<div className="flex max-w-md flex-col items-center gap-3 text-center">
-					<p className="text-sm text-muted-foreground">
-						Checking cloud workspace…
-					</p>
+				<div className="flex h-full items-center justify-center [padding-block:1.5rem] [padding-inline:1.5rem]">
+					<div className="flex max-w-md flex-col items-center gap-3 text-center">
+						<p className="text-sm text-muted-foreground">
+							Checking cloud space…
+						</p>
+					</div>
 				</div>
 			</AuthLoading>
 			<Unauthenticated>
-				<WelcomeScreen
-					cloudEnabled
-					onOpenSettings={onOpenSettings}
-					onCreateFolder={onCreateFolder}
-					onOpenFolder={onOpenFolder}
-				/>
+				<div className="flex h-full items-center justify-center [padding-block:1.5rem] [padding-inline:1.5rem]">
+					<WelcomeScreen
+						cloudEnabled
+						onOpenSettings={onOpenSettings}
+						onCreateFolder={onCreateFolder}
+						onOpenFolder={onOpenFolder}
+					/>
+				</div>
 			</Unauthenticated>
 			<Authenticated>
-				<AuthenticatedCloudWorkspaceHome
-					onOpenSettings={onOpenSettings}
-					onOpenLiveDocument={onOpenLiveDocument}
-					onCreateFolder={onCreateFolder}
-					onOpenFolder={onOpenFolder}
-				/>
+				<div className="h-full overflow-y-auto">
+					<AuthenticatedCloudWorkspaceHome
+						onOpenSettings={onOpenSettings}
+						onOpenLiveDocument={onOpenLiveDocument}
+						onCreateFolder={onCreateFolder}
+						onOpenFolder={onOpenFolder}
+					/>
+				</div>
 			</Authenticated>
 		</>
 	);
@@ -734,12 +737,7 @@ function AuthenticatedCloudWorkspaceHome({
 	const sharedWithMe = useQuery(api.documents.listSharedWithMe, {});
 	const createDocument = useMutation(api.documents.create);
 	const [creating, setCreating] = useState(false);
-	const workspace =
-		dashboard?.workspaces.find((item) => item.personal) ??
-		dashboard?.workspaces[0];
-	const documents = dashboard
-		? [...dashboard.recents, ...dashboard.sharedWithMe].slice(0, 5)
-		: [];
+	const { space: workspace } = useSelectedSpace();
 	const hasOwnDocuments =
 		dashboard !== undefined && dashboard.recents.length > 0;
 	const sharedFolders = sharedWithMe?.folders ?? [];
@@ -768,141 +766,106 @@ function AuthenticatedCloudWorkspaceHome({
 		}
 	};
 
+	const openDashboardFolder = (folderId: string) => {
+		const folder = sharedWithMe?.folders.find(
+			(candidate) => candidate.folderId === folderId,
+		);
+		const document = [...(folder?.documents ?? [])].sort(
+			(a, b) => b.updatedAt - a.updatedAt,
+		)[0];
+		if (document) {
+			onOpenLiveDocument(document._id);
+			return;
+		}
+		toast("Connect a synced folder to browse these files");
+	};
+
 	if (isGuestOnly) {
+		// The scroll wrapper is top-aligned for the dashboard; the guest wedge
+		// keeps its original centered presentation inside it.
 		return (
-			<div className="flex w-full max-w-2xl flex-col gap-5 [padding-inline:1rem]">
-				<div className="flex flex-col items-center gap-2 text-center">
-					<p className="text-xs font-medium uppercase text-muted-foreground">
-						Shared with you
-					</p>
-					<h2 className="font-rounded text-3xl font-medium tracking-normal">
-						Bring your agent in
-					</h2>
-					<p className="max-w-md text-sm text-muted-foreground">
-						Connect a synced folder to get{" "}
-						{sharedFolders.length === 1
-							? `"${sharedFolders[0].name}"`
-							: `your ${sharedFolders.length} shared folders`}{" "}
-						as real files on this computer, then point Cowork or Claude Code at
-						them — saves sync live to everyone, no clone, no git.
-					</p>
-				</div>
-				<div className="flex flex-wrap justify-center gap-2">
-					<Button onClick={onOpenSettings}>Connect synced folder</Button>
-				</div>
-				{sharedFolders.length > 0 && (
-					<div className="grid gap-2 rounded-sm border border-border bg-card/40 [padding-block:0.75rem] [padding-inline:0.75rem]">
-						<p className="text-sm font-medium">Shared with you</p>
-						<ul className="grid gap-1">
-							{sharedFolders.map((folder) => (
-								<li
-									key={folder.folderId}
-									className="flex items-center justify-between gap-3 rounded-sm bg-background/70 [padding-block:0.5rem] [padding-inline:0.625rem]"
-								>
-									<span className="min-w-0 truncate text-sm">
-										{folder.name}
-									</span>
-									<span className="shrink-0 text-xs capitalize text-muted-foreground">
-										{folder.role}
-									</span>
-								</li>
-							))}
-						</ul>
+			<div className="flex min-h-full items-center justify-center [padding-block:1.5rem] [padding-inline:1.5rem]">
+				<div className="flex w-full max-w-2xl flex-col gap-5 [padding-inline:1rem]">
+					<div className="flex flex-col items-center gap-2 text-center">
+						<p className="text-xs font-medium uppercase text-muted-foreground">
+							Shared with you
+						</p>
+						<h2 className="font-rounded text-3xl font-medium tracking-normal">
+							Bring your agent in
+						</h2>
+						<p className="max-w-md text-sm text-muted-foreground">
+							Connect a synced folder to get{" "}
+							{sharedFolders.length === 1
+								? `"${sharedFolders[0].name}"`
+								: `your ${sharedFolders.length} shared folders`}{" "}
+							as real files on this computer, then point Cowork or Claude Code
+							at them — saves sync live to everyone, no clone, no git.
+						</p>
 					</div>
-				)}
-				<div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
-					<Button
-						variant="ghost"
-						size="sm"
-						onClick={() => void createLiveDocument()}
-						disabled={!workspace || creating}
-					>
-						{creating ? "Creating…" : "New Live Document instead"}
-					</Button>
+					<div className="flex flex-wrap justify-center gap-2">
+						<Button onClick={onOpenSettings}>Connect synced folder</Button>
+					</div>
+					{sharedFolders.length > 0 && (
+						<div className="grid gap-2 rounded-sm border border-border bg-card/40 [padding-block:0.75rem] [padding-inline:0.75rem]">
+							<p className="text-sm font-medium">Shared with you</p>
+							<ul className="grid gap-1">
+								{sharedFolders.map((folder) => (
+									<li
+										key={folder.folderId}
+										className="flex items-center justify-between gap-3 rounded-sm bg-background/70 [padding-block:0.5rem] [padding-inline:0.625rem]"
+									>
+										<span className="min-w-0 truncate text-sm">
+											{folder.name}
+										</span>
+										<span className="shrink-0 text-xs capitalize text-muted-foreground">
+											{folder.role}
+										</span>
+									</li>
+								))}
+							</ul>
+						</div>
+					)}
+					<div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={() => void createLiveDocument()}
+							disabled={!workspace || creating}
+						>
+							{creating ? "Creating…" : "New Live Document instead"}
+						</Button>
+					</div>
 				</div>
 			</div>
 		);
 	}
 
 	return (
-		<div className="flex w-full max-w-2xl flex-col gap-5 [padding-inline:1rem]">
-			<div className="flex flex-col items-center gap-2 text-center">
-				<p className="text-xs font-medium uppercase text-muted-foreground">
-					Hubble workspace
-				</p>
-				<h2 className="font-rounded text-3xl font-medium tracking-normal">
-					Live Documents
-				</h2>
-				<p className="max-w-md text-sm text-muted-foreground">
-					Local folders are optional support for external editors, backup, grep,
-					and agents.
-				</p>
-			</div>
-			<div className="flex flex-wrap justify-center gap-2">
-				<Button
-					onClick={() => void createLiveDocument()}
-					disabled={!workspace || creating}
-				>
-					{creating ? "Creating…" : "New Live Document"}
-				</Button>
-				<Button variant="outline" onClick={onOpenSettings}>
-					Connect synced folder
-				</Button>
-			</div>
-			<div className="grid gap-2 rounded-sm border border-border bg-card/40 [padding-block:0.75rem] [padding-inline:0.75rem]">
-				<div className="flex items-center justify-between gap-3">
-					<p className="text-sm font-medium">Recent Live Documents</p>
-					<p className="text-xs text-muted-foreground">
-						{workspace?.name ?? "Workspace loading"}
-					</p>
+		<DashboardScreen
+			onOpenDocument={(workspaceId, documentId) => {
+				void workspaceId;
+				onOpenLiveDocument(documentId);
+			}}
+			onOpenWorkspace={(id) => {
+				setSelectedSpace(id);
+				setSidebarOpen(true);
+			}}
+			onOpenFolder={openDashboardFolder}
+			footer={
+				<div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
+					<Button variant="ghost" size="sm" onClick={onCreateFolder}>
+						Create local folder
+					</Button>
+					<Button variant="ghost" size="sm" onClick={onOpenFolder}>
+						Open local folder
+					</Button>
+					<Button variant="outline" size="sm" onClick={onOpenSettings}>
+						Connect synced folder
+					</Button>
 				</div>
-				{dashboard === undefined ? (
-					<p className="text-sm text-muted-foreground">Loading documents…</p>
-				) : documents.length > 0 ? (
-					<ul className="grid gap-1">
-						{documents.map((document) => (
-							<li
-								key={document._id}
-								className="flex items-center justify-between gap-3 rounded-sm bg-background/70 [padding-block:0.5rem] [padding-inline:0.625rem]"
-							>
-								<button
-									type="button"
-									className="flex min-w-0 flex-1 items-center justify-between gap-3 text-start"
-									onClick={() => onOpenLiveDocument(document._id)}
-								>
-									<span className="min-w-0 truncate text-sm">
-										{document.title}
-									</span>
-									<span className="shrink-0 text-xs text-muted-foreground">
-										{formatEditedDate(document.updatedAt)}
-									</span>
-								</button>
-							</li>
-						))}
-					</ul>
-				) : (
-					<p className="text-sm text-muted-foreground">
-						Create a Live Document to start the workspace.
-					</p>
-				)}
-			</div>
-			<div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
-				<Button variant="ghost" size="sm" onClick={onCreateFolder}>
-					Create local folder
-				</Button>
-				<Button variant="ghost" size="sm" onClick={onOpenFolder}>
-					Open local folder
-				</Button>
-			</div>
-		</div>
+			}
+		/>
 	);
-}
-
-function formatEditedDate(timestamp: number) {
-	return new Intl.DateTimeFormat(undefined, {
-		month: "short",
-		day: "numeric",
-	}).format(timestamp);
 }
 
 type LiveDocumentErrorBoundaryProps = {
@@ -1317,7 +1280,7 @@ function ExternalChangeBanner({
 }) {
 	return (
 		<div className="border-b border-border bg-muted/40">
-			<div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
+			<div className="flex flex-wrap items-center justify-between gap-3 [padding-block:0.5rem] [padding-inline:0.75rem]">
 				<p className="m-0 text-sm text-muted-foreground">
 					File changed on disk. Reload it or keep your editor edits.
 				</p>

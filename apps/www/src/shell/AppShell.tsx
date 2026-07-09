@@ -241,8 +241,8 @@ export function AppShell({
 			<main className="flex h-dvh items-center justify-center bg-background text-foreground">
 				<p className="text-sm text-muted-foreground">
 					{workspace.status === "error"
-						? (workspace.error ?? "Workspace failed to load")
-						: "Loading workspace…"}
+						? (workspace.error ?? "Space failed to load")
+						: "Loading space…"}
 				</p>
 			</main>
 		);
@@ -1259,8 +1259,8 @@ function WorkspaceMembersButton({ workspaceId }: { workspaceId: string }) {
 			<Modal
 				open={open}
 				onOpenChange={setOpen}
-				title="Workspace members"
-				description="Invite collaborators and manage workspace roles."
+				title="Space members"
+				description="Invite collaborators and manage space roles."
 				className="max-w-xl"
 			>
 				<form

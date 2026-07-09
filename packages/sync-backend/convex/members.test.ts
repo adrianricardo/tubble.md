@@ -241,6 +241,67 @@ describe("inviteWorkspaceMember", () => {
 	});
 });
 
+describe("listWorkspaceInvites read access", () => {
+	async function setup(t: ReturnType<typeof convexTest>) {
+		const ownerId = await t.run((ctx) =>
+			ctx.db.insert("users", { email: "owner@example.com", name: "Owner" }),
+		);
+		const workspaceId = await t.run(async (ctx) => {
+			const id = await ctx.db.insert("workspaces", {
+				name: "Team",
+				ownerId,
+				createdAt: Date.now(),
+			});
+			await ctx.db.insert("members", {
+				workspaceId: id,
+				userId: ownerId,
+				role: "owner",
+				createdAt: Date.now(),
+			});
+			await ctx.db.insert("invites", {
+				email: "ghost@example.com",
+				workspaceId: id,
+				workspaceRole: "member",
+				invitedBy: ownerId,
+				createdAt: Date.now(),
+			});
+			return id;
+		});
+		const memberId = await t.run(async (ctx) => {
+			const id = await ctx.db.insert("users", { email: "member@example.com" });
+			await ctx.db.insert("members", {
+				workspaceId,
+				userId: id,
+				role: "member",
+				createdAt: Date.now(),
+			});
+			return id;
+		});
+		return { ownerId, memberId, workspaceId };
+	}
+
+	test("manager sees pending invites", async () => {
+		const t = convexTest(schema, modules);
+		const { ownerId, workspaceId } = await setup(t);
+		const invites = await asUser(t, ownerId).query(
+			api.members.listWorkspaceInvites,
+			{ workspaceId },
+		);
+		expect(invites).toHaveLength(1);
+		expect(invites[0].email).toBe("ghost@example.com");
+	});
+
+	test("non-manager gets an empty list instead of throwing", async () => {
+		const t = convexTest(schema, modules);
+		const { memberId, workspaceId } = await setup(t);
+		const invites = await asUser(t, memberId).query(
+			api.members.listWorkspaceInvites,
+			{ workspaceId },
+		);
+		expect(invites).toEqual([]);
+	});
+});
+
 describe("setWorkspaceMemberRole / removeWorkspaceMember guards", () => {
 	// Workspace whose owner is tracked via a members row (ownerId left undefined)
 	// so workspaceOwnerCount() governs the last-owner guards.

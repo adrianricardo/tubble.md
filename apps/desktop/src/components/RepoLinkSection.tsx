@@ -208,7 +208,7 @@ function RepoLinkManager({ deploymentUrl }: { deploymentUrl: string }) {
 			<div className="grid max-w-md gap-2">
 				<p className="font-medium text-foreground">Link a folder to a repo</p>
 				<label htmlFor="repo-link-workspace" className="text-xs font-medium">
-					Workspace
+					Space
 				</label>
 				<select
 					id="repo-link-workspace"
@@ -221,9 +221,9 @@ function RepoLinkManager({ deploymentUrl }: { deploymentUrl: string }) {
 					className="w-full rounded-sm border border-border bg-background text-sm outline-none focus:border-ring [padding-block:0.5rem] [padding-inline:0.625rem]"
 				>
 					{workspaces === undefined ? (
-						<option value="">Loading workspaces…</option>
+						<option value="">Loading spaces…</option>
 					) : workspaces.length === 0 ? (
-						<option value="">No workspaces available</option>
+						<option value="">No spaces available</option>
 					) : (
 						workspaces.map((workspace) => (
 							<option key={workspace._id} value={workspace._id}>
