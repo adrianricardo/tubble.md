@@ -149,3 +149,20 @@ From `specs/hubble-init/runs/2026-07-09-archive-stress-run.md` (Adrian's calls):
    AGENTS.md symlinked to CLAUDE.md (merge unique content first if a real file
    exists); roadmap doc seeded if missing. In dry-run, *report* whether the repo
    already satisfies the contract; write nothing.
+
+From `specs/hubble-init/runs/2026-07-09-567-brain-generalization-run.md` (foreign-repo
+run; Adrian's calls — note: every AskUserQuestion answer in a run is ALWAYS folded back
+into these rules in the same pass, without being asked to):
+
+9. **External-consumer check.** Scan for consumers of the target outside the repo
+   (sibling-repo symlinks to it, cross-repo references in agent files); dry-run
+   reports them, apply-mode re-points them at the synced-folder projection.
+   Multi-repo mounting of one brain is a named platform requirement.
+10. **Corpus integrity beats per-file rules for append-only source dirs.** A
+    `sources/`-style append-only capture archive moves (or stays) *whole* — even when
+    some captures are engineering-shaped; chronology is the value. Rule 6 yields here.
+11. **Binary assets stay in git.** Cloud is prose; apply-mode rewrites or flags asset
+    links in moved docs rather than moving binaries.
+12. **Consolidation is proposed, never presumed.** When suggesting merging process
+    docs (rule 2), present a concrete proposal with tradeoffs (what's lost: file-level
+    ownership, focused diffs) and let the user decide per-repo.

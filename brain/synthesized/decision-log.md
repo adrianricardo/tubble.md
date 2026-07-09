@@ -2,6 +2,18 @@
 
 Newest first. Cite sources; keep entries short.
 
+## 2026-07-09 — Generalization-run defaults (third dry run, foreign repo: 567 brain)
+**Decision:** four more init defaults: (7) **external-consumer check** — init detects
+cross-repo consumers of a brain (the 567 iOS repo symlinks it) and apply-mode re-points
+them at the synced projection; multi-repo mount is now platform gap #6 in DESIGN.md;
+(8) **append-only source dirs move whole** — corpus integrity beats per-file rules;
+(9) **binary assets stay in git**, links rewritten/flagged at apply (gap #7);
+(10) **consolidation proposed never presumed** — with tradeoffs, user decides.
+Rules 1–8 classified ~85% of a 50-file foreign corpus confidently; contested items
+were all new policy, not classification errors.
+**Source:** `sources/2026-07-09-567-generalization-run-answers.md`; run record
+`/specs/hubble-init/runs/2026-07-09-567-brain-generalization-run.md`.
+
 ## 2026-07-09 — Progress contract: roadmap.md, convention-only, AGENTS.md symlink; init installs it
 **Decision:** `brain/synthesized/roadmap.md` is the single source of "where the build
 is + what's next" (post-split its build-state half stays git-side per the mixed-docs

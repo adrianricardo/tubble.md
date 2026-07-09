@@ -97,6 +97,13 @@ it runs in:
    folder view.
 5. **Folder create API from CLI** (`folders.create`) — exists in backend, needs CLI
    surface.
+6. **Multi-repo mount of one brain** (from the 567 dry run 2026-07-09): a brain can
+   have external consumers (the 567 iOS repo symlinks `567-platform/brain`). Init must
+   detect consumers (sibling-repo symlinks, cross-repo references) and apply-mode must
+   re-point them at the synced-folder projection — which means the same cloud folder
+   mounted into multiple repos.
+7. **Asset-link handling**: binary assets stay in git (decided 2026-07-09); apply-mode
+   rewrites or flags asset links in moved docs. No binary hosting required for v1.
 
 ## Open design questions
 

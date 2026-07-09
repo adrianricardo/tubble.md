@@ -21,9 +21,12 @@
 3. **Track C — Dogfood the split.** Target state: this brain splits — mechanics/build
    docs stay in git, strategy/vision moves to Hubble cloud — driven by the interactive
    init flow on `brain/` as the first corpus. **Two gates:** (1) triage logic feels good
-   (dry-runs) — in progress; first dry run on `brain/` done 2026-07-09, three defaults
-   extracted (see decision log), more runs wanted (e.g. `specs/realtime-collab/archive/`
-   as stress corpus); (2) no-data-loss — **✅ verified 2026-07-09** live on dev
+   (dry-runs) — in progress, close: three dry runs done 2026-07-09 (`brain/`, the
+   archive stress corpus, and the foreign 567-platform brain), twelve learned defaults
+   in the skill, contested ratio 50% → ~18%, and the third run's misses were all new
+   policy rather than classification errors. Next step: Adrian decides whether gate 1
+   is satisfied, then apply-mode design against a scratch workspace (platform gaps
+   #1–7 in `/specs/hubble-init/DESIGN.md` become the work queue); (2) no-data-loss — **✅ verified 2026-07-09** live on dev
    (every agent/file write snapshots first; wipe, restore, and trash all recover;
    nothing prunes history). Caveats: ~60s live-typing granularity, prod re-run pending,
    pre-move commit still required. Evidence:
