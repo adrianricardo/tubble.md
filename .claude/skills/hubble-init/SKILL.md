@@ -68,6 +68,9 @@ the file's actual content**:
 build/engineering sections → git or specs. **Split is the default opening call for
 mixed docs, not a fallback** — say exactly which sections go where.
 
+**Relocate within git** when a doc is alive but misfiled — e.g. live process rules
+sitting in an archive folder. Propose the in-git move; don't force it into move/keep.
+
 **Contested** when signals genuinely conflict. Do not force a call — contested files
 are the point of the conversation. But apply the learned defaults below before marking
 a file contested; only genuinely novel conflicts should land here.
@@ -124,3 +127,19 @@ From `specs/hubble-init/runs/2026-07-09-brain-first-dry-run.md` (Adrian's calls)
 4. **Strong keep-signal:** referenced from CLAUDE.md/AGENTS.md (clone-time dependency).
    **Strong move-signal:** candid/evolving direction, revocable content, non-repo
    audience. Both must be derived from file *content*, never the filename.
+
+From `specs/hubble-init/runs/2026-07-09-archive-stress-run.md` (Adrian's calls):
+
+5. **No archive exemption.** Archived/executed docs follow the same content rules as
+   living docs — never propose a corpus-level wholesale call for an archive. "Archive"
+   is an organizational property the destination preserves (cloud history section /
+   git archive dir), not a triage input. Rule 1 (mixed docs split) applies to dead
+   docs too.
+6. **The cloud brain holds strategy history.** Superseded vision/strategy docs and
+   candid strategy critiques are move-shaped even though no longer living — file them
+   as history/timeline material cloud-side. Liveness is not a move/keep signal for
+   strategy content. Engineering history (build journals, executed plans, ADR-shaped
+   records, task briefs) stays git-side.
+7. **Moving out of an indexed folder obligates the index.** If a proposal moves files
+   that a local README/index enumerates, the proposal must include updating that index
+   at apply time.
