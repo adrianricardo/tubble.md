@@ -6,8 +6,15 @@
   frontmatter round-trip (opaque `frontMatter` node), bare-URL/autolink style
   preservation. New `roundTrip.test.ts` idempotency corpus; 49/49 editor tests
   green, desktop tsc clean. Implemented via Codex delegation, Claude-reviewed.
-  In working tree, uncommitted. Roadmap NEXT STEP item 2 done; item 3 (brain
-  split) unblocked.
+  Committed (`f8048e3`) — then live smoke on dev caught a hole the unit tests
+  missed: the server projection path (`schema.nodeFromJSON`) re-sorts marks by
+  schema rank, re-breaking nested emphasis. Two follow-up rounds (`68d15eb`):
+  order-insensitive mark serialization (nesting by run length) and trailing-
+  newline normalization (non-empty output ends with one `\n`). Regression suite
+  now runs every corpus case through plain AND schema-normalized paths. Dev
+  backend redeployed; CLI upload→projection→export verified **byte-identical**
+  live (smoke workspace `serializer-smoke-0710`, leavable residue). Roadmap
+  NEXT STEP item 2 done; item 3 (brain split) unblocked.
 - 2026-07-09 — Added uncommitted build-state note for GFM table support in
   `brain/synthesized/roadmap.md`: shared editor schema + markdown round-trip,
   slash-command insertion, table controls, and editor styling. No roadmap priority
