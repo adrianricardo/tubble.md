@@ -5,6 +5,7 @@ import {
 	parseDateInput,
 	parseMarkdownFrontMatter,
 	serializeFrontMatter,
+	splitVerbatimFrontMatterBlock,
 } from "./frontMatter";
 
 describe("front matter", () => {
@@ -120,6 +121,15 @@ tags:
 title: Test
 ---
 # Body`);
+	});
+
+	it("splits a verbatim front matter block without normalizing bytes", () => {
+		const markdown = "---\r\ntitle: Test\r\n---\r\n# Body";
+
+		expect(splitVerbatimFrontMatterBlock(markdown)).toEqual({
+			frontMatter: "---\r\ntitle: Test\r\n---\r\n",
+			body: "# Body",
+		});
 	});
 
 	it("detects types only for complete stable values", () => {

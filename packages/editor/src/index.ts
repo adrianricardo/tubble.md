@@ -1,4 +1,5 @@
 export { FakeSelectionExtension } from "./FakeSelectionExtension";
+export { FrontMatterExtension } from "./FrontMatterNode";
 export {
 	combineMarkdownFrontMatter,
 	detectFilePropertyType,
@@ -11,6 +12,8 @@ export {
 	parseMarkdownFrontMatter,
 	serializeFrontMatter,
 	setMarkdownFrontMatter,
+	splitVerbatimFrontMatterBlock,
+	type VerbatimFrontMatterBlock,
 } from "./frontMatter";
 export { HeadingExtension } from "./Heading";
 export {

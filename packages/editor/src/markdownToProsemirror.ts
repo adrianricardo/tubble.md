@@ -9,6 +9,7 @@ import type {
 	AlignType,
 	Content,
 	Image,
+	Link,
 	List,
 	ListItem,
 	Paragraph,
@@ -21,20 +22,30 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { type Plugin, unified } from "unified";
 import { visit } from "unist-util-visit";
+import { splitVerbatimFrontMatterBlock } from "./frontMatter";
 import { wikiDisplayNameForTarget } from "./markdownPath";
 
 // Convert Markdown (string) -> TipTap JSONContent (ProseMirror document)
 export function markdownToTiptapDoc(markdown: string): JSONContent {
-	const input = rawMarkdownAddEmptyMarkers(markdown);
+	const split = splitVerbatimFrontMatterBlock(markdown);
+	const frontMatter = split?.frontMatter ?? null;
+	const body = split?.body ?? markdown;
+	const input = rawMarkdownAddEmptyMarkers(body);
 	const processor = unified()
 		.use(remarkParse)
-		.use(remarkGfm)
+		.use(remarkGfm, { singleTilde: false })
 		.use(remarkRemoveEmptyMarkers);
 	const parsed = processor.parse(input);
 	const tree = processor.runSync(parsed) as Root;
+	const content = normalizeBlockContent(tree.children).flatMap((node) =>
+		blockToPM(node, input),
+	);
+	if (frontMatter !== null) {
+		content.unshift({ type: "frontMatter", attrs: { raw: frontMatter } });
+	}
 	return {
 		type: "doc",
-		content: normalizeBlockContent(tree.children).flatMap(blockToPM),
+		content,
 	} satisfies JSONContent;
 }
 
@@ -43,7 +54,7 @@ function normalizeBlockContent(children: Content[]): Content[] {
 	return children;
 }
 
-function blockToPM(node: Content): JSONContent[] {
+function blockToPM(node: Content, markdown: string): JSONContent[] {
 	switch (node.type) {
 		case "paragraph": {
 			const [maybeImage] = node.children;
@@ -63,7 +74,7 @@ function blockToPM(node: Content): JSONContent[] {
 			return [
 				{
 					type: "paragraph",
-					content: inlineToPM(node.children ?? []),
+					content: inlineToPM(node.children ?? [], markdown),
 				},
 			];
 		}
@@ -72,7 +83,7 @@ function blockToPM(node: Content): JSONContent[] {
 				{
 					type: "heading",
 					attrs: { level: node.depth ?? 1 },
-					content: inlineToPM(node.children ?? []),
+					content: inlineToPM(node.children ?? [], markdown),
 				},
 			];
 		case "blockquote":
@@ -80,7 +91,7 @@ function blockToPM(node: Content): JSONContent[] {
 				{
 					type: "blockquote",
 					content: (node.children ?? []).flatMap((n) =>
-						blockToPM(n as Content),
+						blockToPM(n as Content, markdown),
 					),
 				},
 			];
@@ -103,7 +114,7 @@ function blockToPM(node: Content): JSONContent[] {
 						type: "orderedList",
 						attrs: { start: list.start ?? 1 },
 						content: list.children.flatMap((li) =>
-							listItemToPM(li as ListItem, /* allowChecked */ false),
+							listItemToPM(li as ListItem, /* allowChecked */ false, markdown),
 						),
 					},
 				];
@@ -114,7 +125,7 @@ function blockToPM(node: Content): JSONContent[] {
 				{
 					type: "bulletList",
 					content: list.children.flatMap((li) =>
-						listItemToPM(li as ListItem, /* allowChecked */ true),
+						listItemToPM(li as ListItem, /* allowChecked */ true, markdown),
 					),
 				},
 			];
@@ -147,7 +158,7 @@ function blockToPM(node: Content): JSONContent[] {
 			];
 		}
 		case "table":
-			return tableToPM(node as Table);
+			return tableToPM(node as Table, markdown);
 		case "tableRow":
 		case "tableCell":
 			return [];
@@ -162,10 +173,10 @@ function blockToPM(node: Content): JSONContent[] {
 	}
 }
 
-function tableToPM(tableNode: Table): JSONContent[] {
+function tableToPM(tableNode: Table, markdown: string): JSONContent[] {
 	if (!tableNode.children.length) return [];
 	const rows = tableNode.children.map((row, rowIndex) =>
-		tableRowToPM(row, rowIndex === 0, tableNode.align ?? []),
+		tableRowToPM(row, rowIndex === 0, tableNode.align ?? [], markdown),
 	);
 	return [
 		{
@@ -179,11 +190,12 @@ function tableRowToPM(
 	row: TableRow,
 	isHeaderRow: boolean,
 	align: AlignType[],
+	markdown: string,
 ): JSONContent {
 	return {
 		type: "tableRow",
 		content: row.children.map((cell, columnIndex) =>
-			tableCellToPM(cell, isHeaderRow, align[columnIndex] ?? null),
+			tableCellToPM(cell, isHeaderRow, align[columnIndex] ?? null, markdown),
 		),
 	};
 }
@@ -192,8 +204,9 @@ function tableCellToPM(
 	cell: TableCell,
 	isHeaderCell: boolean,
 	align: AlignType,
+	markdown: string,
 ): JSONContent {
-	const inlineContent = inlineToPM(cell.children ?? []);
+	const inlineContent = inlineToPM(cell.children ?? [], markdown);
 	const paragraph: JSONContent = { type: "paragraph" };
 	if (inlineContent.length > 0) {
 		paragraph.content = inlineContent;
@@ -257,15 +270,21 @@ function hasMeaningfulHtml(node: RootContent): boolean {
 	return node.type !== "text" || node.value.trim() !== "";
 }
 
-function listItemToPM(li: ListItem, allowChecked: boolean): JSONContent[] {
+function listItemToPM(
+	li: ListItem,
+	allowChecked: boolean,
+	markdown: string,
+): JSONContent[] {
 	// mdast listItem children may be paragraphs and nested lists.
 	const blocks = (li.children ?? []) as Content[];
 	const first = blocks[0];
 	const paragraphContent =
-		first && first.type === "paragraph" ? inlineToPM(first.children ?? []) : [];
+		first && first.type === "paragraph"
+			? inlineToPM(first.children ?? [], markdown)
+			: [];
 	const restBlocks = (
 		first && first.type === "paragraph" ? blocks.slice(1) : blocks
-	).flatMap(blockToPM);
+	).flatMap((node) => blockToPM(node, markdown));
 	const content: JSONContent[] = [];
 	content.push({ type: "paragraph", content: paragraphContent });
 	content.push(...restBlocks);
@@ -303,7 +322,7 @@ function htmlToEmbed(raw: string | undefined): JSONContent | null {
 	}
 }
 
-function inlineToPM(children: Content[]): JSONContent[] {
+function inlineToPM(children: Content[], markdown: string): JSONContent[] {
 	const out: JSONContent[] = [];
 	for (const child of children ?? []) {
 		switch (child.type) {
@@ -313,13 +332,19 @@ function inlineToPM(children: Content[]): JSONContent[] {
 				}
 				break;
 			case "strong":
-				out.push(...applyMark(inlineToPM(child.children ?? []), "bold"));
+				out.push(
+					...applyMark(inlineToPM(child.children ?? [], markdown), "bold"),
+				);
 				break;
 			case "emphasis":
-				out.push(...applyMark(inlineToPM(child.children ?? []), "italic"));
+				out.push(
+					...applyMark(inlineToPM(child.children ?? [], markdown), "italic"),
+				);
 				break;
 			case "delete":
-				out.push(...applyMark(inlineToPM(child.children ?? []), "strike"));
+				out.push(
+					...applyMark(inlineToPM(child.children ?? [], markdown), "strike"),
+				);
 				break;
 			case "inlineCode":
 				if (child.value) {
@@ -336,10 +361,15 @@ function inlineToPM(children: Content[]): JSONContent[] {
 			case "link":
 				out.push(
 					...applyMark(
-						inlineToPM(child.children ?? []),
+						inlineToPM(child.children ?? [], markdown),
 						"link",
 						typeof child.url === "string"
-							? { href: child.url, kind: "url", target: null }
+							? {
+									href: child.url,
+									kind: "url",
+									target: null,
+									...linkMarkdownStyleAttrs(child, markdown),
+								}
 							: undefined,
 					),
 				);
@@ -397,6 +427,36 @@ function textToPM(text: string): JSONContent[] {
 		out.push({ type: "text", text: text.slice(lastIndex) });
 	}
 	return out;
+}
+
+function linkMarkdownStyleAttrs(node: Link, markdown: string) {
+	const raw = sourceForNode(node, markdown);
+	if (raw.startsWith("<") && raw.endsWith(">")) {
+		return { markdownStyle: "autolink" };
+	}
+	const text = node.children
+		.map((child) => (child.type === "text" ? child.value : ""))
+		.join("");
+	if (raw === text && urlMatchesAutolinkText(node.url, text)) {
+		return { markdownStyle: "bare" };
+	}
+	return {};
+}
+
+function sourceForNode(
+	node: {
+		position?: { start?: { offset?: number }; end?: { offset?: number } };
+	},
+	markdown: string,
+) {
+	const start = node.position?.start?.offset;
+	const end = node.position?.end?.offset;
+	if (typeof start !== "number" || typeof end !== "number") return "";
+	return markdown.slice(start, end);
+}
+
+function urlMatchesAutolinkText(url: string, text: string) {
+	return url === text || url === `mailto:${text}`;
 }
 
 function applyMark(

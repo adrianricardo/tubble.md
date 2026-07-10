@@ -7,6 +7,7 @@ import {
 	TableRow,
 } from "@tiptap/extension-table";
 import StarterKit from "@tiptap/starter-kit";
+import { FrontMatterExtension } from "./FrontMatterNode";
 import { HeadingExtension } from "./Heading";
 import { LinkExtension } from "./Link";
 import { listExtensions } from "./List";
@@ -56,6 +57,7 @@ export function createHubbleEditorExtensions(
 			listItem: false,
 		}),
 		...(options.codeBlock ? [options.codeBlock] : []),
+		FrontMatterExtension,
 		LinkExtension,
 		HeadingExtension,
 		MarkdownRolloverExtension,
