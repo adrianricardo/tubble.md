@@ -89,6 +89,14 @@ export function createConvexBackend(
 				workspaceId: folder.workspaceId,
 			}));
 		},
+		async createFolder(args) {
+			return client.mutation(api.folders.create, {
+				workspaceId: args.workspaceId as Id<"workspaces">,
+				parentId: args.parentId ? (args.parentId as Id<"folders">) : undefined,
+				name: args.name,
+				actor: args.actor,
+			});
+		},
 		async getFiles(workspaceId, opts) {
 			const files = await client.query(api.sync.getFilesByWorkspace, {
 				workspaceId: workspaceId as Id<"workspaces">,

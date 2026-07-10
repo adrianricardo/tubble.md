@@ -1,9 +1,9 @@
 ---
 name: hubble-init
-description: Triage a repo's durable prose context into "move → Hubble cloud" vs "keep → git". DRY-RUN ONLY for now — scan + interactive triage proposal, zero writes to cloud or the scanned files. Use when the user runs /hubble-init <dir>, asks to triage docs for Hubble, or wants to dry-run the brain split.
+description: Triage a repo's durable prose context into "move → Hubble cloud" vs "keep → git". Dry-run by default (scan + interactive triage proposal, zero writes); apply-mode executes a confirmed split behind a hard safety preflight. Use when the user runs /hubble-init <dir>, asks to triage docs for Hubble, or wants to run/dry-run the brain split.
 ---
 
-# hubble-init (dry-run)
+# hubble-init
 
 You are running the front door of Hubble: an **interactive triage session** that splits
 a directory's durable context into docs that should live in a repo-linked Hubble cloud
@@ -14,18 +14,82 @@ thinking partner, not a batch classifier.
 
 ## Mode guard — read first
 
-**This skill is dry-run only.** Apply-mode is blocked until the triage logic feels good
-across repeated dry-runs (decision log 2026-07-09) and requires a pre-move git commit.
-In this mode you must NOT:
+**Dry-run is the default mode.** In dry-run you must NOT:
 
 - write, move, delete, or rename any scanned file
 - touch `.git/info/exclude`, create workspaces, upload documents, or call any Hubble
   CLI/backend/desktop surface
 
-The only writes permitted are (a) the run record under `specs/hubble-init/runs/` and
-(b) edits to this SKILL.md when the run reveals a heuristic flaw. If the user asks you
-to actually move files, decline and point at the apply-mode gate in
-`brain/synthesized/roadmap.md` Track C.
+The only dry-run writes permitted are (a) the run record under
+`specs/hubble-init/runs/` and (b) edits to this SKILL.md when the run reveals a
+heuristic flaw.
+
+**Apply-mode** (unblocked 2026-07-09 — both Track C gates satisfied) runs only when
+the user explicitly asks to apply, and only after the **safety preflight** below
+passes. If the preflight fails, fall back to dry-run and report what blocked it.
+
+### Apply-mode safety preflight (all mandatory)
+
+1. **Everything on the remote.** Target repo working tree is clean; every local
+   branch is pushed (`git log --branches --not --remotes` is empty); note any
+   stashes as unpushable. Record the pre-move HEAD sha in the run record — it IS
+   the backup.
+2. **A confirmed triage exists** — either a prior run record with the user's final
+   calls for this corpus, or a fresh interactive triage completed in this session.
+   Never apply an unconfirmed opening proposal.
+3. **Workspace target is explicit.** The user has named the workspace (or approved
+   creating a scratch one) and knows whether it's owned by their account or by a
+   throwaway run account with the folder shared to them by email.
+
+### Auth for headless runs (until `hubble login` exists)
+
+Convex-auth JWTs live ~1 hour. Mint a throwaway password-auth account at the start
+of the run (`auth:signIn` with `flow: "signUp"`), keep the credentials only for the
+run (re-mint with `flow: "signIn"` if the token expires mid-run), pass the JWT via
+`--auth-token`/`HUBBLE_AUTH_TOKEN`, and hand the folder to the user with
+`folders:setFolderUserShareByEmail` — that lands it in their desktop app's
+shared-with-me. Delete the credentials when the run ends. CLI stdout can carry
+backend WARN lines before ids — parse ids from the last line, never the first.
+
+## Apply-mode steps
+
+Uploads first, destruction last — the working tree is not touched until every moved
+doc is verified in the cloud.
+
+1. **Create the destination**: `hubble cloud create`/`connect` (workspace), then
+   `hubble cloud folder create` mirroring the corpus's directory structure.
+2. **Upload the move set**: `hubble cloud document create --title … --file … --folder
+   … --path …` for every moved doc, preserving relative paths.
+3. **Execute splits** (rule 1 docs): write the git-side half in place, upload the
+   cloud-side half; each half links to its counterpart's location.
+4. **Verify before deleting**: `hubble cloud folder export --folder … --out <tmp>`
+   and diff every uploaded doc against its source (tolerating only trailing-newline
+   normalization and deliberate split/asset-link edits). Do not proceed on any
+   mismatch.
+5. **The move commit**: remove moved originals, update indexes that enumerated them
+   (rule 7), rewrite/flag asset links (rule 11), then commit — the commit message
+   names the workspace/folder ids and states the honest-scope rule. Push it.
+6. **Mount the projection**: create the mount dir, append the anchored pattern to
+   `.git/info/exclude` (never `.gitignore`), materialize with `hubble cloud folder
+   export --folder … --out <mount>`. Live watch stays a desktop-app job (gap #2).
+7. **Seed BRAIN.md** via `hubble cloud document create` — only if the folder has no
+   BRAIN.md/brain-titled doc already (seed-once, never regenerate).
+8. **Share to the user** (`folders:setFolderUserShareByEmail`, role editor) so the
+   folder appears in their desktop app; they can later take ownership in-product.
+9. **Progress contract** (rule 8): CLAUDE.md pointer block; AGENTS.md → symlink to
+   CLAUDE.md after merging any unique content; roadmap doc seeded if missing.
+10. **Re-point external consumers** (rule 9): update sibling-repo symlinks/references
+    to resolve against the kept-in-git half plus the mount.
+11. **Prove recovery** before declaring success: restore one moved doc's pre-move
+    content from git (`git show <pre-move-sha>:<path>`) and read one doc back from
+    the cloud (`hubble cloud document get`). Both must round-trip.
+12. **Record the run** under `specs/hubble-init/runs/` (same contract as Step 4
+    below) including: pre-move sha, workspace/folder/document ids, verification
+    results, and anything apply-mode got wrong — then fix this skill in the same
+    pass.
+
+If the user asks to move files without the preflight passing, decline and point at
+the failing precondition.
 
 ## Inputs
 
@@ -166,3 +230,22 @@ into these rules in the same pass, without being asked to):
 12. **Consolidation is proposed, never presumed.** When suggesting merging process
     docs (rule 2), present a concrete proposal with tradeoffs (what's lost: file-level
     ownership, focused diffs) and let the user decide per-repo.
+
+From `specs/hubble-init/runs/2026-07-09-567-brain-apply-run.md` (first real apply):
+
+13. **Markdown fidelity is an apply gate — never skip the export-diff.** Diff every
+    uploaded doc against its source before deleting anything, and classify:
+    byte-identical / normalization-only (whitespace reflow, nested-emphasis
+    re-serialization, URL-email autolinking, frontmatter flattening — accept and
+    record) / real loss (STOP). This step caught Live Documents silently dropping
+    GFM tables (fixed 2026-07-09, `65c21c6`). Known open serializer bug: lone `~`
+    doubles into `~~`.
+14. **Nest the mount inside the corpus dir when a split leaves a git half**
+    (`brain/cloud/` pattern): external consumers that symlink the corpus root keep
+    resolving both halves with zero re-pointing; give cloud halves of split docs
+    distinct filenames so the projection can't shadow the git files.
+15. **Split mixed docs at entry level, and prove the split lossless** (sorted
+    line-diff of the two halves + preamble against the original) before uploading.
+16. **Executed-triage reuse:** a prior run record with the user's confirmed calls
+    IS the confirmed triage (preflight #2) — don't re-open settled files; only
+    apply-time choices (workspace, mount path, deferred proposals) get questions.

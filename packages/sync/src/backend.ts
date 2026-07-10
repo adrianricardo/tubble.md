@@ -69,6 +69,16 @@ export interface SyncBackend {
 	listWorkspaces(): Promise<Workspace[]>;
 	/** Folder tree for a workspace; nested via `parentId`. */
 	getFolders(workspaceId: string): Promise<Folder[]>;
+	/**
+	 * Create a folder in a workspace (over `folders.create`). Returns the new
+	 * folderId. Used by hubble-init apply-mode (CLI folder-create surface).
+	 */
+	createFolder(args: {
+		workspaceId: string;
+		parentId?: string;
+		name: string;
+		actor?: string;
+	}): Promise<string>;
 
 	getFiles(
 		workspaceId: string,

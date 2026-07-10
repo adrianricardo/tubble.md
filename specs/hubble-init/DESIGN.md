@@ -5,8 +5,10 @@ repo's durable context into a repo-linked Hubble cloud folder, ensures the deskt
 (the sync bridge), and deep-links into the new workspace.
 Vision: `/brain/synthesized/current-vision.md`. Visual: the v1.1 storyboard, scenes 1–3.
 
-**Status: design only — not built.** Dogfood is gated on this logic feeling good
-(decision log 2026-07-09).
+**Status: apply-mode built and executed once for real** — first apply run split
+`567-platform/brain` into the "567 Brain" workspace on dev (2026-07-09, run record
+`runs/2026-07-09-567-brain-apply-run.md`). Desktop repo-link/watch handoff and
+`hubble login` remain open.
 
 ## Flow
 
@@ -83,10 +85,11 @@ it runs in:
 
 ## Gaps in the platform this needs (verified against code 2026-07-09)
 
-1. **Authenticated headless path.** `packages/cli` has `cloud create/connect/import/
-   document *` but no auth plumbing — workspaces it creates are anonymous (legacy/test
-   semantics in `sync.ts listWorkspaces`). Needs `hubble login` (device flow or pasted
-   token, like `packages/mcp-server`'s `HUBBLE_AUTH_TOKEN`).
+1. **Authenticated headless path.** *Partially closed 2026-07-09:* the CLI accepts
+   `--auth-token` / `HUBBLE_AUTH_TOKEN` / `CONVEX_AUTH_TOKEN` on every command.
+   Working pattern: mint a throwaway password account (`auth:signIn`, flow signUp,
+   JWTs live ~1h), apply, then `folders:setFolderUserShareByEmail` to land the folder
+   in the user's account. Still needed: real `hubble login` (device flow).
 2. **Headless repo-link.** Mount + `.git/info/exclude` + BRAIN.md seeding live only in
    the Electron main process (`desktopApi.linkRepoFolder`). Extract into a shared
    package (most sync machinery is already in `packages/sync`) or expose via the desktop
@@ -95,8 +98,8 @@ it runs in:
    (download URL / brew cask TBD); first-run sign-in handoff.
 4. **Deep link.** `hubble://` protocol registration in the desktop app, routing to a
    folder view.
-5. **Folder create API from CLI** (`folders.create`) — exists in backend, needs CLI
-   surface.
+5. **Folder create API from CLI** — *closed 2026-07-09:* `hubble cloud folder
+   create/list/export` and `cloud document create` shipped.
 6. **Multi-repo mount of one brain** (from the 567 dry run 2026-07-09): a brain can
    have external consumers (the 567 iOS repo symlinks `567-platform/brain`). Init must
    detect consumers (sibling-repo symlinks, cross-repo references) and apply-mode must
@@ -104,6 +107,14 @@ it runs in:
    mounted into multiple repos.
 7. **Asset-link handling**: binary assets stay in git (decided 2026-07-09); apply-mode
    rewrites or flags asset links in moved docs. No binary hosting required for v1.
+8. **Markdown fidelity** (found by the first apply run's export-diff): Live Documents
+   silently dropped GFM tables — fixed (`65c21c6`, editor schema + round-trip). Still
+   open: lone `~` doubles into `~~` (strikethrough serializer), YAML frontmatter
+   flattens to text, bare URLs/emails get autolinked. Apply-mode's verify-before-delete
+   diff is the permanent guard.
+9. **Workspace ownership transfer.** Init's throwaway account owns the workspace it
+   creates; the user only gets folder-editor access via email share. Need a claim /
+   ownership-transfer path (or `hubble login`, which obsoletes the throwaway).
 
 ## Open design questions
 

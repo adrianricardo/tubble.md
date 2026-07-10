@@ -36,6 +36,7 @@ type CliArgs = {
 	help: boolean;
 	workspaceName?: string;
 	workspaceId?: string;
+	authToken?: string;
 	baseRevision?: string;
 	appendMarkdown?: string;
 	replaceMarkdown?: string;
@@ -44,6 +45,10 @@ type CliArgs = {
 	file?: string;
 	format?: string;
 	out?: string;
+	parentId?: string;
+	title?: string;
+	folderId?: string;
+	documentPath?: string;
 	watch: boolean;
 	actor?: string;
 	deploymentUrl?: string;
@@ -78,7 +83,7 @@ async function runCloudCommand(parsed: CliArgs) {
 	const [action, ...extraArgs] = parsed.extraArgs;
 	const { workspacePath } = parsed;
 
-	if (extraArgs.length > 0 && action !== "document") {
+	if (extraArgs.length > 0 && action !== "document" && action !== "folder") {
 		printUsage();
 		process.exitCode = 1;
 		return;
@@ -96,22 +101,25 @@ async function runCloudCommand(parsed: CliArgs) {
 			console.log("Cloud Sync disconnected");
 			return;
 		case "sync":
-			await runManualSync(workspacePath);
+			await runManualSync(workspacePath, parsed);
 			return;
 		case "import":
-			await runImport(workspacePath);
+			await runImport(workspacePath, parsed);
 			return;
 		case "export":
-			await runExport(workspacePath);
+			await runExport(workspacePath, parsed);
 			return;
 		case "project":
-			await runProject(workspacePath);
+			await runProject(workspacePath, parsed);
 			return;
 		case "document":
 			await runDocumentCommand(workspacePath, parsed);
 			return;
+		case "folder":
+			await runFolderCommand(workspacePath, parsed);
+			return;
 		case "watch":
-			await runWatch(workspacePath);
+			await runWatch(workspacePath, parsed);
 			return;
 	}
 
@@ -119,18 +127,21 @@ async function runCloudCommand(parsed: CliArgs) {
 	process.exitCode = 1;
 }
 
-async function runManualSync(workspacePath: string) {
+async function runManualSync(workspacePath: string, parsed: CliArgs) {
 	const cloudSync = await readCloudSyncConfig(workspacePath);
 	if (!cloudSync) return;
 
-	await syncOnce(workspacePath, cloudSync, "manual");
+	await syncOnce(workspacePath, cloudSync, "manual", parsed.authToken);
 }
 
-async function runImport(workspacePath: string) {
+async function runImport(workspacePath: string, parsed: CliArgs) {
 	const cloudSync = await readCloudSyncConfig(workspacePath);
 	if (!cloudSync) return;
 
-	const backend = createConvexBackend(cloudSync.deploymentUrl);
+	const backend = createConvexBackend(
+		cloudSync.deploymentUrl,
+		parsed.authToken,
+	);
 	const result = await importLiveDocuments(backend, fs, {
 		workspaceId: cloudSync.workspaceId,
 		workspacePath,
@@ -142,11 +153,14 @@ async function runImport(workspacePath: string) {
 	);
 }
 
-async function runExport(workspacePath: string) {
+async function runExport(workspacePath: string, parsed: CliArgs) {
 	const cloudSync = await readCloudSyncConfig(workspacePath);
 	if (!cloudSync) return;
 
-	const backend = createConvexBackend(cloudSync.deploymentUrl);
+	const backend = createConvexBackend(
+		cloudSync.deploymentUrl,
+		parsed.authToken,
+	);
 	const result = await exportLiveDocuments(backend, fs, {
 		workspaceId: cloudSync.workspaceId,
 		workspacePath,
@@ -159,11 +173,14 @@ async function runExport(workspacePath: string) {
 	);
 }
 
-async function runProject(workspacePath: string) {
+async function runProject(workspacePath: string, parsed: CliArgs) {
 	const cloudSync = await readCloudSyncConfig(workspacePath);
 	if (!cloudSync) return;
 
-	const backend = createConvexBackend(cloudSync.deploymentUrl);
+	const backend = createConvexBackend(
+		cloudSync.deploymentUrl,
+		parsed.authToken,
+	);
 	const result = await writeLiveDocumentProjections(backend, fs, {
 		workspaceId: cloudSync.workspaceId,
 		workspacePath,
@@ -184,18 +201,16 @@ async function runDocumentCommand(workspacePath: string, parsed: CliArgs) {
 	}
 	const cloudSync = await readCloudSyncConfig(workspacePath);
 	if (!cloudSync) return;
-	if (!parsed.workspaceId) {
-		console.error("Missing required --id documentId.");
-		process.exitCode = 1;
-		return;
-	}
 
 	switch (subcommand) {
 		case "get":
-			await runDocumentGet(cloudSync.deploymentUrl, parsed.workspaceId);
+			await runDocumentGet(cloudSync.deploymentUrl, parsed);
 			return;
 		case "patch":
 			await runDocumentPatch(cloudSync.deploymentUrl, parsed);
+			return;
+		case "create":
+			await runDocumentCreate(workspacePath, cloudSync, parsed);
 			return;
 		case "shim":
 			await runDocumentShim(workspacePath, cloudSync.deploymentUrl, parsed);
@@ -216,10 +231,15 @@ async function runDocumentCommand(workspacePath: string, parsed: CliArgs) {
 	}
 }
 
-async function runDocumentGet(deploymentUrl: string, documentId: string) {
-	const client = new ConvexHttpClient(deploymentUrl);
+async function runDocumentGet(deploymentUrl: string, parsed: CliArgs) {
+	if (!parsed.workspaceId) {
+		console.error("Missing required --id documentId.");
+		process.exitCode = 1;
+		return;
+	}
+	const client = createConvexHttpClient(deploymentUrl, parsed.authToken);
 	const document = await client.query(api.documents.getForAgent, {
-		documentId: documentId as Id<"documents">,
+		documentId: parsed.workspaceId as Id<"documents">,
 	});
 	console.log(JSON.stringify(document, null, 2));
 }
@@ -250,7 +270,7 @@ async function runDocumentPatch(deploymentUrl: string, parsed: CliArgs) {
 		return;
 	}
 
-	const client = new ConvexHttpClient(deploymentUrl);
+	const client = createConvexHttpClient(deploymentUrl, parsed.authToken);
 	const result = await client.mutation(api.documents.applyPatch, {
 		documentId: parsed.workspaceId as Id<"documents">,
 		baseRevision,
@@ -283,6 +303,38 @@ function documentPatchIntent(parsed: CliArgs) {
 	return null;
 }
 
+async function runDocumentCreate(
+	workspacePath: string,
+	cloudSync: CloudSyncConfig,
+	parsed: CliArgs,
+) {
+	if (!parsed.title) {
+		console.error("Missing required --title.");
+		process.exitCode = 1;
+		return;
+	}
+	if (!parsed.file) {
+		console.error("Missing required --file path.md.");
+		process.exitCode = 1;
+		return;
+	}
+	const markdown = await fs.readFile(resolve(workspacePath, parsed.file));
+	const backend = createConvexBackend(
+		cloudSync.deploymentUrl,
+		parsed.authToken,
+	);
+	const documentId = await backend.createDocument({
+		workspaceId: cloudSync.workspaceId,
+		folderId: parsed.folderId,
+		title: parsed.title,
+		path: parsed.documentPath,
+		markdown,
+		actor: parsed.actor,
+	});
+	console.log(documentId);
+	console.log(`created document ${documentId}`);
+}
+
 async function runDocumentExport(
 	workspacePath: string,
 	deploymentUrl: string,
@@ -299,7 +351,7 @@ async function runDocumentExport(
 		process.exitCode = 1;
 		return;
 	}
-	const client = new ConvexHttpClient(deploymentUrl);
+	const client = createConvexHttpClient(deploymentUrl, parsed.authToken);
 	const document = await client.query(api.documents.getForAgent, {
 		documentId: parsed.workspaceId as Id<"documents">,
 	});
@@ -335,7 +387,7 @@ async function runDocumentShim(
 	const stagingPath = resolve(workspacePath, parsed.file);
 	const applyStagingFile = async () => {
 		const markdown = await fs.readFile(stagingPath);
-		const client = new ConvexHttpClient(deploymentUrl);
+		const client = createConvexHttpClient(deploymentUrl, parsed.authToken);
 		const document = await client.query(api.documents.getForAgent, {
 			documentId: parsed.workspaceId as Id<"documents">,
 		});
@@ -412,7 +464,7 @@ async function runDocumentReconcile(
 	}
 	const documentId = parsed.workspaceId;
 	const projectionPath = resolve(workspacePath, parsed.file);
-	const backend = createConvexBackend(deploymentUrl);
+	const backend = createConvexBackend(deploymentUrl, parsed.authToken);
 	const applyProjectionFile = async () => {
 		const outcome = await reconcileProjectionFile(backend, fs, {
 			documentId,
@@ -470,11 +522,111 @@ async function runDocumentReconcile(
 	});
 }
 
-async function runWatch(workspacePath: string) {
+async function runFolderCommand(workspacePath: string, parsed: CliArgs) {
+	const [, subcommand] = parsed.extraArgs;
+	if (parsed.extraArgs.length !== 2) {
+		printFolderHelp();
+		process.exitCode = 1;
+		return;
+	}
 	const cloudSync = await readCloudSyncConfig(workspacePath);
 	if (!cloudSync) return;
 
-	await syncContinuously(workspacePath, cloudSync);
+	switch (subcommand) {
+		case "create":
+			await runFolderCreate(cloudSync, parsed);
+			return;
+		case "list":
+			await runFolderList(cloudSync, parsed);
+			return;
+		case "export":
+			await runFolderExport(workspacePath, cloudSync, parsed);
+			return;
+		default:
+			printFolderHelp();
+			process.exitCode = 1;
+	}
+}
+
+async function runFolderCreate(cloudSync: CloudSyncConfig, parsed: CliArgs) {
+	if (!parsed.workspaceName) {
+		console.error("Missing required --name.");
+		process.exitCode = 1;
+		return;
+	}
+	const backend = createConvexBackend(
+		cloudSync.deploymentUrl,
+		parsed.authToken,
+	);
+	const folderId = await backend.createFolder({
+		workspaceId: cloudSync.workspaceId,
+		parentId: parsed.parentId,
+		name: parsed.workspaceName,
+		actor: parsed.actor,
+	});
+	console.log(folderId);
+	console.log(`created folder ${folderId}`);
+}
+
+async function runFolderList(cloudSync: CloudSyncConfig, parsed: CliArgs) {
+	const backend = createConvexBackend(
+		cloudSync.deploymentUrl,
+		parsed.authToken,
+	);
+	const folders = await backend.getFolders(cloudSync.workspaceId);
+	for (const folder of folders) {
+		console.log(`${folder._id}\t${folder.name}\t${folder.parentId ?? "-"}`);
+	}
+}
+
+async function runFolderExport(
+	workspacePath: string,
+	cloudSync: CloudSyncConfig,
+	parsed: CliArgs,
+) {
+	if (!parsed.folderId) {
+		console.error("Missing required --folder folderId.");
+		process.exitCode = 1;
+		return;
+	}
+	if (!parsed.out) {
+		console.error("Missing required --out dir.");
+		process.exitCode = 1;
+		return;
+	}
+	const outDir = resolve(workspacePath, parsed.out);
+	const backend = createConvexBackend(
+		cloudSync.deploymentUrl,
+		parsed.authToken,
+	);
+	const documents = await backend.getFolderSubtreeDocuments(parsed.folderId);
+	const usedByDir = new Map<string, Set<string>>();
+	await fs.ensureDir(outDir);
+
+	for (const document of documents) {
+		const dirRel = sanitizeRelPath(document.relativePath);
+		const used = usedByDir.get(dirRel) ?? new Set<string>();
+		usedByDir.set(dirRel, used);
+		const fileName = uniqueName(
+			used,
+			exportFileName(document.path, document.title),
+		);
+		const relPath = dirRel ? `${dirRel}/${fileName}` : fileName;
+		const slash = relPath.lastIndexOf("/");
+		if (slash > 0) await fs.ensureDir(`${outDir}/${relPath.slice(0, slash)}`);
+		await fs.writeFile(`${outDir}/${relPath}`, document.markdown);
+	}
+
+	console.log(
+		`exported ${documents.length} document${documents.length === 1 ? "" : "s"} to ${outDir}`,
+	);
+}
+
+async function runWatch(workspacePath: string, parsed: CliArgs) {
+	const cloudSync = await readCloudSyncConfig(workspacePath);
+	if (!cloudSync) return;
+
+	await syncContinuously(workspacePath, cloudSync, parsed.authToken);
 }
 
 async function runCreate(workspacePath: string, opts: CliArgs) {
@@ -490,7 +642,7 @@ async function runCreate(workspacePath: string, opts: CliArgs) {
 	}
 
 	const deploymentUrl = getDeploymentUrl(opts);
-	const backend = createConvexBackend(deploymentUrl);
+	const backend = createConvexBackend(deploymentUrl, opts.authToken);
 	const workspaceId = await backend.createWorkspace(opts.workspaceName);
 	await writeCloudConnection(workspacePath, {
 		deploymentUrl,
@@ -512,7 +664,7 @@ async function runConnect(workspacePath: string, opts: CliArgs) {
 	}
 
 	const deploymentUrl = getDeploymentUrl(opts);
-	const backend = createConvexBackend(deploymentUrl);
+	const backend = createConvexBackend(deploymentUrl, opts.authToken);
 	const workspaceId =
 		opts.workspaceId ?? (await backend.getWorkspace(opts.workspaceName ?? ""));
 
@@ -556,12 +708,25 @@ function getDeploymentUrl(opts: Pick<CliArgs, "deploymentUrl">): string {
 	return opts.deploymentUrl ?? getConvexUrl();
 }
 
+function getAuthToken(flagValue?: string): string | undefined {
+	return (
+		flagValue ?? process.env.HUBBLE_AUTH_TOKEN ?? process.env.CONVEX_AUTH_TOKEN
+	);
+}
+
+function createConvexHttpClient(url: string, authToken?: string) {
+	const client = new ConvexHttpClient(url);
+	if (authToken) client.setAuth(authToken);
+	return client;
+}
+
 async function syncOnce(
 	workspacePath: string,
 	cloudSync: CloudSyncConfig,
 	reason: string,
+	authToken?: string,
 ) {
-	const backend = createConvexBackend(cloudSync.deploymentUrl);
+	const backend = createConvexBackend(cloudSync.deploymentUrl, authToken);
 	const result = await runSync(backend, fs, workspacePath);
 	logResult(reason, result);
 	return result;
@@ -570,15 +735,16 @@ async function syncOnce(
 async function syncContinuously(
 	workspacePath: string,
 	cloudSync: CloudSyncConfig,
+	authToken?: string,
 ) {
 	const convexUrl = cloudSync.deploymentUrl;
 	console.log(`Hubble Sync watching ${workspacePath}`);
 	console.log(`Workspace: ${cloudSync.workspaceId}`);
 
-	const scheduler = createSyncScheduler(workspacePath, cloudSync);
+	const scheduler = createSyncScheduler(workspacePath, cloudSync, authToken);
 	await scheduler.enqueue("startup");
 
-	const subscriber = createConvexSubscriber(convexUrl);
+	const subscriber = createConvexSubscriber(convexUrl, authToken);
 	const unsubscribe = subscriber.onFilesChanged(
 		cloudSync.workspaceId,
 		() => {
@@ -642,6 +808,7 @@ async function syncContinuously(
 function createSyncScheduler(
 	workspacePath: string,
 	cloudSync: CloudSyncConfig,
+	authToken?: string,
 ) {
 	let running = false;
 	let pending = false;
@@ -658,7 +825,7 @@ function createSyncScheduler(
 		let currentReason = reason;
 		try {
 			while (true) {
-				await syncOnce(workspacePath, cloudSync, currentReason);
+				await syncOnce(workspacePath, cloudSync, currentReason, authToken);
 				if (!pending) break;
 				pending = false;
 				currentReason = pendingReason;
@@ -701,6 +868,63 @@ function logResult(reason: string, result: SyncResult) {
 	}
 }
 
+function exportFileName(
+	documentPath: string | null | undefined,
+	title: string,
+) {
+	const normalizedPath = documentPath?.split("\\").join("/");
+	const pathTail = normalizedPath
+		?.split("/")
+		.filter((segment) => segment.length > 0)
+		.pop();
+	return sanitizeSegment(pathTail ?? `${title}.md`);
+}
+
+/**
+ * Sanitize each segment of a `/`-joined relative path. Empty, `.` and `..`
+ * segments are dropped so cloud-controlled paths can never escape the root.
+ */
+function sanitizeRelPath(relativePath: string): string {
+	return relativePath
+		.split("\\")
+		.join("/")
+		.split("/")
+		.filter(
+			(segment) => segment.length > 0 && segment !== "." && segment !== "..",
+		)
+		.map((segment) => sanitizeSegment(segment))
+		.join("/");
+}
+
+function sanitizeSegment(name: string): string {
+	const cleaned = name
+		.replace(/[/\\:*?"<>|]/g, " ")
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: strip control chars
+		.replace(/[\u0000-\u001f]/g, " ")
+		.replace(/\s+/g, " ")
+		.trim()
+		.replace(/^[. ]+|[. ]+$/g, "");
+	return cleaned || "Untitled";
+}
+
+function uniqueName(used: Set<string>, name: string): string {
+	if (!used.has(name)) {
+		used.add(name);
+		return name;
+	}
+	const dot = name.lastIndexOf(".");
+	const stem = dot === -1 ? name : name.slice(0, dot);
+	const ext = dot === -1 ? "" : name.slice(dot);
+	let n = 2;
+	let candidate = `${stem} (${n})${ext}`;
+	while (used.has(candidate)) {
+		n += 1;
+		candidate = `${stem} (${n})${ext}`;
+	}
+	used.add(candidate);
+	return candidate;
+}
+
 function parseCliArgs(argv: string[]) {
 	try {
 		const args = argv[0] === "--" ? argv.slice(1) : argv;
@@ -716,6 +940,7 @@ function parseCliArgs(argv: string[]) {
 				name: { type: "string" },
 				id: { type: "string" },
 				url: { type: "string" },
+				"auth-token": { type: "string" },
 				"base-revision": { type: "string" },
 				append: { type: "string" },
 				replace: { type: "string" },
@@ -724,6 +949,10 @@ function parseCliArgs(argv: string[]) {
 				file: { type: "string" },
 				format: { type: "string" },
 				out: { type: "string" },
+				parent: { type: "string" },
+				title: { type: "string" },
+				folder: { type: "string" },
+				path: { type: "string" },
 				watch: { type: "boolean" },
 				actor: { type: "string" },
 			},
@@ -734,6 +963,7 @@ function parseCliArgs(argv: string[]) {
 			help,
 			workspaceName: values.name,
 			workspaceId: values.id,
+			authToken: getAuthToken(values["auth-token"]),
 			baseRevision: values["base-revision"],
 			appendMarkdown: values.append,
 			replaceMarkdown: values.replace,
@@ -742,6 +972,10 @@ function parseCliArgs(argv: string[]) {
 			file: values.file,
 			format: values.format,
 			out: values.out,
+			parentId: values.parent,
+			title: values.title,
+			folderId: values.folder,
+			documentPath: values.path,
 			watch: values.watch ?? false,
 			actor: values.actor,
 			deploymentUrl: values.url,
@@ -787,6 +1021,9 @@ function printHelp(args: CliArgs) {
 		case "document":
 			printDocumentHelp();
 			return;
+		case "folder":
+			printFolderHelp();
+			return;
 		case "watch":
 			printWatchHelp();
 			return;
@@ -820,29 +1057,34 @@ function printCloudHelp() {
 		"  project     Write read-only Live Document projections for agents",
 	);
 	console.log("  document    Read or patch a Live Document for agents");
+	console.log("  folder      Create, list, or export cloud folders");
 	console.log("  watch       Sync continuously");
 	console.log("  disconnect  Remove Cloud Sync config");
 }
 
 function printCreateHelp() {
 	console.log("Usage:");
-	console.log("  hubble [--cwd path] cloud create --name name [--url url]");
+	console.log(
+		"  hubble [--cwd path] cloud create --name name [--url url] [--auth-token token]",
+	);
 	console.log("");
 	console.log("Options:");
 	console.log("  --name name  Remote workspace name to create");
 	console.log("  --url url    Convex deployment URL");
+	console.log("  --auth-token token  Convex auth token");
 }
 
 function printConnectHelp() {
 	console.log("Usage:");
 	console.log(
-		"  hubble [--cwd path] cloud connect (--name name|--id id) [--url url]",
+		"  hubble [--cwd path] cloud connect (--name name|--id id) [--url url] [--auth-token token]",
 	);
 	console.log("");
 	console.log("Options:");
 	console.log("  --name name  Existing remote workspace name");
 	console.log("  --id id      Existing remote workspace id");
 	console.log("  --url url    Convex deployment URL");
+	console.log("  --auth-token token  Convex auth token");
 }
 
 function printSyncHelp() {
@@ -881,6 +1123,9 @@ function printDocumentHelp() {
 	console.log("Usage:");
 	console.log("  hubble [--cwd path] cloud document get --id documentId");
 	console.log(
+		"  hubble [--cwd path] cloud document create --title title --file path.md [--folder folderId] [--path relativePath] [--actor name]",
+	);
+	console.log(
 		"  hubble [--cwd path] cloud document patch --id documentId --base-revision n (--replace markdown|--append markdown|--after-heading heading --markdown markdown) [--actor name]",
 	);
 	console.log(
@@ -894,8 +1139,21 @@ function printDocumentHelp() {
 	);
 	console.log("");
 	console.log(
-		"Reads or patches Live Documents through the agent document API.",
+		"Creates, reads, or patches Live Documents through the agent document API.",
 	);
+}
+
+function printFolderHelp() {
+	console.log("Usage:");
+	console.log(
+		"  hubble [--cwd path] cloud folder create --name name [--parent folderId] [--actor name]",
+	);
+	console.log("  hubble [--cwd path] cloud folder list");
+	console.log(
+		"  hubble [--cwd path] cloud folder export --folder folderId --out dir",
+	);
+	console.log("");
+	console.log("Creates, lists, or exports cloud folder subtrees.");
 }
 
 function printWatchHelp() {
@@ -924,6 +1182,9 @@ function printUsage() {
 	console.error("  hubble [--cwd path] cloud project");
 	console.error("  hubble [--cwd path] cloud document get --id documentId");
 	console.error(
+		"  hubble [--cwd path] cloud document create --title title --file path.md [--folder folderId] [--path relativePath] [--actor name]",
+	);
+	console.error(
 		"  hubble [--cwd path] cloud document patch --id documentId --base-revision n (--replace markdown|--append markdown|--after-heading heading --markdown markdown)",
 	);
 	console.error(
@@ -934,6 +1195,13 @@ function printUsage() {
 	);
 	console.error(
 		"  hubble [--cwd path] cloud document export --id documentId [--format md] [--out file]",
+	);
+	console.error(
+		"  hubble [--cwd path] cloud folder create --name name [--parent folderId] [--actor name]",
+	);
+	console.error("  hubble [--cwd path] cloud folder list");
+	console.error(
+		"  hubble [--cwd path] cloud folder export --folder folderId --out dir",
 	);
 	console.error("  hubble [--cwd path] cloud watch");
 	console.error("  hubble [--cwd path] cloud disconnect");
