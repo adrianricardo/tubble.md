@@ -49,6 +49,6 @@ describe("embed markdown conversion", () => {
 			],
 		});
 
-		expect(markdown).toBe('<iframe src="./kanban.html"></iframe>');
+		expect(markdown).toBe('<iframe src="./kanban.html"></iframe>\n');
 	});
 });

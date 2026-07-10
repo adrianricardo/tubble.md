@@ -22,7 +22,9 @@ export function tiptapDocToMarkdown(doc: JSONContent): string {
 		}
 		blocks.push(blockToMarkdown(node));
 	}
-	return `${frontMatter}${blocks.join("\n\n")}`;
+	const markdown = `${frontMatter}${blocks.join("\n\n")}`;
+	if (markdown === "" || markdown.endsWith("\n")) return markdown;
+	return `${markdown}\n`;
 }
 
 function blockToMarkdown(node: JSONContent): string {
@@ -336,41 +338,88 @@ function inlineMarksToMarkdown(
 	let result = "";
 	let activeMarks: InlineMarkType[] = [];
 
-	for (const node of nodes) {
-		const nextMarks = inlineMarkdownMarks(node);
-		const shared = sharedMarkPrefix(activeMarks, nextMarks);
-		result += closeMarks(activeMarks.slice(shared));
-		result += openMarks(nextMarks.slice(shared));
-		activeMarks = nextMarks;
-		result += unmarkedNodeToMarkdown(node, options, nextMarks.includes("code"));
+	for (let index = 0; index < nodes.length; index++) {
+		const node = nodes[index];
+		const nextMarks = inlineMarkdownMarkSet(node);
+		const keptMarks = activeMarkPrefix(activeMarks, nextMarks);
+		result += closeMarks(activeMarks.slice(keptMarks.length));
+
+		const marksToOpen = orderedMarksToOpen(nodes, index, nextMarks, keptMarks);
+		result += openMarks(marksToOpen);
+		activeMarks = [...keptMarks, ...marksToOpen];
+		result += unmarkedNodeToMarkdown(
+			node,
+			options,
+			nextMarks.has("code"),
+		);
 	}
 
 	result += closeMarks(activeMarks);
 	return result;
 }
 
-function inlineMarkdownMarks(node: JSONContent): InlineMarkType[] {
-	if (node.type !== "text") return [];
-	const marks = (node.marks ?? [])
-		.map((mark) => mark.type)
-		.filter(
-			(type): type is InlineMarkType =>
-				type === "bold" ||
-				type === "italic" ||
-				type === "strike" ||
-				type === "code",
-		);
-	// Import appends outer marks after inner marks; reversing keeps outer
-	// delimiters open across adjacent text nodes.
-	return marks.reverse();
+function inlineMarkdownMarkSet(node: JSONContent): Set<InlineMarkType> {
+	if (node.type !== "text") return new Set();
+	return new Set(
+		(node.marks ?? [])
+			.map((mark) => mark.type)
+			.filter(
+				(type): type is InlineMarkType =>
+					type === "bold" ||
+					type === "italic" ||
+					type === "strike" ||
+					type === "code",
+			),
+	);
 }
 
-function sharedMarkPrefix(left: InlineMarkType[], right: InlineMarkType[]) {
-	let index = 0;
-	while (left[index] && left[index] === right[index]) {
-		index += 1;
+function activeMarkPrefix(
+	activeMarks: InlineMarkType[],
+	nextMarks: Set<InlineMarkType>,
+) {
+	const prefix: InlineMarkType[] = [];
+	for (const mark of activeMarks) {
+		if (!nextMarks.has(mark)) break;
+		prefix.push(mark);
 	}
-	return index;
+	return prefix;
+}
+
+function orderedMarksToOpen(
+	nodes: JSONContent[],
+	index: number,
+	nextMarks: Set<InlineMarkType>,
+	keptMarks: InlineMarkType[],
+) {
+	const kept = new Set(keptMarks);
+	return Array.from(nextMarks)
+		.filter((mark) => !kept.has(mark))
+		.sort((left, right) => {
+			// Markdown delimiters must nest by run length, not schema mark rank.
+			const runDelta =
+				markRunEnd(nodes, index, right) - markRunEnd(nodes, index, left);
+			if (runDelta !== 0) return runDelta;
+			return MARK_TIE_ORDER[left] - MARK_TIE_ORDER[right];
+		});
+}
+
+const MARK_TIE_ORDER: Record<InlineMarkType, number> = {
+	bold: 0,
+	italic: 1,
+	strike: 2,
+	code: 3,
+};
+
+function markRunEnd(
+	nodes: JSONContent[],
+	index: number,
+	mark: InlineMarkType,
+) {
+	let end = index;
+	while (end < nodes.length && inlineMarkdownMarkSet(nodes[end]).has(mark)) {
+		end += 1;
+	}
+	return end;
 }
 
 function openMarks(marks: InlineMarkType[]) {

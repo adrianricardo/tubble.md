@@ -27,7 +27,7 @@ describe("image markdown conversion", () => {
 				},
 			],
 		});
-		expect(markdown).toBe("![diagram](example.assets/abc123.png)");
+		expect(markdown).toBe("![diagram](example.assets/abc123.png)\n");
 	});
 
 	it("ignores markdown images with empty URLs", () => {
