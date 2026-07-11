@@ -9,9 +9,9 @@ this repo at `brain/cloud/` via the desktop app's repo-link.
 ## Git half (this directory)
 
 - `synthesized/decision-log.md` — engineering/build decisions (product decisions moved
-  to cloud `synthesized/product-decisions.md`)
+  to cloud `synthesized/Product Decision Log.md`)
 - `synthesized/roadmap.md` — **where the build is + what's next** (the progress
-  contract's single source; track strategy moved to cloud `synthesized/track-strategy.md`)
+  contract's single source; track strategy moved to cloud `synthesized/Track Strategy.md`)
 - `BRAINKEEPER.md` — the one governance doc: filing rules (resolver), maintenance
   non-negotiables, session wrap-up. Governs both halves.
 - `cloud/` — the mounted cloud half (git-excluded; absent until the desktop repo-link
@@ -19,9 +19,9 @@ this repo at `brain/cloud/` via the desktop app's repo-link.
 
 ## Cloud half (`brain/cloud/` when mounted)
 
-`BRAIN.md` (index + **PENDING EXTRACTION** status), `synthesized/current-vision.md`,
-`synthesized/product-decisions.md`, `synthesized/track-strategy.md`,
-`synthesized/open-questions.md`, `admin/activity-log.md`, `admin/pending-extraction.md`,
+`BRAIN.md` (index + **PENDING EXTRACTION** status), `synthesized/Current Vision.md`,
+`synthesized/Product Decision Log.md`, `synthesized/Track Strategy.md`,
+`synthesized/Open Questions.md`, `admin/Brain Activity Log.md`, `admin/Pending Extraction.md`,
 `sources/` (append-only session captures).
 
 **No mount on this machine?** The pre-split state of every moved doc is reachable in

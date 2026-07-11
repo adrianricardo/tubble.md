@@ -40,27 +40,36 @@ Next session, in order:
    RESOLVER+BRAINKEEPER consolidated into one governance doc. Run record:
    `/specs/hubble-init/runs/2026-07-10-hubble-brain-apply-run.md`.
 
-## ➤ NEXT STEP (updated 2026-07-11, Phase 2 implemented)
+## ➤ NEXT STEP (updated 2026-07-11, Phases 1+2 LIVE-VERIFIED)
 
-**Phase 1 of `/specs/hubble-init/MAGIC-FLOW-PLAN.md` is implemented in the working
-tree**: `hubble login` device-flow auth now creates one-time device requests,
-approves them through `/device`, stores a Convex Auth refresh token in
-`~/.hubble/credentials.json`, and refreshes CLI JWTs through `auth:signIn`.
-Apply-mode guidance now assumes workspaces are created as the logged-in user instead
-of through throwaway accounts.
+**Magic-flow Phases 1+2 are implemented AND live-verified** (commits `f51023a`,
+`79f6024`; run record `specs/hubble-init/runs/2026-07-11-magic-flow-live-acceptance.md`):
+`hubble login` device flow proven end-to-end on dev (approve became an action —
+nested mutations lose built-in env vars); `hubble mount` proven zero-click on a
+scratch repo (both sync directions ≤12s) and **`brain/cloud/` here is now a live
+mount** (11 docs; local 2026-07-11 entries merged up; slug-era files removed;
+git-side refs updated to the title-based projection names).
 
-**Phase 2 of `/specs/hubble-init/MAGIC-FLOW-PLAN.md` is implemented in the working
-tree**: the desktop app registers `hubble://`, exposes a 0600 Unix CLI socket,
-accepts `status` + `link-repo`, runs socket mounts through the same repo-link helper
-as the settings UI, deletes stale `.hubble-export.json` markers, pushes an undo toast,
-tracks `lastReconcileAt`, and exposes clean-undo removal based on the sync index.
-`hubble mount` now launches/contacts the app, guards deployment/account mismatch,
-links the repo, and exits only after the app reports a live connected mount with the
-sync index present. `hubble cloud folder export` now writes `.hubble-export.json` so a
-static projection cannot masquerade as live.
+**Next build step: Phase 3 — ensure-desktop install magic**, then Phase 4 =
+repo-link form fixes (mount-list liveness already shipped with Phase 2). New from
+the acceptance run, feed into Phase 3/4 scope: (a) projection naming split — the
+desktop materializer names by doc title, `folder export` by doc path; pick one
+canonical scheme; (b) duplication feedback loop — `cloud document create` with
+title≠path into a watched mount ping-pongs materialize↔ingest (6 copies before
+stabilizing); the new-local-file ingestion path needs an idempotency guard;
+(c) `cloud create` connects the cwd as a workspace path — the skill must run it
+from a scratch cwd.
 
-Next build step: dogfood Phase 2 by relinking `brain/cloud/` live, then Phase 3 =
-ensure-desktop install magic; Phase 4 = repo-link form fixes.
+Desktop IA follow-up (direction settled 2026-07-11): replace the simultaneous
+**Folders** / **Live Documents** / **On this computer** sidebar with one current
+context and one folder/document tree. Repo-linked projections become contextual
+folder availability; remove standalone local-authority editing while preserving local
+editing through watched projections of cloud folders. New documents inherit folder
+access, and root documents have no direct/guest shares by default while retaining
+normal workspace-member access.
+Source: `brain/cloud/sources/2026-07-11-desktop-navigation-ia.md`. Schedule the
+implementation after the Phase 2 dogfood so the relink run can preserve evidence of
+the current friction before the sidebar is replaced.
 
 Backlog (non-blocking): serializer continuation-indent preservation
 (`packages/editor`, whitespace-only normalization from the split run); frontmatter

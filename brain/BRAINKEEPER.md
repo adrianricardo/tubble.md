@@ -25,19 +25,19 @@ The brain lives in two halves:
    → cloud `sources/YYYY-MM-DD-short-description.md`. Append-only; never rewrite
    existing sources.
 2. **Product vision / wedge / UX direction?**
-   → cloud `synthesized/current-vision.md` (preserve prior wording in its Timeline).
+   → cloud `synthesized/Current Vision.md` (preserve prior wording in its Timeline).
 3. **A choice already made?** Product/strategy decisions → cloud
-   `synthesized/product-decisions.md`; engineering/build decisions → git
+   `synthesized/Product Decision Log.md`; engineering/build decisions → git
    `synthesized/decision-log.md`. Date, decision, rationale, sources.
 4. **Unresolved / needs Adrian / needs validation?**
-   → cloud `synthesized/open-questions.md`.
+   → cloud `synthesized/Open Questions.md`.
 5. **Sequencing, build state, milestones?** Build state + NEXT STEP → git
    `synthesized/roadmap.md`; track strategy/sequencing → cloud
-   `synthesized/track-strategy.md`.
+   `synthesized/Track Strategy.md`.
 6. **Engineering how-to (architecture, protocols, runbooks)?**
    → `/specs/` — not the brain. Feature designs get their own `/specs/<feature>/` folder.
 7. **About the brain system itself?**
-   → cloud `admin/activity-log.md` or `admin/pending-extraction.md`.
+   → cloud `admin/Brain Activity Log.md` or `admin/Pending Extraction.md`.
 
 Ambiguity rules: prefer a source capture plus links from synthesized docs; if a write
 would restructure multiple files, propose the map first; strategy changes get logged in
@@ -58,13 +58,13 @@ the product decision log **and** reflected in the relevant synthesis doc.
 - Respect **PENDING EXTRACTION** (see cloud `BRAIN.md`): the written vision is incomplete by
   Adrian's own statement; do not invent detail to fill gaps — file an open question instead.
 - Keep the brain scannable: a fresh agent should orient in under 15 minutes.
-- Log meaningful completed changes in cloud `admin/activity-log.md`.
+- Log meaningful completed changes in cloud `admin/Brain Activity Log.md`.
 - Cloud `BRAIN.md` is seeded once, never regenerated — edit it like any doc.
 
 ## Session wrap-up (lightweight workflow)
 
 At the end of a session that produced product direction: capture the raw material in
 cloud `sources/`, route durable outcomes through the resolver, log the pass in cloud
-`admin/activity-log.md`, and note anything deferred in `open-questions.md`. If the
+`admin/Brain Activity Log.md`, and note anything deferred in `open-questions.md`. If the
 mount isn't available, queue the entries in the commit message / run record and file
 them when it is.

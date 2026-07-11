@@ -7,10 +7,11 @@ Vision: `/brain/synthesized/current-vision.md`. Visual: the v1.1 storyboard, sce
 
 **Status: apply-mode built and executed once for real** — first apply run split
 `567-platform/brain` into the "567 Brain" workspace on dev (2026-07-09, run record
-`runs/2026-07-09-567-brain-apply-run.md`). Magic-flow Phases 1+2 landed 2026-07-11:
+`runs/2026-07-09-567-brain-apply-run.md`). Magic-flow Phases 1+2 landed AND were
+live-verified 2026-07-11 (`runs/2026-07-11-magic-flow-live-acceptance.md`):
 `hubble login` device-flow auth and the zero-click live link (`hubble mount` →
-desktop CLI socket). Live-machine acceptance (browser approve, toast, `brain/cloud/`
-relink) pending; Phases 3–4 open.
+desktop CLI socket); this repo's `brain/cloud/` is a live mount. Phases 3–4 open;
+new gaps #11–12 from the acceptance run.
 
 ## Flow
 
@@ -137,6 +138,18 @@ it runs in:
     `sharedWithMe.documents`, ignores `.folders`), and RepoLinkSection's workspace
     picker lists member workspaces only — a folder-shared user can neither see nor
     mount the folder. Found during the apply run's handoff.
+11. **Projection naming split** (found 2026-07-11 live acceptance): the desktop
+    materializer names projection files by doc *title* (`admin/Brain Activity
+    Log.md`) while `hubble cloud folder export` names by doc *path*
+    (`admin/activity-log.md`) — the same folder yields two different trees.
+    Needs one canonical scheme (and a migration story for existing mounts).
+12. **Materialize↔ingest duplication loop** (found 2026-07-11 live acceptance):
+    creating a cloud doc whose title differs from its path-derived filename, in a
+    live-mounted folder, made the mount engine ingest its own materialized
+    title-named file as a new local doc, re-materialize under "(2)", and repeat —
+    6 cloud copies before stabilizing. The new-local-file ingestion path needs an
+    idempotency/dedupe guard (e.g. content-hash match against just-materialized
+    docs, or recognize its own writes).
 
 ## Open design questions
 
