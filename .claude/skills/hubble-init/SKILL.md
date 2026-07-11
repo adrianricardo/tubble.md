@@ -84,8 +84,9 @@ doc is verified in the cloud.
    export --folder … --out <mount>`. Live watch stays a desktop-app job (gap #2).
 7. **Seed BRAIN.md** via `hubble cloud document create` — only if the folder has no
    BRAIN.md/brain-titled doc already (seed-once, never regenerate).
-8. **Share to the user** (`folders:setFolderUserShareByEmail`, role editor) so the
-   folder appears in their desktop app; they can later take ownership in-product.
+8. **Hand off to the user** via workspace **owner membership**
+   (`members:inviteWorkspaceMember`, role owner) — never a folder share alone (see
+   Auth section; folder shares are invisible in the desktop app today).
 9. **Progress contract** (rule 8): CLAUDE.md pointer block; AGENTS.md → symlink to
    CLAUDE.md after merging any unique content; roadmap doc seeded if missing.
 10. **Re-point external consumers** (rule 9): update sibling-repo symlinks/references
@@ -245,11 +246,16 @@ From `specs/hubble-init/runs/2026-07-09-567-brain-apply-run.md` (first real appl
 
 13. **Markdown fidelity is an apply gate — never skip the export-diff.** Diff every
     uploaded doc against its source before deleting anything, and classify:
-    byte-identical / normalization-only (whitespace reflow, nested-emphasis
-    re-serialization, URL-email autolinking, frontmatter flattening — accept and
-    record) / real loss (STOP). This step caught Live Documents silently dropping
-    GFM tables (fixed 2026-07-09, `65c21c6`). Known open serializer bug: lone `~`
-    doubles into `~~`.
+    byte-identical / normalization-only (accept and record) / real loss (STOP). This
+    step caught Live Documents silently dropping GFM tables (fixed 2026-07-09,
+    `65c21c6`) and drove the serializer-idempotency work (fixed 2026-07-10,
+    `f8048e3` + `68d15eb`: nested emphasis, lone `~`, verbatim frontmatter, autolink
+    style, trailing newline). Known remaining normalizations (2026-07-10 run):
+    list-item continuation lines lose indentation, a blank line appears between a
+    heading and its first paragraph, and mark nesting order canonicalizes
+    (`~~**x**~~` → `**~~x~~**`). Also verify every exported doc is a round-trip
+    **fixed point** (re-import → re-export is byte-identical) so the mount can't
+    churn; `packages/editor` roundTrip test helpers make this a one-liner.
 14. **Nest the mount inside the corpus dir when a split leaves a git half**
     (`brain/cloud/` pattern): external consumers that symlink the corpus root keep
     resolving both halves with zero re-pointing; give cloud halves of split docs
