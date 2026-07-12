@@ -119,6 +119,16 @@ pass 66/66 and sync/client typechecks pass. Next: add confirmation-time fingerpr
 revalidation, then route watcher moves through prepare and persist review-required
 results before any cloud hierarchy change.
 
+**Phase 3 implementation queue published 2026-07-11:** GitHub issues
+[#168](https://github.com/bholmesdev/hubble.md/issues/168) through
+[#173](https://github.com/bholmesdev/hubble.md/issues/173) cover atomic confirmation,
+watcher relocation policy, durable consequential moves, desktop review/cancellation,
+deletion classification, and Trash/Undo recovery. Dependency chain:
+`#168 → #169 → #170 → #171` and `#170 → #172 → #173`. The authenticated GitHub
+user can create issues but cannot apply repository labels; the queue therefore still
+needs a maintainer to apply `ready-to-implement` and remove any automated
+`needs-triage` labels.
+
 Desktop IA follow-up (direction settled 2026-07-11): replace the simultaneous
 **Folders** / **Live Documents** / **On this computer** sidebar with one current
 context and one folder/document tree. Repo-linked projections become contextual
