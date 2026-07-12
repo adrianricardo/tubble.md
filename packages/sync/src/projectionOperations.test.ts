@@ -3,6 +3,7 @@ import {
 	loadProjectionOperations,
 	projectionOperationsPath,
 	saveProjectionOperations,
+	upsertProjectionOperation,
 } from "./projectionOperations.js";
 
 function memoryFs() {
@@ -63,5 +64,59 @@ describe("projection operations manifest", () => {
 		);
 		const manifest = await saveProjectionOperations(fs, "/mount", [], 20);
 		expect(manifest.operations).toEqual([]);
+	});
+
+	it("upserts a move without discarding unrelated recovery work", async () => {
+		const fs = memoryFs();
+		await saveProjectionOperations(
+			fs,
+			"/mount",
+			[
+				{
+					kind: "missing-document",
+					documentId: "d1",
+					workspaceId: "ws1",
+					folderId: null,
+					path: "/mount/old.md",
+					baseHash: "base",
+				},
+			],
+			10,
+		);
+		const manifest = await upsertProjectionOperation(
+			fs,
+			"/mount",
+			{
+				kind: "consequential-move",
+				documentId: "d2",
+				workspaceId: "ws1",
+				folderId: null,
+				path: "/mount/from.md",
+				toPath: "/mount/to.md",
+				toFolderId: "f2",
+				title: "to",
+				fingerprint: "reviewed",
+				impact: {
+					gainingUserCount: 1,
+					losingUserCount: 0,
+					publicAccessChanged: false,
+					repoExposureChanged: true,
+				},
+				latestHash: "local",
+			},
+			20,
+		);
+		expect(manifest.operations.map((operation) => operation.kind)).toEqual([
+			"missing-document",
+			"consequential-move",
+		]);
+		const afterStartupRefresh = await saveProjectionOperations(
+			fs,
+			"/mount",
+			[],
+			30,
+		);
+		expect(afterStartupRefresh.operations).toHaveLength(1);
+		expect(afterStartupRefresh.operations[0]?.kind).toBe("consequential-move");
 	});
 });

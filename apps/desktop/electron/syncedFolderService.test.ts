@@ -11,6 +11,7 @@ import {
 	type AgentDocument,
 	contentHash,
 	type DocumentPatchResult,
+	type DocumentRelocationResult,
 	type FileSystem,
 	type LiveDocumentProjection,
 	type SharedSubtreeDocument,
@@ -96,6 +97,12 @@ type Calls = {
 	getLiveDocuments: number;
 	rename: Array<{ documentId: string; title: string; path?: string }>;
 	move: Array<{ documentId: string; folderId: string | null }>;
+	prepareRelocation: Array<{
+		documentId: string;
+		folderId: string | null;
+		title: string;
+		path: string;
+	}>;
 	import: Array<{
 		workspaceId: string;
 		path: string;
@@ -115,6 +122,7 @@ type BackendState = {
 	docs: LiveDocumentProjection[];
 	canWrite: boolean;
 	patchError?: Error | null;
+	relocationResult?: DocumentRelocationResult;
 	/** RB4: subtree "Shared with me" payload (steerable to simulate revoke). */
 	shared: SharedWithMe;
 	/** RB3: per-folder subtree docs served to a mount engine instance. */
@@ -175,6 +183,10 @@ function fakeBackend(
 		},
 		async moveDocument(documentId, folderId) {
 			calls.move.push({ documentId, folderId });
+		},
+		async prepareDocumentRelocation(args) {
+			calls.prepareRelocation.push(args);
+			return state.relocationResult ?? { status: "completed" };
 		},
 		async removeDocument(documentId) {
 			calls.remove.push({ documentId });
@@ -249,6 +261,7 @@ function makeService(
 		docs: overrides.docs ?? [doc1()],
 		canWrite: overrides.canWrite ?? true,
 		patchError: overrides.patchError ?? null,
+		relocationResult: overrides.relocationResult,
 		shared: overrides.shared ?? { folders: [], documents: [] },
 		subtreeDocs: overrides.subtreeDocs ?? {},
 	};
@@ -325,6 +338,7 @@ describe("SyncedFolderService routing", () => {
 			getLiveDocuments: 0,
 			rename: [],
 			move: [],
+			prepareRelocation: [],
 			import: [],
 			patch: [],
 			remove: [],
@@ -540,7 +554,7 @@ describe("SyncedFolderService routing", () => {
 		expect(events).not.toContainEqual({ kind: "reconciled" });
 	});
 
-	it("rename: unlink + correlated add calls renameDocument and re-keys", async () => {
+	it("rename: unlink + correlated add prepares one atomic relocation", async () => {
 		const { service } = makeService(calls, events);
 		await service.connect(CONNECT_INPUT);
 
@@ -556,10 +570,84 @@ describe("SyncedFolderService routing", () => {
 			at: NOW + 100,
 		});
 
-		expect(calls.rename).toEqual([
-			{ documentId: "d1", title: "Renamed", path: "WS/Renamed.md" },
+		expect(calls.prepareRelocation).toEqual([
+			{
+				documentId: "d1",
+				folderId: null,
+				title: "Renamed",
+				path: "WS/Renamed.md",
+			},
 		]);
+		expect(calls.rename).toEqual([]);
 		expect(events).toContainEqual({ kind: "renamed" });
+	});
+
+	it("consequential rename is journaled before review without a cloud move", async () => {
+		const { service, fs, state, subscription } = makeService(calls, events, {
+			relocationResult: {
+				status: "confirmation-required",
+				fingerprint: "impact-v1",
+				impact: {
+					gainingUserCount: 1,
+					losingUserCount: 0,
+					publicAccessChanged: false,
+					repoExposureChanged: true,
+				},
+			},
+		});
+		await service.connect(CONNECT_INPUT);
+		await fs.writeFile(`${SYNC_ROOT}/WS/Renamed.md`, "hello");
+		await fs.deleteFile(`${SYNC_ROOT}/WS/Doc.md`);
+
+		await service.handleRawEvent({
+			type: "unlink",
+			absPath: `${SYNC_ROOT}/WS/Doc.md`,
+			at: NOW,
+		});
+		await service.handleRawEvent({
+			type: "add",
+			absPath: `${SYNC_ROOT}/WS/Renamed.md`,
+			inode: 111,
+			at: NOW + 100,
+		});
+
+		const manifest = JSON.parse(await fs.readFile(OPERATIONS_MANIFEST));
+		expect(manifest.operations[0]).toMatchObject({
+			kind: "consequential-move",
+			documentId: "d1",
+			path: `${SYNC_ROOT}/WS/Doc.md`,
+			toPath: `${SYNC_ROOT}/WS/Renamed.md`,
+			fingerprint: "impact-v1",
+		});
+		expect(service.getStatus()).toMatchObject({
+			state: "pending-review",
+			pendingOperationCount: 1,
+		});
+		expect(events).toContainEqual({
+			kind: "move-review-required",
+			operationId: manifest.operations[0].id,
+		});
+		expect(calls.rename).toEqual([]);
+		expect(calls.move).toEqual([]);
+
+		state.docs = [doc1({ markdown: "cloud update", version: 4 })];
+		subscription.callback?.();
+		await waitForCloudMaterialize();
+		expect(await fs.readFile(`${SYNC_ROOT}/WS/Renamed.md`)).toBe("hello");
+		expect(await fs.readFileOrNull(`${SYNC_ROOT}/WS/Doc.md`)).toBeNull();
+
+		await fs.writeFile(`${SYNC_ROOT}/WS/Renamed.md`, "edited while pending");
+		await service.handleRawEvent({
+			type: "change",
+			absPath: `${SYNC_ROOT}/WS/Renamed.md`,
+			hash: await contentHash("edited while pending"),
+			inode: 111,
+			at: NOW + 200,
+		});
+		const refreshed = JSON.parse(await fs.readFile(OPERATIONS_MANIFEST));
+		expect(refreshed.operations[0].latestHash).toBe(
+			await contentHash("hello world"),
+		);
 	});
 
 	it("create: a new .md inside a workspace folder calls importLiveDocument", async () => {

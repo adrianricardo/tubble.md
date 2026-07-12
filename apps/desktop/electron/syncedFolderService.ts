@@ -15,6 +15,7 @@ import {
 	guardProjectionFileSystem,
 	inspectStartupProjectionDrift,
 	liveDocumentBaseCacheRoot,
+	loadProjectionOperations,
 	loadSyncedFolderIndexManifest,
 	materializeMountFolder,
 	materializeSyncedFolder,
@@ -32,6 +33,7 @@ import {
 	saveProjectionOperations,
 	saveSyncedFolderIndexManifest,
 	toLocalEditName,
+	upsertProjectionOperation,
 	writeReconcileBase,
 } from "@hubble.md/sync";
 import { createNodeFileSystem } from "@hubble.md/sync/node";
@@ -436,7 +438,7 @@ export class SyncedFolderService {
 			this.#now(),
 		);
 		this.#pendingOperationCount = manifest.operations.length;
-		if (operations.length === 0) {
+		if (manifest.operations.length === 0) {
 			this.#startupProjectionPlan = plan;
 			this.#startupProjectionSnapshot = await captureProjectionSnapshot(
 				this.#fs,
@@ -444,7 +446,10 @@ export class SyncedFolderService {
 			);
 			return true;
 		}
-		this.#lastError = `Startup verification found ${comparison.collisions.length} untracked Markdown path collision${comparison.collisions.length === 1 ? "" : "s"}; cloud materialization is paused to preserve local files.`;
+		this.#lastError =
+			comparison.collisions.length > 0
+				? `Startup verification found ${comparison.collisions.length} untracked Markdown path collision${comparison.collisions.length === 1 ? "" : "s"}; cloud materialization is paused to preserve local files.`
+				: "A pending filesystem operation requires review before cloud materialization can continue.";
 		this.#state = "pending-review";
 		this.#recordEvent({ kind: "error" });
 		return false;
@@ -749,6 +754,10 @@ export class SyncedFolderService {
 
 	async #runCloudMaterialize(connectionGeneration: number): Promise<void> {
 		if (connectionGeneration !== this.#connectionGeneration) return;
+		if (this.#pendingOperationCount > 0) {
+			this.#state = "pending-review";
+			return;
+		}
 		if (this.#cloudMaterializeRunning) {
 			this.#cloudMaterializePending = true;
 			return;
@@ -930,6 +939,10 @@ export class SyncedFolderService {
 				if (outcome.status === "reconciled") {
 					this.#markWrittenByUs(decision.absPath, outcome.markdown);
 					await this.#refreshIndexEntry(decision.absPath, outcome.markdown);
+					await this.#refreshPendingMoveHash(
+						decision.documentId,
+						outcome.markdown,
+					);
 					this.#recordEvent({ kind: "reconciled" });
 				} else if (outcome.status === "backstop") {
 					await this.#backstop(
@@ -942,11 +955,27 @@ export class SyncedFolderService {
 			}
 
 			case "rename": {
-				await backend.renameDocument(decision.documentId, {
-					title: titleFromPath(decision.toPath),
-					path: relPath(syncRoot, decision.toPath),
-					actor: "synced-folder",
-				});
+				const title = titleFromPath(decision.toPath);
+				const path = relPath(syncRoot, decision.toPath);
+				const result = backend.prepareDocumentRelocation
+					? await backend.prepareDocumentRelocation({
+							documentId: decision.documentId,
+							folderId: decision.entry.folderId,
+							title,
+							path,
+						})
+					: null;
+				if (!result) {
+					await backend.renameDocument(decision.documentId, {
+						title,
+						path,
+						actor: "synced-folder",
+					});
+				}
+				if (result?.status === "confirmation-required") {
+					await this.#recordConsequentialMove(decision, result, title);
+					return;
+				}
 				this.#rekey(decision.fromPath, decision.toPath, {});
 				this.#recordEvent({ kind: "renamed" });
 				return;
@@ -954,12 +983,28 @@ export class SyncedFolderService {
 
 			case "move": {
 				const folderId = this.#resolveFolderIdForDir(dir(decision.toPath));
-				await backend.moveDocument(decision.documentId, folderId);
-				await backend.renameDocument(decision.documentId, {
-					title: titleFromPath(decision.toPath),
-					path: relPath(syncRoot, decision.toPath),
-					actor: "synced-folder",
-				});
+				const title = titleFromPath(decision.toPath);
+				const path = relPath(syncRoot, decision.toPath);
+				const result = backend.prepareDocumentRelocation
+					? await backend.prepareDocumentRelocation({
+							documentId: decision.documentId,
+							folderId,
+							title,
+							path,
+						})
+					: null;
+				if (!result) {
+					await backend.moveDocument(decision.documentId, folderId);
+					await backend.renameDocument(decision.documentId, {
+						title,
+						path,
+						actor: "synced-folder",
+					});
+				}
+				if (result?.status === "confirmation-required") {
+					await this.#recordConsequentialMove(decision, result, title, folderId);
+					return;
+				}
 				this.#rekey(decision.fromPath, decision.toPath, { folderId });
 				this.#recordEvent({ kind: "moved" });
 				return;
@@ -1015,6 +1060,84 @@ export class SyncedFolderService {
 				return;
 			}
 		}
+	}
+
+	async #recordConsequentialMove(
+		decision: Extract<
+			ReturnType<typeof classifySyncedFolderChange>,
+			{ kind: "rename" | "move" }
+		>,
+		result: Extract<
+			Awaited<ReturnType<NonNullable<SyncBackend["prepareDocumentRelocation"]>>>,
+			{ status: "confirmation-required" }
+		>,
+		title: string,
+		folderId = decision.entry.folderId,
+	): Promise<void> {
+		const syncRoot = this.#syncRoot;
+		if (!syncRoot) return;
+		const markdown = await this.#fs.readFile(decision.toPath);
+		const manifest = await upsertProjectionOperation(
+			this.#fs,
+			syncRoot,
+			{
+				kind: "consequential-move",
+				documentId: decision.documentId,
+				workspaceId: decision.entry.workspaceId,
+				folderId: decision.entry.folderId,
+				path: decision.fromPath,
+				toPath: decision.toPath,
+				toFolderId: folderId,
+				title,
+				fingerprint: result.fingerprint,
+				impact: result.impact,
+				latestHash: await contentHash(markdown),
+			},
+			this.#now(),
+		);
+		this.#pendingOperationCount = manifest.operations.length;
+		this.#state = "pending-review";
+		this.#rekey(decision.fromPath, decision.toPath, { folderId });
+		const operation = manifest.operations.find(
+			(candidate) =>
+				candidate.kind === "consequential-move" &&
+				candidate.documentId === decision.documentId,
+		);
+		if (operation) {
+			this.#recordEvent({
+				kind: "move-review-required",
+				operationId: operation.id,
+			});
+		}
+	}
+
+	async #refreshPendingMoveHash(
+		documentId: string,
+		markdown: string,
+	): Promise<void> {
+		const syncRoot = this.#syncRoot;
+		if (!syncRoot) return;
+		const current = await loadProjectionOperations(this.#fs, syncRoot);
+		const operation = current.operations.find(
+			(candidate) =>
+				candidate.kind === "consequential-move" &&
+				candidate.documentId === documentId,
+		);
+		if (!operation || operation.kind !== "consequential-move") return;
+		const {
+			id: _id,
+			state: _state,
+			createdAt: _createdAt,
+			updatedAt: _updatedAt,
+			...input
+		} = operation;
+		const manifest = await upsertProjectionOperation(
+			this.#fs,
+			syncRoot,
+			{ ...input, latestHash: await contentHash(markdown) },
+			this.#now(),
+		);
+		this.#pendingOperationCount = manifest.operations.length;
 	}
 
 	#scheduleFlush(): void {

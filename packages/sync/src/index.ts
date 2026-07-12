@@ -42,6 +42,7 @@ export {
 	PROJECTION_OPERATIONS_REL,
 	projectionOperationsPath,
 	saveProjectionOperations,
+	upsertProjectionOperation,
 } from "./projectionOperations.js";
 export type { ProjectionDiskComparison } from "./projectionPlan.js";
 export { compareProjectionPlanWithDisk } from "./projectionPlan.js";

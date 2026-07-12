@@ -228,6 +228,7 @@ export type SyncedFolderEvent =
 	| { kind: "reconciled" }
 	| { kind: "renamed" }
 	| { kind: "moved" }
+	| { kind: "move-review-required"; operationId: string }
 	| { kind: "created" }
 	/** A local `unlink` (watcher-origin) soft-deleted the cloud document (§6 case 1). */
 	| { kind: "removed-local" }
