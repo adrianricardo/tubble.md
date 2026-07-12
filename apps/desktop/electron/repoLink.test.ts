@@ -14,7 +14,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
 	buildBrainMarkdown,
 	excludeMountFromGit,
-	excludePatternFor,
 	hasBrainDocument,
 	parseGitOriginUrl,
 	repoNameFrom,
@@ -73,11 +72,35 @@ describe("resolveGitRepo", () => {
 		expect(info?.commonGitDir).toBe(path.join(repo, ".git"));
 	});
 
+	it("walks from a selected child directory to the repo root", async () => {
+		const repo = await makePlainRepo();
+		const child = path.join(repo, "packages", "app", "src");
+		await fs.mkdir(child, { recursive: true });
+
+		const info = await resolveGitRepo(child);
+		expect(info).toEqual({
+			repoDir: repo,
+			commonGitDir: path.join(repo, ".git"),
+		});
+	});
+
 	it("resolves a worktree gitfile to the COMMON gitdir", async () => {
 		const { main, worktree } = await makeWorktreeRepo();
 		const info = await resolveGitRepo(worktree);
 		expect(info).not.toBeNull();
 		expect(info?.commonGitDir).toBe(path.join(main, ".git"));
+	});
+
+	it("walks from a worktree child to the worktree root", async () => {
+		const { main, worktree } = await makeWorktreeRepo();
+		const child = path.join(worktree, "nested", "child");
+		await fs.mkdir(child, { recursive: true });
+
+		const info = await resolveGitRepo(child);
+		expect(info).toEqual({
+			repoDir: worktree,
+			commonGitDir: path.join(main, ".git"),
+		});
 	});
 
 	it("returns null for a non-repo directory", async () => {

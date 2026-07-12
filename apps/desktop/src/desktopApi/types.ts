@@ -132,6 +132,7 @@ export type RepoLinkInput = {
 
 export type RepoLinkResult = {
 	folderId: string;
+	repoDir: string;
 	mountPath: string;
 	isGitRepo: boolean;
 	/** True when the mount path was appended to `.git/info/exclude`. */
@@ -164,6 +165,11 @@ export type DesktopAuthState = {
 	email?: string;
 	name?: string;
 } | null;
+
+export type DesktopAuthHandoffEvent = {
+	deploymentUrl: string;
+	code: string;
+};
 
 export type RepoLinkLinkedEvent = {
 	folderId: string;
@@ -326,6 +332,7 @@ export type DesktopApi = {
 	 * repo display metadata to the cloud, and seed `BRAIN.md` (RB5).
 	 */
 	linkRepoFolder(input: RepoLinkInput): Promise<RepoLinkResult>;
+	resolveGitRepoRoot(selectedDir: string): Promise<string | null>;
 	/** Undo a socket-created mount: unlink, then remove files only if clean. */
 	undoRepoLink(input: { folderId: string }): Promise<RepoLinkUndoResult>;
 	/** Deregister a repo mount and leave the materialized files on disk. */
@@ -346,6 +353,9 @@ export type DesktopApi = {
 		callback: (event: SyncedFolderEvent) => void,
 	): Unsubscribe;
 	setAuthState(state: DesktopAuthState): Promise<void>;
+	onAuthHandoff(
+		callback: (event: DesktopAuthHandoffEvent) => void,
+	): Unsubscribe;
 	onRepoLinkLinked(callback: (event: RepoLinkLinkedEvent) => void): Unsubscribe;
 	getUpdateState(): Promise<DesktopUpdateState>;
 	getFullScreen(): Promise<boolean>;

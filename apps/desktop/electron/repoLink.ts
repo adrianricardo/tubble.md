@@ -33,38 +33,39 @@ async function readFileOrNull(filePath: string): Promise<string | null> {
 }
 
 /**
- * Resolve the git repository anchoring `repoDir`, following the `.git` gitfile
- * indirection (worktrees/submodules point `.git` at a file, not a dir). Returns
- * null when `repoDir` is not inside a git repo.
+ * Resolve the git repository anchoring `repoDir`, walking up from a selected
+ * child directory and following `.git` gitfile indirection for worktrees and
+ * submodules. Returns null when `repoDir` is not inside a git repo.
  */
 export async function resolveGitRepo(
 	repoDir: string,
 ): Promise<GitRepoInfo | null> {
-	const dotGit = path.join(repoDir, ".git");
-	let stat: import("node:fs").Stats;
-	try {
-		stat = await fs.stat(dotGit);
-	} catch {
-		return null;
+	let candidate = path.resolve(repoDir);
+	while (true) {
+		const dotGit = path.join(candidate, ".git");
+		const stat = await fs.stat(dotGit).catch(() => null);
+		if (stat?.isDirectory()) {
+			return { repoDir: candidate, commonGitDir: dotGit };
+		}
+		if (stat?.isFile()) {
+			const raw = await readFileOrNull(dotGit);
+			const match = raw?.match(/^gitdir:\s*(.+)\s*$/m);
+			if (match) {
+				const gitDir = path.resolve(candidate, match[1].trim());
+				const commonDirPointer = await readFileOrNull(
+					path.join(gitDir, "commondir"),
+				);
+				const commonGitDir = commonDirPointer
+					? path.resolve(gitDir, commonDirPointer.trim())
+					: gitDir;
+				return { repoDir: candidate, commonGitDir };
+			}
+		}
+
+		const parent = path.dirname(candidate);
+		if (parent === candidate) return null;
+		candidate = parent;
 	}
-
-	if (stat.isDirectory()) {
-		return { repoDir, commonGitDir: dotGit };
-	}
-
-	// `.git` is a gitfile: `gitdir: <path-to-real-gitdir>`.
-	const raw = await readFileOrNull(dotGit);
-	const match = raw?.match(/^gitdir:\s*(.+)\s*$/m);
-	if (!match) return null;
-	const gitDir = path.resolve(repoDir, match[1].trim());
-
-	// A worktree gitdir contains a `commondir` file pointing (relatively) at the
-	// shared gitdir whose `info/exclude` we must edit.
-	const commonDirPointer = await readFileOrNull(path.join(gitDir, "commondir"));
-	const commonGitDir = commonDirPointer
-		? path.resolve(gitDir, commonDirPointer.trim())
-		: gitDir;
-	return { repoDir, commonGitDir };
 }
 
 /**

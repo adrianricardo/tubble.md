@@ -102,8 +102,14 @@ it runs in:
    connected and the sync index is materialized. `hubble cloud folder export` now
    writes a `.hubble-export.json` marker so a static projection can never
    masquerade as a live mount; the link flow deletes the marker on takeover.
-3. **Desktop detection + install.** Platform check for the app bundle; install path
-   (download URL / brew cask TBD); first-run sign-in handoff.
+3. **Desktop detection + install.** *Implemented 2026-07-11; packaged acceptance
+   pending:* `hubble ensure-desktop` detects or opens the macOS app, asks before an
+   install, downloads the architecture-specific artifact and verifies its release
+   size plus SHA-256 manifest, installs into `/Applications`, and signs the app in
+   through a two-minute single-use Convex Auth handoff code. A manually dispatched
+   GitHub workflow owns the mutable `desktop-dev-latest` release channel. The code,
+   unit tests, and desktop/CLI builds pass; publishing that channel and exercising the
+   complete path on a machine without Hubble remain operator acceptance gates.
 4. **Deep link.** *Registration closed 2026-07-11:* the desktop app registers
    `hubble://` (electron-builder protocols entry + `open-url`/second-instance
    routing into `handleProtocolUrl`). Routing to a folder view remains open — the

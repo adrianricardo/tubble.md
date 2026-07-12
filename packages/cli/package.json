@@ -21,6 +21,7 @@
 	"scripts": {
 		"build": "tsc -p tsconfig.json",
 		"postbuild": "chmod +x dist/index.js",
+		"test": "vitest run",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
 	},
@@ -33,6 +34,7 @@
 	},
 	"devDependencies": {
 		"@types/node": "^25.5.0",
-		"typescript": "~5.8.3"
+		"typescript": "~5.8.3",
+		"vitest": "^3.2.4"
 	}
 }

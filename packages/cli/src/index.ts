@@ -4,6 +4,7 @@ import * as nodeFs from "node:fs/promises";
 import net from "node:net";
 import { homedir, hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { createInterface } from "node:readline/promises";
 import { parseArgs as parseNodeArgs } from "node:util";
 import {
 	createConvexBackend,
@@ -29,6 +30,10 @@ import { api } from "@hubble.md/sync-backend";
 import type { Id } from "@hubble.md/sync-backend/types";
 import chokidar from "chokidar";
 import { ConvexHttpClient } from "convex/browser";
+import {
+	findInstalledHubbleApp,
+	installDesktopDevRelease,
+} from "./desktopInstall.js";
 
 const fs = createNodeFileSystem();
 const CREDENTIALS_DIR = join(homedir(), ".hubble");
@@ -62,6 +67,7 @@ type CliArgs = {
 	mountPath?: string;
 	repoDir?: string;
 	watch: boolean;
+	assumeYes: boolean;
 	actor?: string;
 	deploymentUrl?: string;
 	authFromCredentials: boolean;
@@ -100,6 +106,11 @@ async function main() {
 
 	if (parsed.command === "mount") {
 		await runMount(parsed);
+		return;
+	}
+
+	if (parsed.command === "ensure-desktop") {
+		await runEnsureDesktop(parsed);
 		return;
 	}
 
@@ -269,15 +280,9 @@ async function runMount(parsed: CliArgs) {
 		return;
 	}
 
-	const auth = await resolveMountAuth(parsed);
+	const auth = await resolveDesktopAuth(parsed);
 	const socketPath = getCliSocketPath();
-	let status = await readAppStatus(socketPath).catch(() => null);
-	if (!status) {
-		await launchHubbleApp();
-		status = await waitForAppStatus(socketPath, 30_000);
-	}
-
-	await assertMountAccountMatches(status, auth);
+	await ensureDesktopReady(parsed, auth, socketPath);
 
 	const repoDir = resolve(parsed.workspacePath, parsed.repoDir);
 	const mountPath = parsed.mountPath
@@ -332,6 +337,80 @@ async function runMount(parsed: CliArgs) {
 		console.log(
 			`  documents: ${documentCount} document${documentCount === 1 ? "" : "s"}`,
 		);
+	}
+}
+
+async function runEnsureDesktop(parsed: CliArgs) {
+	if (parsed.extraArgs.length > 0) {
+		printEnsureDesktopHelp();
+		process.exitCode = 1;
+		return;
+	}
+	const auth = await resolveDesktopAuth(parsed);
+	const status = await ensureDesktopReady(parsed, auth, getCliSocketPath());
+	console.log("Hubble desktop is ready");
+	console.log(`  version: ${status.appVersion}`);
+	if (status.auth?.email) console.log(`  account: ${status.auth.email}`);
+}
+
+async function ensureDesktopReady(
+	parsed: CliArgs,
+	auth: { deploymentUrl: string; authToken: string },
+	socketPath: string,
+): Promise<CliServerStatus> {
+	let status = await readAppStatus(socketPath).catch(() => null);
+	if (!status) {
+		let appPath = await findInstalledHubbleApp();
+		if (!appPath) {
+			const approved =
+				parsed.assumeYes ||
+				(await confirmDesktopInstall(
+					"Hubble desktop is required for live mounts. Download and install the verified dev build?",
+				));
+			if (!approved) throw new Error("Desktop installation was declined.");
+			console.log("Downloading and verifying Hubble desktop…");
+			const installed = await installDesktopDevRelease();
+			appPath = installed.appPath;
+			console.log(
+				`Installed Hubble ${installed.version} (${installed.commit.slice(0, 12)})`,
+			);
+		}
+		await launchHubbleApp(appPath);
+		status = await waitForAppStatus(socketPath, 60_000);
+	}
+
+	if (!status.auth) {
+		const client = createConvexHttpClient(auth.deploymentUrl, auth.authToken);
+		const handoff = await client.mutation(
+			api.deviceAuth.createDesktopHandoff,
+			{},
+		);
+		await sendCliCommand(socketPath, "login-with-handoff", {
+			deploymentUrl: auth.deploymentUrl,
+			code: handoff.code,
+		});
+		status = await waitForDesktopSignIn(socketPath, 30_000);
+	}
+
+	await assertMountAccountMatches(status, auth);
+	return status;
+}
+
+async function confirmDesktopInstall(message: string): Promise<boolean> {
+	if (!process.stdin.isTTY || !process.stdout.isTTY) {
+		throw new Error(
+			"Desktop installation needs confirmation. Re-run with --yes after approving the install.",
+		);
+	}
+	const readline = createInterface({
+		input: process.stdin,
+		output: process.stdout,
+	});
+	try {
+		const answer = await readline.question(`${message} [y/N] `);
+		return answer.trim().toLowerCase() === "y";
+	} finally {
+		readline.close();
 	}
 }
 
@@ -958,7 +1037,7 @@ async function resolveStoredAuth(parsed: CliArgs) {
 	parsed.authFromCredentials = true;
 }
 
-async function resolveMountAuth(parsed: CliArgs): Promise<{
+async function resolveDesktopAuth(parsed: CliArgs): Promise<{
 	deploymentUrl: string;
 	authToken: string;
 }> {
@@ -972,7 +1051,7 @@ async function resolveMountAuth(parsed: CliArgs): Promise<{
 	const credentials = await readCredentials();
 	if (!credentials) {
 		throw new Error(
-			"`hubble mount` requires a Hubble user login. Run `hubble login` first.",
+			"This command requires a Hubble user login. Run `hubble login` first.",
 		);
 	}
 	if (
@@ -1024,18 +1103,31 @@ async function waitForAppStatus(
 		}
 	}
 	throw new Error(
-		`Hubble did not open its CLI socket at ${socketPath} within ${Math.round(timeoutMs / 1000)}s. Phase 3 will automate desktop install; for now, install and open Hubble manually. (${errorMessage(lastError)})`,
+		`Hubble did not open its CLI socket at ${socketPath} within ${Math.round(timeoutMs / 1000)}s. (${errorMessage(lastError)})`,
 	);
 }
 
-async function launchHubbleApp(): Promise<void> {
+async function waitForDesktopSignIn(
+	socketPath: string,
+	timeoutMs: number,
+): Promise<CliServerStatus> {
+	const startedAt = Date.now();
+	while (Date.now() - startedAt < timeoutMs) {
+		const status = await readAppStatus(socketPath);
+		if (status.auth) return status;
+		await delay(250);
+	}
+	throw new Error(
+		"Hubble desktop opened but did not complete the one-time CLI sign-in.",
+	);
+}
+
+async function launchHubbleApp(appPath?: string): Promise<void> {
 	if (process.platform !== "darwin") {
-		throw new Error(
-			"Hubble desktop is not running. Phase 3 will automate desktop install; for now, install and open Hubble manually.",
-		);
+		throw new Error("Hubble desktop is currently supported on macOS only.");
 	}
 	try {
-		await spawnAndWait("open", ["-a", "Hubble"]);
+		await spawnAndWait("open", appPath ? [appPath] : ["-a", "Hubble"]);
 		return;
 	} catch {
 		try {
@@ -1043,7 +1135,7 @@ async function launchHubbleApp(): Promise<void> {
 			return;
 		} catch (error) {
 			throw new Error(
-				`Could not launch Hubble desktop. Phase 3 will automate install; for now, install Hubble and run this command again. (${errorMessage(error)})`,
+				`Could not launch Hubble desktop. (${errorMessage(error)})`,
 			);
 		}
 	}
@@ -1485,6 +1577,7 @@ function parseCliArgs(argv: string[]) {
 				repo: { type: "string" },
 				path: { type: "string" },
 				watch: { type: "boolean" },
+				yes: { type: "boolean", short: "y" },
 				actor: { type: "string" },
 			},
 		});
@@ -1511,6 +1604,7 @@ function parseCliArgs(argv: string[]) {
 			mountPath: values.path,
 			repoDir: values.repo,
 			watch: values.watch ?? false,
+			assumeYes: values.yes ?? false,
 			actor: values.actor,
 			deploymentUrl: values.url,
 			authFromCredentials: false,
@@ -1535,6 +1629,10 @@ function printHelp(args: CliArgs) {
 	}
 	if (args.command === "mount") {
 		printMountHelp();
+		return;
+	}
+	if (args.command === "ensure-desktop") {
+		printEnsureDesktopHelp();
 		return;
 	}
 	if (args.command !== "cloud") {
@@ -1586,14 +1684,16 @@ function printRootHelp() {
 	console.log("Usage:");
 	console.log("  hubble login [--url url]");
 	console.log("  hubble logout");
+	console.log("  hubble ensure-desktop [--url url] [--yes]");
 	console.log(
-		"  hubble mount --workspace id --folder id --folder-name name --repo dir [--path mountPath] [--url url]",
+		"  hubble mount --workspace id --folder id --folder-name name --repo dir [--path mountPath] [--url url] [--yes]",
 	);
 	console.log("  hubble [--cwd path] cloud <command>");
 	console.log("");
 	console.log("Commands:");
 	console.log("  login    Sign in with browser approval");
 	console.log("  logout   Remove saved CLI credentials");
+	console.log("  ensure-desktop  Install, open, and sign in the desktop app");
 	console.log("  mount    Create a live desktop-watched repo mount");
 	console.log("  cloud    Manage Cloud Sync");
 }
@@ -1617,10 +1717,25 @@ function printLogoutHelp() {
 	console.log("Deletes saved Hubble CLI credentials.");
 }
 
+function printEnsureDesktopHelp() {
+	console.log("Usage:");
+	console.log("  hubble ensure-desktop [--url url] [--yes]");
+	console.log("");
+	console.log(
+		"Ensures the verified Hubble dev build is installed, open, and signed in as the CLI user.",
+	);
+	console.log("");
+	console.log("Options:");
+	console.log("  --url url  Convex deployment URL");
+	console.log(
+		"  --yes, -y  Approve installation without an interactive prompt",
+	);
+}
+
 function printMountHelp() {
 	console.log("Usage:");
 	console.log(
-		"  hubble mount --workspace id --folder id --folder-name name --repo dir [--path mountPath] [--url url]",
+		"  hubble mount --workspace id --folder id --folder-name name --repo dir [--path mountPath] [--url url] [--yes]",
 	);
 	console.log("");
 	console.log(
@@ -1634,6 +1749,9 @@ function printMountHelp() {
 	console.log("  --repo dir          Local repository directory");
 	console.log("  --path mountPath    Optional mount path");
 	console.log("  --url url           Convex deployment URL");
+	console.log(
+		"  --yes, -y           Approve desktop installation without prompting",
+	);
 }
 
 function printCloudHelp() {
@@ -1768,7 +1886,7 @@ function printUsage() {
 	console.error("  hubble login [--url url]");
 	console.error("  hubble logout");
 	console.error(
-		"  hubble mount --workspace id --folder id --folder-name name --repo dir [--path mountPath] [--url url]",
+		"  hubble mount --workspace id --folder id --folder-name name --repo dir [--path mountPath] [--url url] [--yes]",
 	);
 	console.error("  hubble [--cwd path] cloud create --name name [--url url]");
 	console.error(

@@ -124,6 +124,54 @@ describe("device auth", () => {
 			t.action(api.deviceAuth.approve, { code: requested.code }),
 		).rejects.toThrow("Not authenticated");
 	});
+
+	test("desktop handoff signs the app in once", async () => {
+		const t = convexTest(schema, modules);
+		const { userId } = await createUser(t);
+		const handoff = await asUser(t, userId).mutation(
+			api.deviceAuth.createDesktopHandoff,
+			{},
+		);
+
+		const signedIn = await t.action(api.auth.signIn, {
+			provider: "desktop-handoff",
+			params: { code: handoff.code },
+		});
+		expect(signedIn.tokens?.token).toMatch(/^ey/);
+
+		await expect(
+			t.action(api.auth.signIn, {
+				provider: "desktop-handoff",
+				params: { code: handoff.code },
+			}),
+		).rejects.toThrow("invalid or expired");
+	});
+
+	test("expired desktop handoff cannot sign in", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-07-11T12:00:00Z"));
+		const t = convexTest(schema, modules);
+		const { userId } = await createUser(t);
+		const handoff = await asUser(t, userId).mutation(
+			api.deviceAuth.createDesktopHandoff,
+			{},
+		);
+
+		vi.setSystemTime(new Date("2026-07-11T12:02:01Z"));
+		await expect(
+			t.action(api.auth.signIn, {
+				provider: "desktop-handoff",
+				params: { code: handoff.code },
+			}),
+		).rejects.toThrow("invalid or expired");
+	});
+
+	test("desktop handoff creation requires authentication", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(api.deviceAuth.createDesktopHandoff, {}),
+		).rejects.toThrow("Not authenticated");
+	});
 });
 
 async function createUser(t: ReturnType<typeof convexTest>) {

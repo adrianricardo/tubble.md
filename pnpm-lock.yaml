@@ -326,6 +326,9 @@ importers:
       typescript:
         specifier: ~5.8.3
         version: 5.8.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@edge-runtime/vm@5.0.0)(@types/debug@4.1.12)(@types/node@25.5.0)(happy-dom@20.10.3)(jiti@2.6.1)(lightningcss@1.30.2)(msw@2.12.13(@types/node@25.5.0)(typescript@5.8.3))(yaml@2.9.0)
 
   packages/cloud-ui:
     dependencies:

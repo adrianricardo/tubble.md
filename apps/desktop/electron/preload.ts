@@ -92,6 +92,8 @@ const desktopApi = {
 		ipcRenderer.invoke("desktop:live-sync:status-folder"),
 	linkRepoFolder: (input) =>
 		ipcRenderer.invoke("desktop:repo-link:link", input),
+	resolveGitRepoRoot: (selectedDir) =>
+		ipcRenderer.invoke("desktop:repo-link:resolve-root", selectedDir),
 	undoRepoLink: (input) => ipcRenderer.invoke("desktop:repo-link:undo", input),
 	unlinkRepoFolder: (folderId) =>
 		ipcRenderer.invoke("desktop:repo-link:unlink", folderId),
@@ -103,6 +105,11 @@ const desktopApi = {
 	onSyncedFolderEvent: (callback) =>
 		subscribe("desktop:live-sync:event", callback),
 	setAuthState: (state) => ipcRenderer.invoke("desktop:auth-state", state),
+	onAuthHandoff: (callback) => {
+		const unsubscribe = subscribe("desktop:auth-handoff", callback);
+		void ipcRenderer.invoke("desktop:auth-handoff-ready");
+		return unsubscribe;
+	},
 	onRepoLinkLinked: (callback) =>
 		subscribe("desktop:repo-link:linked", callback),
 	getUpdateState: () => ipcRenderer.invoke("desktop:get-update-state"),

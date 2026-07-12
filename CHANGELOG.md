@@ -8,10 +8,12 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 ## [Unreleased]
 
 ### Added
+- `hubble ensure-desktop` can install, open, and sign in the verified macOS development app for live mounts
 
 ### Changed
 
 ### Fixed
+- Choosing a folder inside a Git repository now resolves to the repository root, and repo-link mount suggestions refresh when the repository or cloud folder changes
 
 ## [0.1.13] - 2026-06-24
 

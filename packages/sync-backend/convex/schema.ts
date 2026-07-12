@@ -84,6 +84,15 @@ export default defineSchema({
 		.index("by_requestedAt", ["requestedAt"])
 		.index("by_status_and_requestedAt", ["status", "requestedAt"]),
 
+	desktopAuthHandoffs: defineTable({
+		code: v.string(),
+		userId: v.id("users"),
+		createdAt: v.number(),
+		expiresAt: v.number(),
+	})
+		.index("by_code", ["code"])
+		.index("by_userId_and_createdAt", ["userId", "createdAt"]),
+
 	files: defineTable({
 		workspaceId: v.id("workspaces"),
 		path: v.string(),

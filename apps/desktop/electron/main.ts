@@ -160,6 +160,8 @@ let updateState: DesktopUpdateState = {
 };
 const watchers = new Map<string, FSWatcher>();
 let cachedAuthState: DesktopAuthState = null;
+let authHandoffRendererReady = false;
+let pendingAuthHandoff: z.infer<typeof desktopAuthHandoffSchema> | null = null;
 let cliServer: CliServer | null = null;
 // Always-on lifecycle (Decision C): background mode + tray are only engaged
 // while a cloud Live-Document workspace is connected.
@@ -302,6 +304,10 @@ const desktopAuthStateSchema = z
 		name: z.string().optional(),
 	})
 	.nullable();
+const desktopAuthHandoffSchema = z.object({
+	deploymentUrl: convexDeploymentUrlSchema,
+	code: z.string().min(32),
+});
 const repoLinkUndoSchema = z.object({
 	folderId: z.string().min(1),
 });
@@ -505,10 +511,10 @@ async function performRepoLink(input: unknown): Promise<RepoLinkResult> {
 		);
 	}
 
-	const repoDir = resolvePath(parsed.repoDir);
+	const selectedRepoDir = resolvePath(parsed.repoDir);
+	const repo = await resolveGitRepo(selectedRepoDir);
+	const repoDir = repo?.repoDir ?? selectedRepoDir;
 	grantRoot(repoDir);
-
-	const repo = await resolveGitRepo(repoDir);
 	const mountPath = parsed.mountPath
 		? resolvePath(parsed.mountPath)
 		: path.join(repoDir, sanitizeMountSegment(parsed.folderName));
@@ -584,6 +590,7 @@ async function performRepoLink(input: unknown): Promise<RepoLinkResult> {
 
 	return {
 		folderId: parsed.folderId,
+		repoDir,
 		mountPath,
 		isGitRepo: repo !== null,
 		excluded,
@@ -648,9 +655,19 @@ async function startCliCommandServer(): Promise<void> {
 					folderId: parsed.folderId,
 					folderName: parsed.folderName,
 					mountPath: result.mountPath,
-					repoDir: resolvePath(parsed.repoDir),
+					repoDir: result.repoDir,
 				});
 				return result;
+			},
+			async "login-with-handoff"(args) {
+				const handoff = desktopAuthHandoffSchema.parse(args);
+				pendingAuthHandoff = handoff;
+				if (authHandoffRendererReady) {
+					sendToRenderer("desktop:auth-handoff", handoff);
+					pendingAuthHandoff = null;
+				}
+				mainWindow?.show();
+				return { accepted: true };
 			},
 		},
 	});
@@ -1435,6 +1452,9 @@ async function createWindow() {
 		},
 	});
 	mainWindow = window;
+	window.webContents.on("did-start-loading", () => {
+		authHandoffRendererReady = false;
+	});
 	if (windowState.isFullScreen) {
 		window.setFullScreen(true);
 	} else if (windowState.isMaximized) {
@@ -1812,6 +1832,14 @@ function registerIpc() {
 		cachedAuthState = desktopAuthStateSchema.parse(state);
 	});
 
+	ipcMain.handle("desktop:auth-handoff-ready", () => {
+		authHandoffRendererReady = true;
+		if (pendingAuthHandoff) {
+			sendToRenderer("desktop:auth-handoff", pendingAuthHandoff);
+			pendingAuthHandoff = null;
+		}
+	});
+
 	ipcMain.handle("desktop:set-background-active", (_event, active: boolean) => {
 		setBackgroundActive(active === true);
 	});
@@ -1918,6 +1946,14 @@ function registerIpc() {
 		"desktop:repo-link:link",
 		async (_event, input: RepoLinkInput): Promise<RepoLinkResult> => {
 			return performRepoLink(input);
+		},
+	);
+
+	ipcMain.handle(
+		"desktop:repo-link:resolve-root",
+		async (_event, selectedDir: string): Promise<string | null> => {
+			const repo = await resolveGitRepo(resolvePath(selectedDir));
+			return repo?.repoDir ?? null;
 		},
 	);
 

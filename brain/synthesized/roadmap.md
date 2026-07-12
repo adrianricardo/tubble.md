@@ -1,7 +1,7 @@
 # Roadmap / Current State
 
 Build-state half of the roadmap. Track strategy/sequencing moved to the cloud brain
-(`brain/cloud/synthesized/track-strategy.md` when mounted) — split 2026-07-10 by the
+(`brain/cloud/synthesized/Track Strategy.md` when mounted) — split 2026-07-10 by the
 hubble-init apply run.
 
 ## ➤ NEXT STEP (updated 2026-07-09, post-apply-run)
@@ -40,7 +40,7 @@ Next session, in order:
    RESOLVER+BRAINKEEPER consolidated into one governance doc. Run record:
    `/specs/hubble-init/runs/2026-07-10-hubble-brain-apply-run.md`.
 
-## ➤ NEXT STEP (updated 2026-07-11, Phases 1+2 LIVE-VERIFIED)
+## ➤ NEXT STEP (updated 2026-07-11, Phases 3+4 IMPLEMENTED)
 
 **Magic-flow Phases 1+2 are implemented AND live-verified** (commits `f51023a`,
 `79f6024`; run record `specs/hubble-init/runs/2026-07-11-magic-flow-live-acceptance.md`):
@@ -50,15 +50,25 @@ scratch repo (both sync directions ≤12s) and **`brain/cloud/` here is now a li
 mount** (11 docs; local 2026-07-11 entries merged up; slug-era files removed;
 git-side refs updated to the title-based projection names).
 
-**Next build step: Phase 3 — ensure-desktop install magic**, then Phase 4 =
-repo-link form fixes (mount-list liveness already shipped with Phase 2). New from
-the acceptance run, feed into Phase 3/4 scope: (a) projection naming split — the
-desktop materializer names by doc title, `folder export` by doc path; pick one
-canonical scheme; (b) duplication feedback loop — `cloud document create` with
-title≠path into a watched mount ping-pongs materialize↔ingest (6 copies before
-stabilizing); the new-local-file ingestion path needs an idempotency guard;
-(c) `cloud create` connects the cwd as a workspace path — the skill must run it
-from a scratch cwd.
+**Magic-flow Phases 3+4 are implemented and independently rechecked at the code,
+test, and build levels** (run record
+`specs/hubble-init/runs/2026-07-11-magic-flow-phase-3-4-verification.md`).
+`hubble ensure-desktop` now detects, confirms, downloads, size/hash-verifies,
+installs, opens, and signs in the macOS development app using a two-minute,
+single-use handoff code rather than copying the CLI refresh token. The manual repo-link
+form accepts a selected child directory, shows the resolved git root, and derives a
+fresh suggested mount path after either selection changes. The stable dev release has
+not been published and the complete install path still needs a clean-machine operator
+acceptance pass; do not describe Phase 3 as packaged-live-verified yet.
+
+**Next build step:** close the two projection correctness gaps found by Phase 2
+dogfood before broadening the desktop filesystem surface: (a) choose and migrate to
+one canonical naming scheme (desktop materializer currently uses title; `folder
+export` uses path), and (b) add an idempotency/self-write guard so a title/path mismatch
+cannot create materialize↔ingest duplicates. Also keep `cloud create` in a scratch cwd
+because it connects its cwd as the workspace path. After those guards, start the
+desktop cloud-workspace TECH.md revalidation/Phase 0 work. Publishing
+`desktop-dev-latest` and clean-machine Phase 3 acceptance are separate operator gates.
 
 Desktop IA follow-up (direction settled 2026-07-11): replace the simultaneous
 **Folders** / **Live Documents** / **On this computer** sidebar with one current
@@ -67,9 +77,20 @@ folder availability; remove standalone local-authority editing while preserving 
 editing through watched projections of cloud folders. New documents inherit folder
 access, and root documents have no direct/guest shares by default while retaining
 normal workspace-member access.
-Source: `brain/cloud/sources/2026-07-11-desktop-navigation-ia.md`. Schedule the
-implementation after the Phase 2 dogfood so the relink run can preserve evidence of
-the current friction before the sidebar is replaced.
+The observable contract is now
+`specs/desktop-cloud-workspace/PRODUCT.md`; the architecture handoff is the
+commit-pinned `specs/desktop-cloud-workspace/TECH.md`. A future implementing agent must
+run TECH's revalidation gate and update its module map against HEAD before editing code.
+The first safety gate is startup drift: no cloud materialization may overwrite edits
+made while Hubble was quit. Source:
+`brain/cloud/sources/2026-07-11 Desktop Navigation IA.md`. Keep this behind the
+projection correctness guards above unless explicitly reprioritized.
+
+Documentation gate for this feature: preserve PRODUCT.md as the product-intent source
+while code changes. Do not maintain public marketing/support prose in parallel with an
+unstable implementation. After packaged acceptance passes, derive those docs from the
+product contract plus the shipped UI and live failure-mode QA; do not infer intended
+behavior from code alone.
 
 Backlog (non-blocking): serializer continuation-indent preservation
 (`packages/editor`, whitespace-only normalization from the split run); frontmatter

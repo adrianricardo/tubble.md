@@ -1,0 +1,63 @@
+name: Desktop Dev Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      convex_url:
+        description: Dev Convex deployment URL embedded in the desktop renderer
+        required: true
+        default: https://strong-setter-709.convex.cloud
+
+jobs:
+  release:
+    name: Build and publish unsigned dev app
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build desktop app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          VITE_CONVEX_URL: ${{ inputs.convex_url }}
+        run: |
+          pnpm --filter @hubble.md/desktop... --if-present build
+          pnpm --filter @hubble.md/desktop exec electron-builder --mac zip --arm64 --x64 --publish never
+
+      - name: Create verified channel manifest
+        run: |
+          VERSION="$(node -p "require('./apps/desktop/package.json').version")"
+          node scripts/create-desktop-dev-manifest.mjs apps/desktop/release "$GITHUB_SHA" "$VERSION-dev.${GITHUB_SHA::12}"
+
+      - name: Publish stable dev channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view desktop-dev-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create desktop-dev-latest --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "Hubble Desktop Dev (latest)"
+          fi
+          gh release upload desktop-dev-latest --repo "$GITHUB_REPOSITORY" --clobber \
+            apps/desktop/release/Hubble-dev-arm64-mac.zip \
+            apps/desktop/release/Hubble-dev-x64-mac.zip \
+            apps/desktop/release/desktop-dev-manifest.json
+          gh release edit desktop-dev-latest --repo "$GITHUB_REPOSITORY" --prerelease \
+            --notes "Unsigned development build from commit $GITHUB_SHA. Installed only after explicit CLI confirmation."

@@ -17,6 +17,7 @@
 		"typecheck": "pnpm -r --if-present typecheck",
 		"build": "pnpm check && pnpm -r --if-present build && pnpm typecheck",
 		"build:desktop": "pnpm --filter @hubble.md/desktop... --if-present build && pnpm --filter @hubble.md/desktop... --if-present typecheck",
+		"build:desktop:dist": "pnpm --filter @hubble.md/desktop... --if-present build && CSC_IDENTITY_AUTO_DISCOVERY=false pnpm --filter @hubble.md/desktop exec electron-builder --mac zip --publish never",
 		"bundle:desktop": "pnpm --filter @hubble.md/desktop... --if-present build && pnpm --filter @hubble.md/desktop bundle",
 		"postinstall": "pnpm --filter @hubble.md/desktop exec install-electron",
 		"dev:desktop": "pnpm -r --parallel --stream --filter @hubble.md/desktop... --if-present dev",

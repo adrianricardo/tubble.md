@@ -1,4 +1,4 @@
-import { ConvexAuthProvider } from "@convex-dev/auth/react";
+import { ConvexAuthProvider, useAuthActions } from "@convex-dev/auth/react";
 import { useTiptapSync } from "@convex-dev/prosemirror-sync/tiptap";
 import { DashboardScreen } from "@hubble.md/cloud-ui";
 import {
@@ -571,7 +571,10 @@ function AppContent() {
 				</section>
 			</div>
 			{desktopConvexUrl ? (
-				<DesktopAuthStateBridge deploymentUrl={desktopConvexUrl} />
+				<>
+					<DesktopAuthHandoffBridge deploymentUrl={desktopConvexUrl} />
+					<DesktopAuthStateBridge deploymentUrl={desktopConvexUrl} />
+				</>
 			) : null}
 			<SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen}>
 				{desktopConvexUrl ? (
@@ -642,6 +645,31 @@ function CloudCreateButton({
 			</Authenticated>
 		</>
 	);
+}
+
+function DesktopAuthHandoffBridge({
+	deploymentUrl,
+}: {
+	deploymentUrl: string;
+}) {
+	const { signIn } = useAuthActions();
+	useEffect(() => {
+		const unsubscribe = desktopApi.onAuthHandoff((handoff) => {
+			if (handoff.deploymentUrl !== deploymentUrl) {
+				toast.error("Desktop sign-in targets a different deployment", {
+					description: `CLI: ${handoff.deploymentUrl}; app: ${deploymentUrl}`,
+				});
+				return;
+			}
+			void signIn("desktop-handoff", { code: handoff.code }).catch((error) => {
+				toast.error("Could not sign in from the Hubble CLI", {
+					description: error instanceof Error ? error.message : String(error),
+				});
+			});
+		});
+		return unsubscribe;
+	}, [deploymentUrl, signIn]);
+	return null;
 }
 
 function DesktopAuthStateBridge({ deploymentUrl }: { deploymentUrl: string }) {

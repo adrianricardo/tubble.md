@@ -58,8 +58,7 @@ function RepoLinkManager({ deploymentUrl }: { deploymentUrl: string }) {
 	);
 	const [folderId, setFolderId] = useState<string>("");
 	const [repoDir, setRepoDir] = useState<string | null>(null);
-	const [mountPath, setMountPath] = useState<string>("");
-	const [mountPathEdited, setMountPathEdited] = useState(false);
+	const [customMountPath, setCustomMountPath] = useState<string | null>(null);
 	const [pending, setPending] = useState<"link" | "unlink" | null>(null);
 	const [mounts, setMounts] = useState<RepoMount[]>([]);
 	const [lastResult, setLastResult] = useState<RepoLinkResult | null>(null);
@@ -99,19 +98,24 @@ function RepoLinkManager({ deploymentUrl }: { deploymentUrl: string }) {
 	}, [workspaceId, workspaces]);
 
 	const selectedFolder = folders?.find((folder) => folder._id === folderId);
-
-	// Default mount path <repo>/<sanitized-folder-name>/ (editable).
-	useEffect(() => {
-		if (mountPathEdited) return;
-		if (!repoDir || !selectedFolder) return;
-		setMountPath(`${repoDir}/${sanitizeMountSegment(selectedFolder.name)}`);
-	}, [mountPathEdited, repoDir, selectedFolder]);
+	const derivedMountPath =
+		repoDir && selectedFolder
+			? `${repoDir}/${sanitizeMountSegment(selectedFolder.name)}`
+			: "";
+	const mountPath = customMountPath ?? derivedMountPath;
 
 	const pickRepoDir = async () => {
 		const picked = await desktopApi.openFolderPicker();
 		if (!picked) return;
-		setRepoDir(picked);
-		setMountPathEdited(false);
+		const root = await desktopApi.resolveGitRepoRoot(picked);
+		if (!root) {
+			toast.error("That folder is not inside a git repository", {
+				description: "Choose a repository or any folder inside one.",
+			});
+			return;
+		}
+		setRepoDir(root);
+		setCustomMountPath(null);
 	};
 
 	const link = async () => {
@@ -239,6 +243,7 @@ function RepoLinkManager({ deploymentUrl }: { deploymentUrl: string }) {
 					onChange={(event) => {
 						setWorkspaceId(event.target.value);
 						setFolderId("");
+						setCustomMountPath(null);
 					}}
 					disabled={isBusy || workspaces === undefined}
 					className="w-full rounded-sm border border-border bg-background text-sm outline-none focus:border-ring [padding-block:0.5rem] [padding-inline:0.625rem]"
@@ -264,7 +269,7 @@ function RepoLinkManager({ deploymentUrl }: { deploymentUrl: string }) {
 					value={folderId}
 					onChange={(event) => {
 						setFolderId(event.target.value);
-						setMountPathEdited(false);
+						setCustomMountPath(null);
 					}}
 					disabled={isBusy || !workspaceId || folders === undefined}
 					className="w-full rounded-sm border border-border bg-background text-sm outline-none focus:border-ring [padding-block:0.5rem] [padding-inline:0.625rem]"
@@ -292,26 +297,45 @@ function RepoLinkManager({ deploymentUrl }: { deploymentUrl: string }) {
 							{repoDir ? "Change repo…" : "Choose repo…"}
 						</Button>
 						{repoDir ? (
-							<span className="break-all text-muted-foreground">{repoDir}</span>
+							<span className="grid min-w-0 gap-0.5 text-muted-foreground">
+								<span className="break-all">{repoDir}</span>
+								<span>Resolved repository root</span>
+							</span>
 						) : null}
 					</div>
 				</div>
 
 				{repoDir && selectedFolder ? (
 					<div className="grid gap-1">
-						<label
-							htmlFor="repo-link-mount-path"
-							className="text-xs font-medium"
-						>
-							Mount path
-						</label>
+						<div className="flex items-center justify-between gap-2">
+							<label
+								htmlFor="repo-link-mount-path"
+								className="text-xs font-medium"
+							>
+								Mount path · {customMountPath === null ? "Suggested" : "Custom"}
+							</label>
+							{customMountPath !== null ? (
+								<Button
+									type="button"
+									size="sm"
+									variant="ghost"
+									onClick={() => setCustomMountPath(null)}
+									disabled={isBusy}
+								>
+									Use suggested
+								</Button>
+							) : null}
+						</div>
 						<input
 							id="repo-link-mount-path"
 							type="text"
 							value={mountPath}
 							onChange={(event) => {
-								setMountPath(event.target.value);
-								setMountPathEdited(true);
+								setCustomMountPath(
+									event.target.value === derivedMountPath
+										? null
+										: event.target.value,
+								);
 							}}
 							disabled={isBusy}
 							className="w-full rounded-sm border border-border bg-background text-sm outline-none focus:border-ring [padding-block:0.5rem] [padding-inline:0.625rem]"

@@ -20,6 +20,8 @@ declare const process: {
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const DEVICE_AUTH_TTL_MS = 10 * 60 * 1000;
+const DESKTOP_HANDOFF_TTL_MS = 2 * 60 * 1000;
+const DESKTOP_HANDOFF_REQUEST_LIMIT = 5;
 const DEVICE_AUTH_REQUEST_LIMIT = 10;
 const DEFAULT_SESSION_TOTAL_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -197,6 +199,68 @@ export const poll = mutation({
 	},
 });
 
+export const createDesktopHandoff = mutation({
+	args: {},
+	handler: async (ctx) => {
+		const userId = await getAuthUserId(ctx);
+		if (!userId) throw new Error("Not authenticated");
+
+		// Let the desktop mint its own session without copying the CLI's durable
+		// refresh token across the local socket.
+		const createdAt = Date.now();
+		const recent = await ctx.db
+			.query("desktopAuthHandoffs")
+			.withIndex("by_userId_and_createdAt", (q) =>
+				q
+					.eq("userId", userId)
+					.gte("createdAt", createdAt - DESKTOP_HANDOFF_TTL_MS),
+			)
+			.take(DESKTOP_HANDOFF_REQUEST_LIMIT);
+		if (recent.length >= DESKTOP_HANDOFF_REQUEST_LIMIT) {
+			throw new Error("Too many pending desktop sign-in handoffs");
+		}
+		const code = generateHandoffCode();
+		const handoffId = await ctx.db.insert("desktopAuthHandoffs", {
+			code,
+			userId,
+			createdAt,
+			expiresAt: createdAt + DESKTOP_HANDOFF_TTL_MS,
+		});
+		await ctx.scheduler.runAfter(
+			DESKTOP_HANDOFF_TTL_MS,
+			internal.deviceAuth.expireDesktopHandoff,
+			{ handoffId },
+		);
+		return { code, expiresAt: createdAt + DESKTOP_HANDOFF_TTL_MS };
+	},
+});
+
+export const claimDesktopHandoff = internalMutation({
+	args: { code: v.string() },
+	handler: async (ctx, args) => {
+		const handoff = await ctx.db
+			.query("desktopAuthHandoffs")
+			.withIndex("by_code", (q) => q.eq("code", args.code))
+			.unique();
+		if (!handoff || handoff.expiresAt <= Date.now()) {
+			if (handoff) await ctx.db.delete(handoff._id);
+			throw new Error("Desktop sign-in handoff is invalid or expired");
+		}
+		await ctx.db.delete(handoff._id);
+		return { userId: handoff.userId };
+	},
+});
+
+export const expireDesktopHandoff = internalMutation({
+	args: { handoffId: v.id("desktopAuthHandoffs") },
+	handler: async (ctx, args) => {
+		const handoff = await ctx.db.get(args.handoffId);
+		if (handoff && handoff.expiresAt <= Date.now()) {
+			await ctx.db.delete(handoff._id);
+		}
+	},
+});
+
 export const cleanupExpired = internalMutation({
 	args: {},
 	handler: async (ctx) => {
@@ -231,6 +295,14 @@ function generateCode(): string {
 		(byte) => CODE_ALPHABET[byte & 31] ?? CODE_ALPHABET[0],
 	);
 	return `${chars.slice(0, 4).join("")}-${chars.slice(4).join("")}`;
+}
+
+function generateHandoffCode(): string {
+	const bytes = new Uint8Array(32);
+	crypto.getRandomValues(bytes);
+	return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+		"",
+	);
 }
 
 async function findRequest(

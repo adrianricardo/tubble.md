@@ -1,5 +1,8 @@
+import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { convexAuth } from "@convex-dev/auth/server";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { ensurePersonalWorkspace, resolveInvitesForUser } from "./members";
 
@@ -15,6 +18,18 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
 				if (!email) throw new Error("Email is required");
 				const name = String(params.name ?? "").trim() || email;
 				return { email, name };
+			},
+		}),
+		ConvexCredentials({
+			id: "desktop-handoff",
+			authorize: async (params, ctx) => {
+				const code = typeof params.code === "string" ? params.code : "";
+				if (!code) throw new Error("Desktop sign-in handoff code is required");
+				const claimed: { userId: Id<"users"> } = await ctx.runMutation(
+					internal.deviceAuth.claimDesktopHandoff,
+					{ code },
+				);
+				return claimed;
 			},
 		}),
 	],
