@@ -11,6 +11,7 @@ import { contentHash, type FileSystem, type InitFileSystem } from "./fs.js";
 import { writeReconcileBase } from "./reconcile.js";
 import {
 	type SyncedFolderIndex,
+	type SyncedFolderTopologyEntry,
 	saveSyncedFolderIndex,
 } from "./syncedFolderIndex.js";
 import type {
@@ -409,6 +410,7 @@ export type MaterializeSyncedFolderResult = {
 	written: string[];
 	/** The reverse index written to `.hubble/index/synced-folder.json`. */
 	index: SyncedFolderIndex;
+	topology: SyncedFolderTopologyEntry[];
 };
 
 function createReadOnlyPlanningFileSystem(): ProjectionFsSubset {
@@ -482,6 +484,7 @@ export async function materializeSyncedFolder(
 	const { syncRoot } = opts;
 	const written: string[] = [];
 	const index: SyncedFolderIndex = {};
+	const topology: SyncedFolderTopologyEntry[] = [];
 
 	const workspaces = await backend.listWorkspaces();
 	const sharedDirName = "Shared with me";
@@ -496,6 +499,14 @@ export async function materializeSyncedFolder(
 
 		const folders = await backend.getFolders(workspace._id);
 		const folderRelPaths = buildFolderRelPaths(folders);
+		for (const folder of folders) {
+			topology.push({
+				folderId: folder._id,
+				workspaceId: workspace._id,
+				parentFolderId: folder.parentId,
+				relativePath: joinRel(workspaceName, folderRelPaths.get(folder._id) ?? ""),
+			});
+		}
 
 		const documents = await backend.getLiveDocuments(workspace._id);
 		// Track sibling-title collisions per directory → ` (2)` suffix.
@@ -565,7 +576,7 @@ export async function materializeSyncedFolder(
 
 	await saveSyncedFolderIndex(fs, syncRoot, index);
 
-	return { syncRoot, written, index };
+	return { syncRoot, written, index, topology };
 }
 
 type ProjectionFsSubset = Pick<
@@ -671,7 +682,7 @@ export async function materializeMountFolder(
 		);
 	}
 	await saveSyncedFolderIndex(fs, syncRoot, index);
-	return { syncRoot, written, index };
+	return { syncRoot, written, index, topology: [] };
 }
 
 /**

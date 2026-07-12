@@ -161,6 +161,25 @@ describe("classifySyncedFolderChange", () => {
 		});
 	});
 
+	it("create: resolves an empty folder from explicit topology", () => {
+		const decision = classifySyncedFolderChange(
+			event({ type: "add", absPath: `${SYNC_ROOT}/WS/Empty/New.md` }),
+			ctx({
+				topology: [
+					{
+						folderId: "f_empty",
+						workspaceId: "ws",
+						relativePath: "WS/Empty",
+					},
+				],
+			}),
+		);
+		expect(decision).toMatchObject({
+			kind: "create",
+			folderId: "f_empty",
+		});
+	});
+
 	it("delete: a held unlink past the correlation window flushes to delete", () => {
 		const held: HeldUnlink = {
 			absPath: `${SYNC_ROOT}/WS/Doc.md`,

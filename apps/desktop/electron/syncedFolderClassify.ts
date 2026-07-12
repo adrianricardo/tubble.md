@@ -11,6 +11,7 @@
 import type {
 	SyncedFolderIndex,
 	SyncedFolderIndexEntry,
+	SyncedFolderTopologyEntry,
 } from "@hubble.md/sync";
 
 /** A raw filesystem event as reported by chokidar, normalized for classify. */
@@ -50,6 +51,7 @@ export const SYNCED_FOLDER_INDEX_REL = ".hubble/index/synced-folder.json";
 export type ClassifyContext = {
 	syncRoot: string;
 	index: SyncedFolderIndex;
+	topology?: readonly SyncedFolderTopologyEntry[];
 	/** Open `unlink`s awaiting a correlated `add` (§2 step 1). */
 	heldUnlinks: readonly HeldUnlink[];
 	/** Self-write suppression set (§2 / §6 case 6). */
@@ -218,6 +220,13 @@ function resolveCreateTarget(
 	absPath: string,
 	ctx: ClassifyContext,
 ): { workspaceId: string; folderId: string | null } | null {
+	const relativeDir = dirname(absPath).slice(ctx.syncRoot.length + 1);
+	const explicit = ctx.topology?.find(
+		(folder) => folder.relativePath === relativeDir,
+	);
+	if (explicit) {
+		return { workspaceId: explicit.workspaceId, folderId: explicit.folderId };
+	}
 	const rel = absPath.slice(ctx.syncRoot.length + 1);
 	const segments = rel.split("/");
 	// Must be at least <workspace>/<file>.md — never a stray file at the root.

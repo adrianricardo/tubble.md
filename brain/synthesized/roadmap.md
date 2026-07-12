@@ -102,6 +102,14 @@ runtime path to gate; the safety fix itself applies to the current engine. Also 
 `cloud create` in a scratch cwd because it connects its cwd as the workspace path. Publishing
 `desktop-dev-latest` and clean-machine Phase 3 acceptance are separate operator gates.
 
+**Phase 3 topology slice is implemented** (working tree, 2026-07-11): whole-workspace
+materialization now persists explicit folder topology from the cloud folder tree,
+including empty folders and parent identity. Watcher creates and correlated moves use
+that topology before the legacy sibling-document fallback, so an empty destination is
+no longer mistaken for the Workspace root. Sync tests pass 43/43, desktop tests pass
+124/124, and `pnpm build:desktop` passes. Next: replace composed cross-folder mutations
+with the atomic prepare/confirm relocation contract and persist consequential moves.
+
 Desktop IA follow-up (direction settled 2026-07-11): replace the simultaneous
 **Folders** / **Live Documents** / **On this computer** sidebar with one current
 context and one folder/document tree. Repo-linked projections become contextual

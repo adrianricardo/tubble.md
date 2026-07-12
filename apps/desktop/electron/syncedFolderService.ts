@@ -674,7 +674,10 @@ export class SyncedFolderService {
 			entries: {},
 		};
 		manifest.entries = result.index;
-		manifest.topology = projectionTopology(syncRoot, result.index);
+		manifest.topology =
+			result.topology.length > 0
+				? result.topology
+				: projectionTopology(syncRoot, result.index);
 		manifest.verification = { state: "verified", reason: null, updatedAt: now };
 		await saveSyncedFolderIndexManifest(this.#fs, syncRoot, manifest);
 		this.#indexManifest = manifest;
@@ -874,6 +877,7 @@ export class SyncedFolderService {
 		const decision = classifySyncedFolderChange(event, {
 			syncRoot: this.#syncRoot,
 			index: this.#index,
+			topology: this.#indexManifest?.topology,
 			heldUnlinks: this.#heldUnlinks,
 			recentlyWrittenByUs: this.#recentlyWrittenByUs,
 			correlationWindowMs: CORRELATION_WINDOW_MS,
@@ -1309,6 +1313,14 @@ export class SyncedFolderService {
 	}
 
 	#resolveFolderIdForDir(targetDir: string): string | null {
+		const syncRoot = this.#syncRoot;
+		if (syncRoot) {
+			const relativeDir = targetDir.slice(syncRoot.length + 1);
+			const explicit = this.#indexManifest?.topology.find(
+				(folder) => folder.relativePath === relativeDir,
+			);
+			if (explicit) return explicit.folderId;
+		}
 		for (const [path, entry] of Object.entries(this.#index)) {
 			if (dir(path) === targetDir) return entry.folderId;
 		}
