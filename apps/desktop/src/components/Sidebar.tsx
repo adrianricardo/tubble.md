@@ -1,5 +1,10 @@
-import { FoldersSection, LiveDocumentsSection } from "@hubble.md/cloud-ui";
+import {
+	CloudContentTree,
+	FoldersSection,
+	LiveDocumentsSection,
+} from "@hubble.md/cloud-ui";
 import { api } from "@hubble.md/sync-backend";
+import type { Id } from "@hubble.md/sync-backend/types";
 import {
 	Button,
 	Sidebar as SharedSidebar,
@@ -37,8 +42,15 @@ import {
 	sidebarOpenStore,
 	workspaceStore,
 } from "../store/state";
-import { SpaceSwitcher, useSelectedSpace } from "./SpaceSwitcher";
+import {
+	CloudContextSwitcher,
+	SpaceSwitcher,
+	useSelectedCloudContext,
+	useSelectedSpace,
+} from "./SpaceSwitcher";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+
+const unifiedCloudTreeEnabled = import.meta.env.VITE_UNIFIED_CLOUD_TREE === "1";
 
 export function Sidebar({
 	cloudEnabled,
@@ -236,16 +248,139 @@ function CloudSidebarSection({
 				</div>
 			</Unauthenticated>
 			<Authenticated>
-				<div className="flex items-center justify-between gap-2">
-					<SpaceSwitcher />
-					<CloudSidebarCreateButton onOpenLiveDocument={onOpenLiveDocument} />
-				</div>
-				<AuthenticatedCloudSidebarSection
-					activeLiveDocumentId={activeLiveDocumentId}
-					onOpenLiveDocument={onOpenLiveDocument}
-				/>
+				{unifiedCloudTreeEnabled ? (
+					<UnifiedAuthenticatedCloudSidebar
+						activeDocumentId={activeLiveDocumentId ?? null}
+						onOpenDocument={onOpenLiveDocument}
+					/>
+				) : (
+					<>
+						<div className="flex items-center justify-between gap-2">
+							<SpaceSwitcher />
+							<CloudSidebarCreateButton
+								onOpenLiveDocument={onOpenLiveDocument}
+							/>
+						</div>
+						<AuthenticatedCloudSidebarSection
+							activeLiveDocumentId={activeLiveDocumentId}
+							onOpenLiveDocument={onOpenLiveDocument}
+						/>
+					</>
+				)}
 			</Authenticated>
 		</div>
+	);
+}
+
+function UnifiedAuthenticatedCloudSidebar({
+	activeDocumentId,
+	onOpenDocument,
+}: {
+	activeDocumentId: string | null;
+	onOpenDocument?: (documentId: string) => void;
+}) {
+	const { spaces, sharedFolders, context } = useSelectedCloudContext();
+	const selectedSharedFolder =
+		context?.kind === "shared-folder"
+			? sharedFolders?.find((folder) => folder.folderId === context.folderId)
+			: undefined;
+	const canCreate =
+		context?.kind === "workspace" ||
+		selectedSharedFolder?.role === "owner" ||
+		selectedSharedFolder?.role === "editor";
+	const openDocument = (documentId: string) => {
+		if (onOpenDocument) onOpenDocument(documentId);
+		else toast("Document opening is unavailable in this window");
+	};
+
+	if (!spaces || !sharedFolders) {
+		return (
+			<p className="text-[11px] text-sidebar-foreground/70">Loading content…</p>
+		);
+	}
+
+	return (
+		<div className="flex min-h-0 flex-col gap-1">
+			<div className="flex items-center justify-between gap-2">
+				<CloudContextSwitcher
+					spaces={spaces}
+					sharedFolders={sharedFolders}
+					context={context}
+				/>
+				<CloudContextCreateButton
+					context={context}
+					canCreate={canCreate}
+					onOpenDocument={openDocument}
+				/>
+			</div>
+			{context ? (
+				<>
+					{selectedSharedFolder ? (
+						<p className="m-0 truncate text-[10px] text-muted-foreground [padding-inline:0.5rem]">
+							{selectedSharedFolder.workspaceName} · {selectedSharedFolder.role}
+						</p>
+					) : null}
+					<CloudContentTree
+						context={context}
+						selectedDocumentId={activeDocumentId}
+						onSelectDocument={openDocument}
+					/>
+				</>
+			) : (
+				<p className="m-0 text-[11px] text-muted-foreground [padding-block:0.5rem] [padding-inline:0.5rem]">
+					Create a Workspace or ask someone to share a folder with you.
+				</p>
+			)}
+		</div>
+	);
+}
+
+function CloudContextCreateButton({
+	context,
+	canCreate,
+	onOpenDocument,
+}: {
+	context: ReturnType<typeof useSelectedCloudContext>["context"];
+	canCreate: boolean;
+	onOpenDocument: (documentId: string) => void;
+}) {
+	const createDocument = useMutation(api.documents.create);
+	const [creating, setCreating] = useState(false);
+
+	const create = async () => {
+		if (!context || !canCreate || creating) return;
+		setCreating(true);
+		try {
+			const documentId = await createDocument({
+				workspaceId: context.workspaceId as Id<"workspaces">,
+				folderId:
+					context.kind === "shared-folder"
+						? (context.folderId as Id<"folders">)
+						: undefined,
+				title: "Untitled",
+			});
+			onOpenDocument(documentId);
+			toast.success("Document created");
+		} catch (error) {
+			toast.error("Failed to create document", {
+				description: error instanceof Error ? error.message : String(error),
+			});
+		} finally {
+			setCreating(false);
+		}
+	};
+
+	return (
+		<Button
+			variant="ghost"
+			size="icon-xs"
+			aria-label="New document"
+			title={canCreate ? "New document" : "You can’t create in this context"}
+			disabled={!context || !canCreate || creating}
+			onClick={() => void create()}
+		>
+			<MingcuteAddLine className="size-3.5" />
+		</Button>
 	);
 }
 

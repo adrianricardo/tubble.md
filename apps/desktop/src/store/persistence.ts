@@ -17,10 +17,12 @@ type UiState = {
 	isSwitcherOpen: boolean;
 };
 
+export type CloudContext =
+	| { kind: "workspace"; workspaceId: string }
+	| { kind: "shared-folder"; folderId: string; workspaceId: string };
+
 type CloudState = {
-	// Cloud space (workspace doc) the sidebar/space switcher is scoped to.
-	// Resolution falls back to the personal space when this id is stale.
-	selectedSpaceId: string | null;
+	context: CloudContext | null;
 };
 
 export type DesktopState = {
@@ -39,10 +41,33 @@ type Persisted = {
 	};
 	document?: { lastOpenedPath?: string | null };
 	ui?: { sidebarOpen?: boolean };
-	cloud?: { selectedSpaceId?: string | null };
+	cloud?: {
+		context?: CloudContext | null;
+		selectedSpaceId?: string | null;
+	};
 };
 
 export const STORAGE_KEY = "hubble-desktop-app";
+
+function hydrateCloudContext(cloud: Persisted["cloud"]): CloudContext | null {
+	const context = cloud?.context;
+	if (
+		context?.kind === "workspace" &&
+		typeof context.workspaceId === "string"
+	) {
+		return context;
+	}
+	if (
+		context?.kind === "shared-folder" &&
+		typeof context.folderId === "string" &&
+		typeof context.workspaceId === "string"
+	) {
+		return context;
+	}
+	return typeof cloud?.selectedSpaceId === "string"
+		? { kind: "workspace", workspaceId: cloud.selectedSpaceId }
+		: null;
+}
 
 function readStorage<T>(key: string): T | null {
 	if (typeof localStorage === "undefined") return null;
@@ -81,7 +106,7 @@ export function getInitialState(): DesktopState {
 		workspace: hydrateWorkspace(p?.workspace),
 		document: emptyDoc(p?.document?.lastOpenedPath ?? null),
 		ui: { sidebarOpen: p?.ui?.sidebarOpen ?? false, isSwitcherOpen: false },
-		cloud: { selectedSpaceId: p?.cloud?.selectedSpaceId ?? null },
+		cloud: { context: hydrateCloudContext(p?.cloud) },
 	};
 }
 
@@ -100,7 +125,7 @@ export function serialize(state: DesktopState): Persisted {
 			sidebarOpen: state.ui.sidebarOpen,
 		},
 		cloud: {
-			selectedSpaceId: state.cloud.selectedSpaceId,
+			context: state.cloud.context,
 		},
 	};
 }

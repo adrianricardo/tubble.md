@@ -1,8 +1,8 @@
 # Desktop cloud workspace
 
 > **Architecture snapshot:** revalidated on `v1-release` at
-> [`0882b7517a8480db33fe75da0b2c28703af818eb`](https://github.com/bholmesdev/hubble.md/tree/0882b7517a8480db33fe75da0b2c28703af818eb)
-> on 2026-07-13, plus the Phase 4 root-scoping/status slice in the same working tree.
+> [`05fd66e63e123150503e3fd0fc7c090797dd8d60`](https://github.com/bholmesdev/hubble.md/tree/05fd66e63e123150503e3fd0fc7c090797dd8d60)
+> on 2026-07-13 after the completed Phase 4 root-scoping/status slice.
 > The product contract is durable; re-run the gate after material architectural changes.
 
 ## Context
@@ -89,6 +89,15 @@ bounded operation counts, and `hubble status --json` reports per-root health, qu
 edits, pending review, recovery, and Undo availability without document content or
 credentials. Phase 4 is complete at code/test/build level; Phase 5 unified desktop
 context/tree work is next.
+
+**2026-07-13 Phase 5 result:** re-run against `05fd66e`. The renderer still composes
+the legacy cloud and local sections, while the backend already provides both member
+Workspace metadata and a guest-safe shared-folder subtree. No new backend contract is
+needed for the first unified-navigation slice. Persisted renderer state still stores
+only `selectedSpaceId`, and there is no internal unified-tree flag, context union, or
+cloud-ID tree component. The existing `ProjectionManager` and `listRepoMounts` API are
+the current local-availability join boundary; do not infer device state from folder
+repo metadata.
 
 ### Architecture principles
 
@@ -344,6 +353,18 @@ desktop socket.
    or credentials.
 
 ### Phase 5 — Unified desktop context and tree
+
+**Progress 2026-07-13:** the first flag-gated slice is implemented in the working
+tree. Desktop persistence migrates `selectedSpaceId` into a discriminated Workspace or
+shared-folder `CloudContext`; stale contexts resolve to the personal/member Workspace,
+and guest-only accounts resolve to their first top-most shared root. The context
+switcher includes both member Workspaces and shared roots with source Workspace/role.
+`CloudContentTree` uses stable cloud IDs to render root folders and documents in one
+alphabetical hierarchy, keeps expansion/selection by ID, and implements roving-focus
+tree keyboard navigation. Contextual document creation works at Workspace root or the
+selected shared root for editor/owner roles. The implementation is gated by
+`VITE_UNIFIED_CLOUD_TREE=1`; the legacy UI remains the default while later Phase 5
+slices land.
 
 1. Add the cloud context state and migration from `selectedSpaceId`.
 2. Build `CloudContentTree` from cloud IDs. Render root folders and documents in one

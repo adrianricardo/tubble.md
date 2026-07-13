@@ -3,11 +3,14 @@ import type { Doc } from "@hubble.md/sync-backend/types";
 import { Button, Input, Modal, WorkspaceSwitcherMenu } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
 import { useMutation, useQuery } from "convex/react";
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import MingcuteAddLine from "~icons/mingcute/add-line";
-import { setSelectedSpace } from "../store/actions";
-import { selectedSpaceIdStore } from "../store/state";
+import MingcuteFolderLine from "~icons/mingcute/folder-line";
+import { resolveCloudContext, type SharedFolderContext } from "../cloudContext";
+import { setCloudContext, setSelectedSpace } from "../store/actions";
+import type { CloudContext } from "../store/persistence";
+import { cloudContextStore, selectedWorkspaceId } from "../store/state";
 
 // Resolves the cloud space the desktop app is scoped to: the persisted pick if
 // it still exists, else the auto-provisioned personal space, else any member
@@ -17,12 +20,42 @@ export function useSelectedSpace(): {
 	space: Doc<"workspaces"> | undefined;
 } {
 	const spaces = useQuery(api.sync.listWorkspaces, {});
-	const selectedSpaceId = useStoreValue(selectedSpaceIdStore);
+	const context = useStoreValue(cloudContextStore) ?? null;
+	const selectedSpaceId = selectedWorkspaceId(context);
 	const space =
 		spaces?.find((candidate) => candidate._id === selectedSpaceId) ??
 		spaces?.find((candidate) => candidate.personal) ??
 		spaces?.[0];
 	return { spaces, space };
+}
+
+export function useSelectedCloudContext(): {
+	spaces: Doc<"workspaces">[] | undefined;
+	sharedFolders: SharedFolderContext[] | undefined;
+	context: CloudContext | null;
+} {
+	const spaces = useQuery(api.sync.listWorkspaces, {});
+	const sharedWithMe = useQuery(api.documents.listSharedWithMe, {});
+	const persisted = useStoreValue(cloudContextStore) ?? null;
+	const sharedFolders = useMemo(
+		() =>
+			sharedWithMe?.folders.map((folder) => ({
+				folderId: folder.folderId,
+				name: folder.name,
+				workspaceId: folder.workspaceId,
+				workspaceName: folder.workspaceName,
+				role: folder.role,
+			})),
+		[sharedWithMe?.folders],
+	);
+	const context = useMemo(
+		() =>
+			spaces && sharedFolders
+				? resolveCloudContext(persisted, spaces, sharedFolders)
+				: null,
+		[persisted, sharedFolders, spaces],
+	);
+	return { spaces, sharedFolders, context };
 }
 
 // Signed-in sidebar header: switch between cloud spaces, mirroring the web
@@ -136,5 +169,83 @@ export function SpaceSwitcher() {
 				</form>
 			</Modal>
 		</>
+	);
+}
+
+export function CloudContextSwitcher({
+	spaces,
+	sharedFolders,
+	context,
+}: {
+	spaces: Doc<"workspaces">[];
+	sharedFolders: SharedFolderContext[];
+	context: CloudContext | null;
+}) {
+	const [open, setOpen] = useState(false);
+	const selectedSpace =
+		context?.kind === "workspace"
+			? spaces.find((space) => space._id === context.workspaceId)
+			: undefined;
+	const selectedFolder =
+		context?.kind === "shared-folder"
+			? sharedFolders.find((folder) => folder.folderId === context.folderId)
+			: undefined;
+	const label = selectedSpace?.name ?? selectedFolder?.name ?? "Choose context";
+
+	return (
+		<WorkspaceSwitcherMenu
+			label={label}
+			title={label}
+			open={open}
+			onOpenChange={setOpen}
+		>
+			{spaces.map((space) => (
+				<WorkspaceSwitcherMenu.Item
+					key={space._id}
+					selected={
+						context?.kind === "workspace" && context.workspaceId === space._id
+					}
+					onClick={() => {
+						setOpen(false);
+						setCloudContext({ kind: "workspace", workspaceId: space._id });
+					}}
+				>
+					<span className="truncate">{space.name}</span>
+				</WorkspaceSwitcherMenu.Item>
+			))}
+			{spaces.length > 0 && sharedFolders.length > 0 ? (
+				<WorkspaceSwitcherMenu.Separator />
+			) : null}
+			{sharedFolders.length > 0 ? (
+				<span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground [padding-block:0.25rem] [padding-inline:0.5rem]">
+					Shared with me
+				</span>
+			) : null}
+			{sharedFolders.map((folder) => (
+				<WorkspaceSwitcherMenu.Item
+					key={folder.folderId}
+					icon={<MingcuteFolderLine className="size-3 shrink-0" />}
+					selected={
+						context?.kind === "shared-folder" &&
+						context.folderId === folder.folderId
+					}
+					onClick={() => {
+						setOpen(false);
+						setCloudContext({
+							kind: "shared-folder",
+							folderId: folder.folderId,
+							workspaceId: folder.workspaceId,
+						});
+					}}
+				>
+					<span className="min-w-0">
+						<span className="block truncate">{folder.name}</span>
+						<span className="block truncate text-[10px] text-muted-foreground">
+							{folder.workspaceName} · {folder.role}
+						</span>
+					</span>
+				</WorkspaceSwitcherMenu.Item>
+			))}
+		</WorkspaceSwitcherMenu>
 	);
 }

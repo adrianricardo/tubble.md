@@ -226,9 +226,18 @@ desktop socket, reports per-root health, queued edits, pending review, recovery,
 and bounded operation-kind counts without document content or credentials. Desktop
 tests pass 145/145, CLI and Convex-client typechecks pass, `pnpm build:desktop` passes,
 and both JSON and human-readable status output passed a real Unix-socket acceptance.
-Next: begin Phase 5 in `specs/desktop-cloud-workspace/TECH.md` by introducing the
-persisted `CloudContext` and unified cloud folder/document tree behind the internal
-build flag.
+
+**Phase 5 unified-context foundation is implemented** (working tree, 2026-07-13):
+persisted desktop state migrates the legacy selected Workspace into a discriminated
+Workspace/shared-folder `CloudContext`; stale selections fall back safely and
+guest-only accounts default to an accessible top-most shared root. Behind
+`VITE_UNIFIED_CLOUD_TREE=1`, the context switcher includes member Workspaces and shared
+roots, and the new cloud-ID tree renders root folders and documents once in one
+alphabetical hierarchy with stable expansion/selection and keyboard tree navigation.
+Contextual creation supports Workspace root and writable shared-root contexts. Focused
+tree/context/persistence tests pass. Next: scope search to this tree, join direct local
+availability/status by folder ID, and remove the remaining legacy local-authority UI
+inside the flag before the unified-IA acceptance gate.
 
 Desktop IA follow-up (direction settled 2026-07-11): replace the simultaneous
 **Folders** / **Live Documents** / **On this computer** sidebar with one current

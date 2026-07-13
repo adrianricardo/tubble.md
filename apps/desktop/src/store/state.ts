@@ -2,6 +2,7 @@ import { store } from "@simplestack/store";
 import type { FileAction } from "../externalFileChange";
 import { localStoragePersist } from "../lib/localStoragePersist";
 import {
+	type CloudContext,
 	type DesktopState,
 	getInitialState,
 	STORAGE_KEY,
@@ -149,4 +150,8 @@ export const recentWorkspacesStore = workspaceStore.select("recentWorkspaces");
 export const currentPathStore = viewerStore.select("currentPath");
 export const sidebarOpenStore = uiStore.select("sidebarOpen");
 export const switcherOpenStore = uiStore.select("isSwitcherOpen");
-export const selectedSpaceIdStore = cloudStore.select("selectedSpaceId");
+export const cloudContextStore = cloudStore.select("context");
+
+export function selectedWorkspaceId(context: CloudContext | null) {
+	return context?.kind === "workspace" ? context.workspaceId : null;
+}

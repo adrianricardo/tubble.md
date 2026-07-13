@@ -27,10 +27,12 @@ import {
 	isSyncedLiveDocument,
 	resolveExternalFileChange,
 } from "../syncedDocumentGuard";
+import type { CloudContext } from "./persistence";
 import {
 	applyFileAction,
 	appStore,
 	cleanFileState,
+	cloudContextStore,
 	emptyDoc,
 	type FileEntry,
 	type FolderEntry,
@@ -39,7 +41,6 @@ import {
 	LOADING_DELAY_MS,
 	MAX_RECENT,
 	type SortMode,
-	selectedSpaceIdStore,
 	sidebarOpenStore,
 	switcherOpenStore,
 	viewerStore,
@@ -297,7 +298,11 @@ export function setWorkspaceSwitcherOpen(isOpen: boolean) {
 }
 
 export function setSelectedSpace(spaceId: string) {
-	selectedSpaceIdStore.set(spaceId);
+	cloudContextStore.set({ kind: "workspace", workspaceId: spaceId });
+}
+
+export function setCloudContext(context: CloudContext) {
+	cloudContextStore.set(context);
 }
 
 export function setSidebarOpen(isOpen: boolean) {
