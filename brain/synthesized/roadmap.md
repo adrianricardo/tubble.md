@@ -235,9 +235,16 @@ guest-only accounts default to an accessible top-most shared root. Behind
 roots, and the new cloud-ID tree renders root folders and documents once in one
 alphabetical hierarchy with stable expansion/selection and keyboard tree navigation.
 Contextual creation supports Workspace root and writable shared-root contexts. Focused
-tree/context/persistence tests pass. Next: scope search to this tree, join direct local
-availability/status by folder ID, and remove the remaining legacy local-authority UI
-inside the flag before the unified-IA acceptance gate.
+tree/context/persistence tests pass. The next flagged slice now scopes search to the
+current tree, joins repo-mount availability/status by folder ID, and removes the local
+filesystem tree plus local create/open entry points from the unified shell. Healthy
+mounts stay quiet; exception states are named. Desktop tests pass 150/150, cloud UI
+tests pass 4/4, and `pnpm build:desktop` passes. A real flagged Electron smoke pass
+confirmed the local-authority labels/actions are absent while an already-open local
+document remains editable; populated-cloud interaction was blocked by a transient dev
+Convex push 500. Next: add contextual reveal/copy/relocate/stop controls with Phase 6
+cleanliness gates, complete multi-member destination prompting, then run populated-tree
+keyboard and screen-reader acceptance before removing the internal flag.
 
 Desktop IA follow-up (direction settled 2026-07-11): replace the simultaneous
 **Folders** / **Live Documents** / **On this computer** sidebar with one current

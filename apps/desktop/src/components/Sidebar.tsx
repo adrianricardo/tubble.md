@@ -4,7 +4,6 @@ import {
 	LiveDocumentsSection,
 } from "@hubble.md/cloud-ui";
 import { api } from "@hubble.md/sync-backend";
-import type { Id } from "@hubble.md/sync-backend/types";
 import {
 	Button,
 	Sidebar as SharedSidebar,
@@ -19,11 +18,13 @@ import {
 	useMutation,
 	useQuery,
 } from "convex/react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import MingcuteAddLine from "~icons/mingcute/add-line";
 import MingcuteCloudLine from "~icons/mingcute/cloud-line";
 import { desktopApi } from "../desktopApi";
+import type { RepoMount } from "../desktopApi/types";
+import { unifiedCloudTreeEnabled } from "../featureFlags";
 import { revealFileLabel } from "../lib/revealFile";
 import {
 	createMarkdownFileInFolder,
@@ -42,6 +43,7 @@ import {
 	sidebarOpenStore,
 	workspaceStore,
 } from "../store/state";
+import { CloudDocumentCreateButton } from "./CloudDocumentCreateButton";
 import {
 	CloudContextSwitcher,
 	SpaceSwitcher,
@@ -49,8 +51,6 @@ import {
 	useSelectedSpace,
 } from "./SpaceSwitcher";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
-
-const unifiedCloudTreeEnabled = import.meta.env.VITE_UNIFIED_CLOUD_TREE === "1";
 
 export function Sidebar({
 	cloudEnabled,
@@ -75,6 +75,23 @@ export function Sidebar({
 
 	if (!sidebarOpen) return null;
 	const collapseSidebar = () => setSidebarOpen(false);
+	if (cloudEnabled && unifiedCloudTreeEnabled) {
+		return (
+			<SidebarFrame onCollapse={collapseSidebar}>
+				<CloudSidebarSection
+					activeLiveDocumentId={activeLiveDocumentId}
+					onOpenLiveDocument={onOpenLiveDocument}
+					onOpenSettings={onOpenSettings}
+					className="flex min-h-0 flex-1 flex-col overflow-hidden"
+				/>
+				{footer ? (
+					<div className="border-t border-sidebar-border [padding-block:0.5rem] [padding-inline:0.5rem]">
+						{footer}
+					</div>
+				) : null}
+			</SidebarFrame>
+		);
+	}
 	if (!workspacePath) {
 		return (
 			<SidebarFrame onCollapse={collapseSidebar}>
@@ -224,7 +241,7 @@ function CloudSidebarSection({
 }) {
 	return (
 		<div
-			className={`grid gap-2 [padding-block:0.625rem] [padding-inline:0.625rem] ${className ?? ""}`}
+			className={`${unifiedCloudTreeEnabled ? "flex flex-col" : "grid"} gap-2 [padding-block:0.625rem] [padding-inline:0.625rem] ${className ?? ""}`}
 		>
 			<AuthLoading>
 				<p className="text-[11px] text-sidebar-foreground/70">Loading space…</p>
@@ -280,6 +297,32 @@ function UnifiedAuthenticatedCloudSidebar({
 	onOpenDocument?: (documentId: string) => void;
 }) {
 	const { spaces, sharedFolders, context } = useSelectedCloudContext();
+	const [mounts, setMounts] = useState<RepoMount[]>([]);
+	useEffect(() => {
+		let active = true;
+		const refresh = () => {
+			void desktopApi.listRepoMounts().then((next) => {
+				if (active) setMounts(next);
+			});
+		};
+		refresh();
+		const unsubscribeLinked = desktopApi.onRepoLinkLinked(refresh);
+		const unsubscribeSync = desktopApi.onSyncedFolderEvent(refresh);
+		return () => {
+			active = false;
+			unsubscribeLinked();
+			unsubscribeSync();
+		};
+	}, []);
+	const localFolders = useMemo(
+		() =>
+			mounts.map((mount) => ({
+				folderId: mount.folderId,
+				localPath: mount.mountPath,
+				status: mount.status,
+			})),
+		[mounts],
+	);
 	const selectedSharedFolder =
 		context?.kind === "shared-folder"
 			? sharedFolders?.find((folder) => folder.folderId === context.folderId)
@@ -307,7 +350,7 @@ function UnifiedAuthenticatedCloudSidebar({
 					sharedFolders={sharedFolders}
 					context={context}
 				/>
-				<CloudContextCreateButton
+				<CloudDocumentCreateButton
 					context={context}
 					canCreate={canCreate}
 					onOpenDocument={openDocument}
@@ -324,6 +367,7 @@ function UnifiedAuthenticatedCloudSidebar({
 						context={context}
 						selectedDocumentId={activeDocumentId}
 						onSelectDocument={openDocument}
+						localFolders={localFolders}
 					/>
 				</>
 			) : (
@@ -332,55 +376,6 @@ function UnifiedAuthenticatedCloudSidebar({
 				</p>
 			)}
 		</div>
-	);
-}
-
-function CloudContextCreateButton({
-	context,
-	canCreate,
-	onOpenDocument,
-}: {
-	context: ReturnType<typeof useSelectedCloudContext>["context"];
-	canCreate: boolean;
-	onOpenDocument: (documentId: string) => void;
-}) {
-	const createDocument = useMutation(api.documents.create);
-	const [creating, setCreating] = useState(false);
-
-	const create = async () => {
-		if (!context || !canCreate || creating) return;
-		setCreating(true);
-		try {
-			const documentId = await createDocument({
-				workspaceId: context.workspaceId as Id<"workspaces">,
-				folderId:
-					context.kind === "shared-folder"
-						? (context.folderId as Id<"folders">)
-						: undefined,
-				title: "Untitled",
-			});
-			onOpenDocument(documentId);
-			toast.success("Document created");
-		} catch (error) {
-			toast.error("Failed to create document", {
-				description: error instanceof Error ? error.message : String(error),
-			});
-		} finally {
-			setCreating(false);
-		}
-	};
-
-	return (
-		<Button
-			variant="ghost"
-			size="icon-xs"
-			aria-label="New document"
-			title={canCreate ? "New document" : "You can’t create in this context"}
-			disabled={!context || !canCreate || creating}
-			onClick={() => void create()}
-		>
-			<MingcuteAddLine className="size-3.5" />
-		</Button>
 	);
 }
 

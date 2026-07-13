@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCloudContentTree } from "./CloudContentTree";
+import { buildCloudContentTree, searchCloudContent } from "./CloudContentTree";
 
 describe("buildCloudContentTree", () => {
 	it("renders root folders and documents in one stable hierarchy", () => {
@@ -45,6 +45,20 @@ describe("buildCloudContentTree", () => {
 		).toEqual([
 			{ kind: "folder", id: "child", name: "Child", children: [] },
 			{ kind: "document", id: "doc", name: "Shared note" },
+		]);
+	});
+
+	it("searches documents only within the current tree", () => {
+		const tree = buildCloudContentTree(
+			[{ id: "folder", name: "Research", parentId: null }],
+			[
+				{ id: "match", title: "Launch brief", folderId: "folder" },
+				{ id: "other", title: "Meeting notes", folderId: null },
+			],
+			null,
+		);
+		expect(searchCloudContent(tree, "launch")).toEqual([
+			{ id: "match", name: "Launch brief", path: "Research" },
 		]);
 	});
 });

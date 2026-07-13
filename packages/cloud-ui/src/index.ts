@@ -2,6 +2,9 @@ export {
 	buildCloudContentTree,
 	type CloudContentContext,
 	CloudContentTree,
+	type CloudDocumentSearchResult,
+	type CloudFolderAvailability,
+	searchCloudContent,
 } from "./CloudContentTree";
 export type { ConvexErrorKind } from "./convex-error";
 export { categorizeError, describeError } from "./convex-error";

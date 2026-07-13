@@ -40,6 +40,7 @@ import {
 import { toast } from "sonner";
 import MingcuteAddLine from "~icons/mingcute/add-line";
 import MingcuteFileNewLine from "~icons/mingcute/file-new-line";
+import { CloudDocumentCreateButton } from "./components/CloudDocumentCreateButton";
 import {
 	CloudSyncSection,
 	CloudSyncUnavailableSection,
@@ -53,7 +54,10 @@ import { ProjectionTrashRecoveryDialog } from "./components/ProjectionTrashRecov
 import { RepoLinkSection } from "./components/RepoLinkSection";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
-import { useSelectedSpace } from "./components/SpaceSwitcher";
+import {
+	useSelectedCloudContext,
+	useSelectedSpace,
+} from "./components/SpaceSwitcher";
 import { Toolbar } from "./components/Toolbar";
 import {
 	SidebarUpdateCallout,
@@ -72,6 +76,7 @@ import { createEmbedExtension } from "./editor/EmbedExtension";
 import { handleImageDrop, handleImagePaste } from "./editor/handleImagePaste";
 import { IframeView, toAssetUrl } from "./editor/IframeView";
 import { createImageExtension } from "./editor/ImageExtension";
+import { unifiedCloudTreeEnabled } from "./featureFlags";
 import { createMarkdownFile } from "./fileActions";
 import { hasHtmlExtension, relativeWorkspacePath } from "./lib/filePath";
 import { hasHubbleSkillsInstalled } from "./lib/hubbleSkills";
@@ -351,7 +356,9 @@ function AppContent() {
 	}, [openLocalPath]);
 
 	useEffect(() => {
-		void desktopApi.setMenuState({ hasWorkspace });
+		void desktopApi.setMenuState({
+			hasWorkspace: !unifiedCloudTreeEnabled && hasWorkspace,
+		});
 	}, [hasWorkspace]);
 
 	useEffect(() => {
@@ -362,7 +369,9 @@ function AppContent() {
 		const onKeyDown = async (event: KeyboardEvent) => {
 			if (keymatch(event, "CmdOrCtrl+N")) {
 				event.preventDefault();
-				if (!triggerCreateAction()) await createMarkdownFile();
+				if (!triggerCreateAction() && !unifiedCloudTreeEnabled) {
+					await createMarkdownFile();
+				}
 			} else if (keymatch(event, "CmdOrCtrl+,")) {
 				event.preventDefault();
 				openSettings();
@@ -371,9 +380,11 @@ function AppContent() {
 				event.preventDefault();
 				setWorkspaceSwitcherOpen(true);
 			} else if (keymatch(event, "CmdOrCtrl+Shift+N")) {
+				if (unifiedCloudTreeEnabled) return;
 				event.preventDefault();
 				await openWorkspaceWithSidebar();
 			} else if (keymatch(event, "CmdOrCtrl+O")) {
+				if (unifiedCloudTreeEnabled) return;
 				event.preventDefault();
 				await openFilePicker();
 			} else if (keymatch(event, "CmdOrCtrl+Shift+C")) {
@@ -424,9 +435,16 @@ function AppContent() {
 
 	useEffect(() => {
 		const disposers = [
-			desktopApi.onMenuCreateMarkdownFile(() => void createMarkdownFile()),
-			desktopApi.onMenuOpenFile(() => void openFilePicker()),
-			desktopApi.onMenuOpenFolder(() => void openWorkspaceWithSidebar()),
+			desktopApi.onMenuCreateMarkdownFile(() => {
+				if (unifiedCloudTreeEnabled) triggerCreateAction();
+				else void createMarkdownFile();
+			}),
+			desktopApi.onMenuOpenFile(() => {
+				if (!unifiedCloudTreeEnabled) void openFilePicker();
+			}),
+			desktopApi.onMenuOpenFolder(() => {
+				if (!unifiedCloudTreeEnabled) void openWorkspaceWithSidebar();
+			}),
 			desktopApi.onMenuOpenSettings(() => openSettings()),
 			desktopApi.onMenuShowWorkspaceSwitcher(() =>
 				setWorkspaceSwitcherOpen(true),
@@ -528,7 +546,10 @@ function AppContent() {
 				showSidebarBadge={!sidebarOpen && showUpdateCallout}
 				leftSlot={
 					cloudEnabled ? (
-						<CloudCreateButton onOpenLiveDocument={openLiveDocument} />
+						<CloudCreateButton
+							onOpenLiveDocument={openLiveDocument}
+							unified={unifiedCloudTreeEnabled}
+						/>
 					) : (
 						<LocalFileCreateButton
 							onBeforeCreate={() => setActiveLiveDocumentId(null)}
@@ -569,7 +590,15 @@ function AppContent() {
 						state.status !== "error" &&
 						!state.currentPath &&
 						!activeLiveDocumentId &&
-						(hasWorkspace ? (
+						(unifiedCloudTreeEnabled && cloudEnabled ? (
+							<CloudWorkspaceHome
+								unified
+								onOpenSettings={openSettings}
+								onOpenLiveDocument={openLiveDocument}
+								onCreateFolder={() => void createWorkspaceWithSidebar()}
+								onOpenFolder={() => void openWorkspaceWithSidebar()}
+							/>
+						) : hasWorkspace ? (
 							<div className="flex h-full items-center justify-center [padding-block:1.5rem] [padding-inline:1.5rem]">
 								<Button onClick={() => void openFilePicker()}>Open file</Button>
 							</div>
@@ -681,23 +710,54 @@ function LocalFileCreateButton({
 
 function CloudCreateButton({
 	onOpenLiveDocument,
+	unified,
 }: {
 	onOpenLiveDocument: (documentId: string) => void;
+	unified: boolean;
 }) {
 	return (
 		<>
-			<AuthLoading>
-				<LocalFileCreateButton />
-			</AuthLoading>
+			<AuthLoading>{unified ? null : <LocalFileCreateButton />}</AuthLoading>
 			<Unauthenticated>
-				<LocalFileCreateButton />
+				{unified ? null : <LocalFileCreateButton />}
 			</Unauthenticated>
 			<Authenticated>
-				<AuthenticatedCloudCreateButton
-					onOpenLiveDocument={onOpenLiveDocument}
-				/>
+				{unified ? (
+					<UnifiedCloudCreateButton onOpenLiveDocument={onOpenLiveDocument} />
+				) : (
+					<AuthenticatedCloudCreateButton
+						onOpenLiveDocument={onOpenLiveDocument}
+					/>
+				)}
 			</Authenticated>
 		</>
+	);
+}
+
+function UnifiedCloudCreateButton({
+	onOpenLiveDocument,
+}: {
+	onOpenLiveDocument: (documentId: string) => void;
+}) {
+	const { context, sharedFolders } = useSelectedCloudContext();
+	const sharedRole =
+		context?.kind === "shared-folder"
+			? sharedFolders?.find((folder) => folder.folderId === context.folderId)
+					?.role
+			: null;
+	const canCreate =
+		context?.kind === "workspace" ||
+		sharedRole === "owner" ||
+		sharedRole === "editor";
+
+	return (
+		<CloudDocumentCreateButton
+			context={context}
+			canCreate={canCreate}
+			onOpenDocument={onOpenLiveDocument}
+			size="icon-sm"
+			primary
+		/>
 	);
 }
 
@@ -845,11 +905,13 @@ function AuthenticatedCloudCreateButton({
 }
 
 function CloudWorkspaceHome({
+	unified = false,
 	onOpenSettings,
 	onOpenLiveDocument,
 	onCreateFolder,
 	onOpenFolder,
 }: {
+	unified?: boolean;
 	onOpenSettings: () => void;
 	onOpenLiveDocument: (documentId: string) => void;
 	onCreateFolder: () => void;
@@ -867,18 +929,33 @@ function CloudWorkspaceHome({
 				</div>
 			</AuthLoading>
 			<Unauthenticated>
-				<div className="flex h-full items-center justify-center [padding-block:1.5rem] [padding-inline:1.5rem]">
-					<WelcomeScreen
-						cloudEnabled
-						onOpenSettings={onOpenSettings}
-						onCreateFolder={onCreateFolder}
-						onOpenFolder={onOpenFolder}
-					/>
-				</div>
+				{unified ? (
+					<div className="flex h-full items-center justify-center [padding-block:1.5rem] [padding-inline:1.5rem]">
+						<div className="flex max-w-sm flex-col items-center gap-3 text-center">
+							<h2 className="font-rounded text-2xl font-medium">
+								Your work, in one place
+							</h2>
+							<p className="text-sm text-muted-foreground">
+								Sign in to open your Workspaces and shared folders.
+							</p>
+							<Button onClick={onOpenSettings}>Sign in</Button>
+						</div>
+					</div>
+				) : (
+					<div className="flex h-full items-center justify-center [padding-block:1.5rem] [padding-inline:1.5rem]">
+						<WelcomeScreen
+							cloudEnabled
+							onOpenSettings={onOpenSettings}
+							onCreateFolder={onCreateFolder}
+							onOpenFolder={onOpenFolder}
+						/>
+					</div>
+				)}
 			</Unauthenticated>
 			<Authenticated>
 				<div className="h-full overflow-y-auto">
 					<AuthenticatedCloudWorkspaceHome
+						unified={unified}
 						onOpenSettings={onOpenSettings}
 						onOpenLiveDocument={onOpenLiveDocument}
 						onCreateFolder={onCreateFolder}
@@ -891,11 +968,13 @@ function CloudWorkspaceHome({
 }
 
 function AuthenticatedCloudWorkspaceHome({
+	unified,
 	onOpenSettings,
 	onOpenLiveDocument,
 	onCreateFolder,
 	onOpenFolder,
 }: {
+	unified: boolean;
 	onOpenSettings: () => void;
 	onOpenLiveDocument: (documentId: string) => void;
 	onCreateFolder: () => void;
@@ -957,7 +1036,7 @@ function AuthenticatedCloudWorkspaceHome({
 		toast("Connect a synced folder to browse these files");
 	};
 
-	if (isGuestOnly) {
+	if (isGuestOnly && !unified) {
 		// The scroll wrapper is top-aligned for the dashboard; the guest wedge
 		// keeps its original centered presentation inside it.
 		return (
@@ -1030,14 +1109,18 @@ function AuthenticatedCloudWorkspaceHome({
 			onOpenFolder={openDashboardFolder}
 			footer={
 				<div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
-					<Button variant="ghost" size="sm" onClick={onCreateFolder}>
-						Create local folder
-					</Button>
-					<Button variant="ghost" size="sm" onClick={onOpenFolder}>
-						Open local folder
-					</Button>
+					{unified ? null : (
+						<>
+							<Button variant="ghost" size="sm" onClick={onCreateFolder}>
+								Create local folder
+							</Button>
+							<Button variant="ghost" size="sm" onClick={onOpenFolder}>
+								Open local folder
+							</Button>
+						</>
+					)}
 					<Button variant="outline" size="sm" onClick={onOpenSettings}>
-						Connect synced folder
+						{unified ? "Local availability" : "Connect synced folder"}
 					</Button>
 				</div>
 			}

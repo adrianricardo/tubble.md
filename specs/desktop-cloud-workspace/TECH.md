@@ -366,6 +366,19 @@ selected shared root for editor/owner roles. The implementation is gated by
 `VITE_UNIFIED_CLOUD_TREE=1`; the legacy UI remains the default while later Phase 5
 slices land.
 
+The second flag-gated slice removes the local filesystem tree and local create/open
+entry points from the unified shell without deleting the legacy implementation. Search
+filters document metadata entirely within the selected context and opens the same
+cloud document ID. Repo mounts join onto folder nodes by folder ID from the device API;
+healthy roots show only a quiet computer marker, while verifying, syncing, offline,
+pending-review, disconnected, and error states gain text. The top-level shared root
+shows its path because that root is intentionally invisible inside its own tree. A
+real Electron smoke pass with the flag enabled confirmed that an already-open local
+playground document remains editable while the sidebar exposes no **Folders**, **Live
+Documents**, **On this computer**, or local open/create controls. The dev Convex push
+was returning a transient 500, so populated-tree interaction remains an acceptance
+gate rather than a completed live test.
+
 1. Add the cloud context state and migration from `selectedSpaceId`.
 2. Build `CloudContentTree` from cloud IDs. Render root folders and documents in one
    hierarchy and preserve expansion/selection by stable ID.
