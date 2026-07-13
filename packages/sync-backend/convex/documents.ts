@@ -907,6 +907,19 @@ export const listTrash = query({
 	},
 });
 
+export const getTrashState = query({
+	args: { documentId: v.id("documents") },
+	handler: async (ctx, { documentId }) => {
+		const document = await ctx.db.get(documentId);
+		if (!document) return "inaccessible" as const;
+		const role = await documentRole(ctx, documentId, { includeDeleted: true });
+		if (role === null) return "inaccessible" as const;
+		return document.deletedAt === undefined
+			? ("active" as const)
+			: ("trashed" as const);
+	},
+});
+
 export const get = query({
 	args: { documentId: v.id("documents") },
 	handler: async (ctx, { documentId }) => {

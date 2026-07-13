@@ -17,6 +17,8 @@ import {
 	dialog,
 	ipcMain,
 	Menu,
+	Notification,
+	net,
 	protocol,
 	screen,
 	shell,
@@ -219,9 +221,44 @@ function createSyncedFolderWatcher({
 	return { close: () => watcher.close() };
 }
 
+const offlineSentinel = process.env.HUBBLE_DESKTOP_OFFLINE_SENTINEL;
+
+function isDesktopOffline(): boolean {
+	// The sentinel gives acceptance tests a process-local offline switch without
+	// disconnecting the developer's whole machine from the network.
+	if (offlineSentinel && fsSync.existsSync(offlineSentinel)) return true;
+	return !net.isOnline();
+}
+
 const syncedFolder = new SyncedFolderService({
-	emit: (event) => sendToRenderer("desktop:live-sync:event", event),
+	emit: (event) => {
+		sendToRenderer("desktop:live-sync:event", event);
+		if (
+			(event.kind === "move-review-required" ||
+				event.kind === "trashed-local") &&
+			(!mainWindow?.isVisible() || !mainWindow.isFocused()) &&
+			Notification.isSupported()
+		) {
+			const notification = new Notification({
+				title:
+					event.kind === "trashed-local"
+						? "Document moved to Trash"
+						: "Review a document move",
+				body:
+					event.kind === "trashed-local"
+						? "Open Hubble to undo."
+						: "This move changes access or linked repository exposure.",
+			});
+			notification.on("click", () => {
+				mainWindow?.show();
+				mainWindow?.focus();
+				sendToRenderer("desktop:live-sync:event", event);
+			});
+			notification.show();
+		}
+	},
 	deviceId: os.hostname(),
+	isOffline: isDesktopOffline,
 	createWatcher: createSyncedFolderWatcher,
 });
 
@@ -493,6 +530,7 @@ async function connectRepoMountEngine(
 	const service = new SyncedFolderService({
 		emit: (event) => sendToRenderer("desktop:live-sync:event", event),
 		deviceId: os.hostname(),
+		isOffline: isDesktopOffline,
 		createWatcher: createSyncedFolderWatcher,
 		mountFolderId: folderId,
 	});
@@ -1941,6 +1979,52 @@ function registerIpc() {
 	ipcMain.handle("desktop:live-sync:status-folder", () =>
 		syncedFolder.getStatus(),
 	);
+	ipcMain.handle("desktop:live-sync:list-pending-operations", () =>
+		syncedFolder.listPendingOperations(),
+	);
+	ipcMain.handle(
+		"desktop:live-sync:approve-pending-move",
+		(_event, input: unknown) => {
+			const { operationId } = z
+				.object({ operationId: z.string().min(1) })
+				.parse(input);
+			return syncedFolder.approvePendingMove(operationId);
+		},
+	);
+	ipcMain.handle(
+		"desktop:live-sync:cancel-pending-move",
+		(_event, input: unknown) => {
+			const { operationId } = z
+				.object({ operationId: z.string().min(1) })
+				.parse(input);
+			return syncedFolder.cancelPendingMove(operationId);
+		},
+	);
+	for (const [channel, handler] of [
+		[
+			"desktop:live-sync:approve-pending-deletion",
+			(operationId: string) => syncedFolder.approvePendingDeletion(operationId),
+		],
+		[
+			"desktop:live-sync:cancel-pending-deletion",
+			(operationId: string) => syncedFolder.cancelPendingDeletion(operationId),
+		],
+		[
+			"desktop:live-sync:undo-trash",
+			(operationId: string) => syncedFolder.undoTrashedDocument(operationId),
+		],
+		[
+			"desktop:live-sync:dismiss-trash-undo",
+			(operationId: string) => syncedFolder.dismissTrashUndo(operationId),
+		],
+	] as const) {
+		ipcMain.handle(channel, (_event, input: unknown) => {
+			const { operationId } = z
+				.object({ operationId: z.string().min(1) })
+				.parse(input);
+			return handler(operationId);
+		});
+	}
 
 	ipcMain.handle(
 		"desktop:repo-link:link",

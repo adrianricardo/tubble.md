@@ -90,6 +90,28 @@ const desktopApi = {
 		ipcRenderer.invoke("desktop:live-sync:disconnect-folder"),
 	getSyncedFolderStatus: () =>
 		ipcRenderer.invoke("desktop:live-sync:status-folder"),
+	listPendingProjectionOperations: () =>
+		ipcRenderer.invoke("desktop:live-sync:list-pending-operations"),
+	approvePendingProjectionMove: (operationId) =>
+		ipcRenderer.invoke("desktop:live-sync:approve-pending-move", {
+			operationId,
+		}),
+	cancelPendingProjectionMove: (operationId) =>
+		ipcRenderer.invoke("desktop:live-sync:cancel-pending-move", {
+			operationId,
+		}),
+	approvePendingProjectionDeletion: (operationId) =>
+		ipcRenderer.invoke("desktop:live-sync:approve-pending-deletion", {
+			operationId,
+		}),
+	cancelPendingProjectionDeletion: (operationId) =>
+		ipcRenderer.invoke("desktop:live-sync:cancel-pending-deletion", {
+			operationId,
+		}),
+	undoTrashedProjectionDocument: (operationId) =>
+		ipcRenderer.invoke("desktop:live-sync:undo-trash", { operationId }),
+	dismissProjectionTrashUndo: (operationId) =>
+		ipcRenderer.invoke("desktop:live-sync:dismiss-trash-undo", { operationId }),
 	linkRepoFolder: (input) =>
 		ipcRenderer.invoke("desktop:repo-link:link", input),
 	resolveGitRepoRoot: (selectedDir) =>

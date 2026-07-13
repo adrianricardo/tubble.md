@@ -1,5 +1,6 @@
 import type { DocumentRelocationImpact } from "./backend.js";
 import { contentHash, type FileSystem } from "./fs.js";
+import type { SyncedFolderIndexEntry } from "./syncedFolderIndex.js";
 
 export const PROJECTION_OPERATIONS_REL =
 	".hubble/pending/projection-operations.json";
@@ -48,6 +49,22 @@ export type PendingProjectionOperation =
 			fingerprint: string;
 			impact: DocumentRelocationImpact;
 			latestHash: string;
+	  })
+	| (PendingOperationBase & {
+			kind: "deletion-review";
+			reason: "offline" | "bulk" | "read-only" | "storage" | "root";
+			items: Array<{
+				documentId: string;
+				path: string;
+				role: SyncedFolderIndexEntry["role"];
+				workspaceId?: string;
+				folderId?: string | null;
+			}>;
+	  })
+	| (PendingOperationBase & {
+			kind: "trash-undo";
+			phase: "pending-trash" | "undo-available";
+			trashedAt: number | null;
 	  });
 
 export type PendingProjectionOperationInput =
@@ -74,6 +91,14 @@ export type PendingProjectionOperationInput =
 	| Omit<
 			Extract<PendingProjectionOperation, { kind: "consequential-move" }>,
 			"id" | "state" | "createdAt" | "updatedAt"
+	  >
+	| Omit<
+			Extract<PendingProjectionOperation, { kind: "deletion-review" }>,
+			"id" | "state" | "createdAt" | "updatedAt"
+	  >
+	| Omit<
+			Extract<PendingProjectionOperation, { kind: "trash-undo" }>,
+			"id" | "state" | "createdAt" | "updatedAt"
 	  >;
 
 export type ProjectionOperationsManifest = {
@@ -99,7 +124,7 @@ export async function loadProjectionOperations(
 }
 
 /**
- * Replace startup blockers while retaining stable IDs and consequential moves.
+ * Replace startup blockers while retaining stable IDs and user-intent reviews.
  * Startup verification reruns independently, but user intent must survive it.
  */
 export async function saveProjectionOperations(
@@ -110,7 +135,10 @@ export async function saveProjectionOperations(
 ): Promise<ProjectionOperationsManifest> {
 	const current = await loadProjectionOperations(fs, syncRoot);
 	const retained = current.operations.filter(
-		(operation) => operation.kind === "consequential-move",
+		(operation) =>
+			operation.kind === "consequential-move" ||
+			operation.kind === "deletion-review" ||
+			operation.kind === "trash-undo",
 	);
 	const byId = new Map(
 		current.operations.map((operation) => [operation.id, operation]),
@@ -164,6 +192,25 @@ export async function upsertProjectionOperation(
 			...current.operations.filter((candidate) => candidate.id !== id),
 			operation,
 		],
+	};
+	await fs.ensureDir(`${syncRoot}/.hubble/pending`);
+	await fs.writeFile(
+		projectionOperationsPath(syncRoot),
+		JSON.stringify(manifest, null, 2),
+	);
+	return manifest;
+}
+
+/** Remove one resolved operation without disturbing unrelated pending work. */
+export async function removeProjectionOperation(
+	fs: Pick<FileSystem, "ensureDir" | "readFileOrNull" | "writeFile">,
+	syncRoot: string,
+	id: string,
+): Promise<ProjectionOperationsManifest> {
+	const current = await loadProjectionOperations(fs, syncRoot);
+	const manifest = {
+		version: 1 as const,
+		operations: current.operations.filter((operation) => operation.id !== id),
 	};
 	await fs.ensureDir(`${syncRoot}/.hubble/pending`);
 	await fs.writeFile(

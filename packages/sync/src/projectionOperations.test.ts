@@ -119,4 +119,80 @@ describe("projection operations manifest", () => {
 		expect(afterStartupRefresh.operations).toHaveLength(1);
 		expect(afterStartupRefresh.operations[0]?.kind).toBe("consequential-move");
 	});
+
+	it("retains a pending deletion review across startup refresh", async () => {
+		const fs = memoryFs();
+		await upsertProjectionOperation(
+			fs,
+			"/mount",
+			{
+				kind: "deletion-review",
+				documentId: "d1",
+				workspaceId: "ws1",
+				folderId: null,
+				path: "/mount/note.md",
+				reason: "offline",
+				items: [{ documentId: "d1", path: "/mount/note.md", role: "editor" }],
+			},
+			10,
+		);
+
+		const afterStartupRefresh = await saveProjectionOperations(
+			fs,
+			"/mount",
+			[],
+			20,
+		);
+		expect(afterStartupRefresh.operations).toContainEqual(
+			expect.objectContaining({ kind: "deletion-review", reason: "offline" }),
+		);
+	});
+
+	it("retains durable Trash undo without changing its stable identity", async () => {
+		const fs = memoryFs();
+		const pending = await upsertProjectionOperation(
+			fs,
+			"/mount",
+			{
+				kind: "trash-undo",
+				documentId: "d1",
+				workspaceId: "ws1",
+				folderId: null,
+				path: "/mount/note.md",
+				phase: "pending-trash",
+				trashedAt: null,
+			},
+			10,
+		);
+		const available = await upsertProjectionOperation(
+			fs,
+			"/mount",
+			{
+				kind: "trash-undo",
+				documentId: "d1",
+				workspaceId: "ws1",
+				folderId: null,
+				path: "/mount/note.md",
+				phase: "undo-available",
+				trashedAt: 20,
+			},
+			20,
+		);
+		const afterStartupRefresh = await saveProjectionOperations(
+			fs,
+			"/mount",
+			[],
+			30,
+		);
+
+		expect(available.operations[0]).toMatchObject({
+			id: pending.operations[0]?.id,
+			createdAt: 10,
+			phase: "undo-available",
+		});
+		expect(afterStartupRefresh.operations[0]).toMatchObject({
+			id: pending.operations[0]?.id,
+			kind: "trash-undo",
+		});
+	});
 });

@@ -41,6 +41,7 @@ export {
 	loadProjectionOperations,
 	PROJECTION_OPERATIONS_REL,
 	projectionOperationsPath,
+	removeProjectionOperation,
 	saveProjectionOperations,
 	upsertProjectionOperation,
 } from "./projectionOperations.js";

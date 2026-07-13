@@ -7,6 +7,7 @@ import {
 	wikiDisplayNameForTarget,
 	withMarkdownExtension,
 } from "@hubble.md/editor";
+import type { PendingProjectionOperation } from "@hubble.md/sync";
 import { api } from "@hubble.md/sync-backend";
 import type { Id } from "@hubble.md/sync-backend/types";
 import {
@@ -47,6 +48,8 @@ import {
 	HtmlAppsDialog,
 	SidebarHtmlAppsCallout,
 } from "./components/HtmlAppsCallout";
+import { ProjectionMoveReviewDialog } from "./components/ProjectionMoveReviewDialog";
+import { ProjectionTrashRecoveryDialog } from "./components/ProjectionTrashRecoveryDialog";
 import { RepoLinkSection } from "./components/RepoLinkSection";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
@@ -59,7 +62,12 @@ import {
 import { WelcomeScreen } from "./components/WelcomeScreen";
 import { desktopConvexUrl } from "./convex";
 import { desktopApi } from "./desktopApi";
-import type { DesktopUpdateState } from "./desktopApi/types";
+import type {
+	ConsequentialMoveOperation,
+	DeletionReviewOperation,
+	DesktopUpdateState,
+	TrashUndoOperation,
+} from "./desktopApi/types";
 import { createEmbedExtension } from "./editor/EmbedExtension";
 import { handleImageDrop, handleImagePaste } from "./editor/handleImagePaste";
 import { IframeView, toAssetUrl } from "./editor/IframeView";
@@ -187,7 +195,44 @@ function AppContent() {
 	const [activeLiveDocumentId, setActiveLiveDocumentId] = useState<
 		string | null
 	>(null);
+	const [pendingOperations, setPendingOperations] = useState<
+		PendingProjectionOperation[]
+	>([]);
 	const cloudEnabled = Boolean(desktopConvexUrl);
+
+	const refreshPendingOperations = useCallback(async () => {
+		const operations = await desktopApi.listPendingProjectionOperations();
+		setPendingOperations(operations);
+	}, []);
+	const pendingMove =
+		pendingOperations.find(
+			(operation): operation is ConsequentialMoveOperation =>
+				operation.kind === "consequential-move",
+		) ?? null;
+	const pendingDeletion =
+		pendingOperations.find(
+			(operation): operation is DeletionReviewOperation =>
+				operation.kind === "deletion-review",
+		) ?? null;
+	const trashUndo =
+		pendingOperations.find(
+			(operation): operation is TrashUndoOperation =>
+				operation.kind === "trash-undo" && operation.phase === "undo-available",
+		) ?? null;
+
+	useEffect(() => {
+		void refreshPendingOperations();
+		const unsubscribeSync = desktopApi.onSyncedFolderEvent(() => {
+			void refreshPendingOperations();
+		});
+		const unsubscribeFocus = desktopApi.onWindowFocus(() => {
+			void refreshPendingOperations();
+		});
+		return () => {
+			unsubscribeSync();
+			unsubscribeFocus();
+		};
+	}, [refreshPendingOperations]);
 
 	const dismissHtmlAppsCallout = useCallback(() => {
 		if (workspacePath) {
@@ -596,6 +641,15 @@ function AppContent() {
 				open={htmlAppsDialogOpen}
 				onOpenChange={setHtmlAppsDialogOpen}
 				workspacePath={workspacePath ?? null}
+			/>
+			<ProjectionMoveReviewDialog
+				operation={pendingMove}
+				onResolved={() => void refreshPendingOperations()}
+			/>
+			<ProjectionTrashRecoveryDialog
+				deletionReview={pendingMove ? null : pendingDeletion}
+				trashUndo={pendingMove || pendingDeletion ? null : trashUndo}
+				onResolved={() => void refreshPendingOperations()}
 			/>
 		</main>
 	);

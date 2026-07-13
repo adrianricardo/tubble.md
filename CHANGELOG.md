@@ -9,6 +9,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Added
 - `hubble ensure-desktop` can install, open, and sign in the verified macOS development app for live mounts
+- Synced cloud folders now review consequential moves and provide durable recovery or Undo when local files are deleted
 
 ### Changed
 

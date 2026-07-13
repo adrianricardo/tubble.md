@@ -19,12 +19,14 @@ import {
 	loadSyncedFolderIndexManifest,
 	materializeMountFolder,
 	materializeSyncedFolder,
+	type PendingProjectionOperation,
 	ProjectionGuardConflict,
 	type ProjectionSnapshot,
 	planMountFolder,
 	planSyncedFolder,
 	reconcileProjectionFile,
 	rekeySyncedFolderEntry,
+	removeProjectionOperation,
 	type SyncBackend,
 	type SyncedFolderIndex,
 	type SyncedFolderIndexEntry,
@@ -72,6 +74,8 @@ export type SyncedFolderServiceOptions = {
 	statInode?: (absPath: string) => number | null;
 	/** Injectable connectivity predicate. When true, watcher events are queued. */
 	isOffline?: () => boolean;
+	/** Checks that a root or parent directory still exists before cloud deletion. */
+	isPathAvailable?: (path: string) => boolean;
 	/**
 	 * Factory for the real watcher. Returns `null` to skip wiring a watcher
 	 * (unit tests drive {@link SyncedFolderService.handleRawEvent} directly).
@@ -99,12 +103,18 @@ const CHANGE_DEBOUNCE_MS = 250;
 const CLOUD_MATERIALIZE_DEBOUNCE_MS = 250;
 const HEARTBEAT_MS = 10_000;
 const SELF_WRITE_TTL_MS = 5_000;
+const PROJECTION_OPERATION_BATCH_SIZE = 25;
 
 const QUEUE_DIR_REL = ".hubble/queue";
 const QUEUE_MANIFEST_REL = `${QUEUE_DIR_REL}/events.json`;
 /** Where access-lost local bytes are parked instead of being hard-deleted. */
 const TRASH_DIR_REL = ".hubble/trash";
 const RECENT_TELEMETRY_EVENTS = 8;
+
+type DeletionReviewOperation = Extract<
+	PendingProjectionOperation,
+	{ kind: "deletion-review" }
+>;
 
 type QueuedWatcherEvent = RawWatcherEvent & {
 	id: string;
@@ -117,6 +127,38 @@ type QueueManifest = {
 	version: 1;
 	events: QueuedWatcherEvent[];
 };
+
+function memoizeAsync<TArgs extends unknown[], TResult>(
+	fn: (...args: TArgs) => Promise<TResult>,
+): (...args: TArgs) => Promise<TResult> {
+	const cache = new Map<string, Promise<TResult>>();
+	return (...args) => {
+		const key = JSON.stringify(args);
+		const existing = cache.get(key);
+		if (existing) return existing;
+		const result = fn(...args);
+		cache.set(key, result);
+		return result;
+	};
+}
+
+/** Reuse one cloud snapshot for a no-write preflight and its materialize pass. */
+function memoizeProjectionBackend(backend: SyncBackend): SyncBackend {
+	return {
+		...backend,
+		listWorkspaces: memoizeAsync(() => backend.listWorkspaces()),
+		getFolders: memoizeAsync((workspaceId: string) =>
+			backend.getFolders(workspaceId),
+		),
+		getLiveDocuments: memoizeAsync((workspaceId: string) =>
+			backend.getLiveDocuments(workspaceId),
+		),
+		getSharedWithMe: memoizeAsync(() => backend.getSharedWithMe()),
+		getFolderSubtreeDocuments: memoizeAsync((folderId: string) =>
+			backend.getFolderSubtreeDocuments(folderId),
+		),
+	};
+}
 
 function projectionTopology(
 	syncRoot: string,
@@ -167,6 +209,7 @@ export class SyncedFolderService {
 	#pid: number;
 	#statInode: (absPath: string) => number | null;
 	#isOffline: () => boolean;
+	#isPathAvailable: (path: string) => boolean;
 	#createWatcher: SyncedFolderServiceOptions["createWatcher"];
 	#mountFolderId: string | null;
 
@@ -197,6 +240,9 @@ export class SyncedFolderService {
 	#subscriber: Subscriber | null = null;
 	#unsubscribeSyncedFolder: (() => void) | null = null;
 	#connectionGeneration = 0;
+	#operationTask: Promise<void> = Promise.resolve();
+	#connectInput: ConnectFolderInput | null = null;
+	#startupIncomplete = false;
 
 	constructor(options: SyncedFolderServiceOptions = {}) {
 		this.#createBackend = options.createBackend ?? createConvexBackend;
@@ -217,6 +263,17 @@ export class SyncedFolderService {
 				}
 			});
 		this.#isOffline = options.isOffline ?? (() => false);
+		this.#isPathAvailable =
+			options.isPathAvailable ??
+			(options.fs
+				? () => true
+				: (candidate) => {
+						try {
+							return statSync(candidate).isDirectory();
+						} catch {
+							return false;
+						}
+					});
 		this.#createWatcher = options.createWatcher;
 		this.#mountFolderId = options.mountFolderId ?? null;
 	}
@@ -256,6 +313,236 @@ export class SyncedFolderService {
 		};
 	}
 
+	async listPendingOperations() {
+		if (!this.#syncRoot) return [];
+		return (await loadProjectionOperations(this.#fs, this.#syncRoot))
+			.operations;
+	}
+
+	async approvePendingMove(operationId: string) {
+		const syncRoot = this.#syncRoot;
+		const backend = this.#backend;
+		if (!syncRoot || !backend?.confirmDocumentRelocation) {
+			throw new Error("The synced folder is not ready to review moves");
+		}
+		const current = await loadProjectionOperations(this.#fs, syncRoot);
+		const operation = current.operations.find(({ id }) => id === operationId);
+		if (!operation || operation.kind !== "consequential-move") {
+			throw new Error("Pending move not found");
+		}
+		const result = await backend.confirmDocumentRelocation({
+			documentId: operation.documentId,
+			folderId: operation.toFolderId,
+			title: operation.title,
+			path: operation.toPath.slice(syncRoot.length + 1),
+			fingerprint: operation.fingerprint,
+		});
+		if (result.status === "confirmation-required") {
+			const {
+				id: _id,
+				state: _state,
+				createdAt: _createdAt,
+				updatedAt: _updatedAt,
+				...input
+			} = operation;
+			const manifest = await upsertProjectionOperation(
+				this.#fs,
+				syncRoot,
+				{ ...input, fingerprint: result.fingerprint, impact: result.impact },
+				this.#now(),
+			);
+			this.#pendingOperationCount = manifest.operations.length;
+			return { status: "refreshed" as const };
+		}
+		const manifest = await removeProjectionOperation(
+			this.#fs,
+			syncRoot,
+			operationId,
+		);
+		this.#pendingOperationCount = manifest.operations.length;
+		this.#state =
+			manifest.operations.length === 0 ? "connected" : "pending-review";
+		await this.#resumeStartupAfterReview();
+		return { status: "completed" as const };
+	}
+
+	async cancelPendingMove(operationId: string) {
+		const syncRoot = this.#syncRoot;
+		if (!syncRoot) throw new Error("The synced folder is not connected");
+		const current = await loadProjectionOperations(this.#fs, syncRoot);
+		const operation = current.operations.find(({ id }) => id === operationId);
+		if (!operation || operation.kind !== "consequential-move") {
+			throw new Error("Pending move not found");
+		}
+		const latest = await this.#fs.readFile(operation.toPath);
+		const source = await this.#fs.readFileOrNull(operation.path);
+		if (source !== null) {
+			await upsertProjectionOperation(
+				this.#fs,
+				syncRoot,
+				{
+					kind: "path-collision",
+					documentId: operation.documentId,
+					workspaceId: operation.workspaceId,
+					folderId: operation.folderId,
+					path: operation.path,
+					localHash: await contentHash(source),
+					desiredHash: await contentHash(latest),
+				},
+				this.#now(),
+			);
+			const afterRemoval = await removeProjectionOperation(
+				this.#fs,
+				syncRoot,
+				operationId,
+			);
+			this.#pendingOperationCount = afterRemoval.operations.length;
+			return { status: "collision" as const };
+		}
+		await this.#fs.writeFile(operation.path, latest);
+		this.#markWrittenByUs(operation.path, latest);
+		// Point the index at the restored file before unlinking the destination so
+		// the watcher cannot misclassify our cancellation as a local cloud delete.
+		this.#rekey(operation.toPath, operation.path, {
+			folderId: operation.folderId,
+		});
+		await this.#saveCurrentIndex();
+		await this.#fs.deleteFile(operation.toPath);
+		const manifest = await removeProjectionOperation(
+			this.#fs,
+			syncRoot,
+			operationId,
+		);
+		this.#pendingOperationCount = manifest.operations.length;
+		this.#state =
+			manifest.operations.length === 0 ? "connected" : "pending-review";
+		await this.#resumeStartupAfterReview();
+		return { status: "cancelled" as const };
+	}
+
+	async approvePendingDeletion(operationId: string) {
+		const syncRoot = this.#syncRoot;
+		if (!syncRoot || !this.#backend) {
+			throw new Error("The synced folder is not ready to review deletions");
+		}
+		const current = await loadProjectionOperations(this.#fs, syncRoot);
+		const operation = current.operations.find(({ id }) => id === operationId);
+		if (!operation || operation.kind !== "deletion-review") {
+			throw new Error("Pending deletion review not found");
+		}
+		const batch = operation.items.slice(0, PROJECTION_OPERATION_BATCH_SIZE);
+		if (batch.some((item) => item.role !== "owner" && item.role !== "editor")) {
+			throw new Error("Read-only documents cannot be moved to Trash");
+		}
+		for (const item of batch) {
+			const entry = this.#index[item.path];
+			if (!entry) continue;
+			await this.#trashDocument(item.path, entry);
+		}
+		const remainingItems = operation.items.slice(batch.length);
+		await this.#replaceDeletionReview(operation, remainingItems);
+		await this.#resumeStartupAfterReview();
+		return { processed: batch.length, remaining: remainingItems.length };
+	}
+
+	async cancelPendingDeletion(operationId: string) {
+		const syncRoot = this.#syncRoot;
+		const backend = this.#backend;
+		if (!syncRoot || !backend) {
+			throw new Error("The synced folder is not ready to restore deletions");
+		}
+		const current = await loadProjectionOperations(this.#fs, syncRoot);
+		const operation = current.operations.find(({ id }) => id === operationId);
+		if (!operation || operation.kind !== "deletion-review") {
+			throw new Error("Pending deletion review not found");
+		}
+		const batch = operation.items.slice(0, PROJECTION_OPERATION_BATCH_SIZE);
+		for (const item of batch) {
+			const document = await backend.getDocumentForAgent(item.documentId);
+			if (!document) continue;
+			const existing = await this.#fs.readFileOrNull(item.path);
+			if (existing !== null) {
+				await upsertProjectionOperation(
+					this.#fs,
+					syncRoot,
+					{
+						kind: "path-collision",
+						documentId: item.documentId,
+						workspaceId: item.workspaceId ?? operation.workspaceId,
+						folderId: item.folderId ?? operation.folderId,
+						path: item.path,
+						localHash: await contentHash(existing),
+						desiredHash: await contentHash(document.markdown),
+					},
+					this.#now(),
+				);
+				continue;
+			}
+			await this.#fs.writeFile(item.path, document.markdown);
+			this.#markWrittenByUs(item.path, document.markdown);
+			await this.#refreshIndexEntry(item.path, document.markdown);
+		}
+		const remainingItems = operation.items.slice(batch.length);
+		await this.#replaceDeletionReview(operation, remainingItems);
+		await this.#resumeStartupAfterReview();
+		return { processed: batch.length, remaining: remainingItems.length };
+	}
+
+	async undoTrashedDocument(operationId: string) {
+		const syncRoot = this.#syncRoot;
+		const backend = this.#backend;
+		if (!syncRoot || !backend?.restoreDocument) {
+			throw new Error("The synced folder is not ready to restore Trash");
+		}
+		const current = await loadProjectionOperations(this.#fs, syncRoot);
+		const operation = current.operations.find(({ id }) => id === operationId);
+		if (
+			!operation ||
+			operation.kind !== "trash-undo" ||
+			operation.phase !== "undo-available"
+		) {
+			throw new Error("Trash undo operation not found");
+		}
+		await backend.restoreDocument(operation.documentId, "synced-folder-undo");
+		await removeProjectionOperation(this.#fs, syncRoot, operationId);
+		const existing = await this.#fs.readFileOrNull(operation.path);
+		if (existing !== null) {
+			const document = await backend.getDocumentForAgent(operation.documentId);
+			if (document) {
+				await upsertProjectionOperation(
+					this.#fs,
+					syncRoot,
+					{
+						kind: "path-collision",
+						documentId: operation.documentId,
+						workspaceId: operation.workspaceId,
+						folderId: operation.folderId,
+						path: operation.path,
+						localHash: await contentHash(existing),
+						desiredHash: await contentHash(document.markdown),
+					},
+					this.#now(),
+				);
+			}
+			this.#state = "pending-review";
+			return { status: "collision" as const };
+		}
+		await this.#materialize();
+		return { status: "restored" as const };
+	}
+
+	async dismissTrashUndo(operationId: string) {
+		const syncRoot = this.#syncRoot;
+		if (!syncRoot) throw new Error("The synced folder is not connected");
+		const manifest = await removeProjectionOperation(
+			this.#fs,
+			syncRoot,
+			operationId,
+		);
+		this.#pendingOperationCount = manifest.operations.length;
+		return { status: "dismissed" as const };
+	}
+
 	/**
 	 * Acquire the lock, materialize the mirror, and (in production) start the
 	 * bounded watcher. Throws when another fresh device already owns the folder
@@ -284,6 +571,8 @@ export class SyncedFolderService {
 
 		this.#backend = this.#createBackend(deploymentUrl, authToken);
 		this.#syncRoot = syncRoot;
+		this.#connectInput = { syncRoot, deploymentUrl, authToken };
+		this.#startupIncomplete = true;
 		this.#connectionGeneration = connectionGeneration;
 		this.#lastError = null;
 		this.#verificationReason = null;
@@ -307,6 +596,11 @@ export class SyncedFolderService {
 			return this.getStatus();
 		}
 		this.#index = this.#indexManifest.entries;
+		const pendingOperations = await loadProjectionOperations(
+			this.#fs,
+			syncRoot,
+		);
+		this.#pendingOperationCount = pendingOperations.operations.length;
 		if (this.#isOffline()) {
 			await this.#pauseForVerification("offline");
 			return this.getStatus();
@@ -323,6 +617,7 @@ export class SyncedFolderService {
 			return this.getStatus();
 		}
 		try {
+			await this.#resumePendingTrashOperations();
 			const startupSafe = await this.#reconcileStartupDrift();
 			if (!startupSafe) return this.getStatus();
 			const projectionSafe = await this.#verifyProjectionPlan();
@@ -357,7 +652,20 @@ export class SyncedFolderService {
 
 		this.#state = "connected";
 		this.#verificationReason = null;
+		this.#startupIncomplete = false;
 		return this.getStatus();
+	}
+
+	async #resumeStartupAfterReview(): Promise<void> {
+		const input = this.#connectInput;
+		if (!this.#startupIncomplete || !input) return;
+		const manifest = await loadProjectionOperations(this.#fs, input.syncRoot);
+		if (
+			manifest.operations.some((operation) => operation.kind !== "trash-undo")
+		) {
+			return;
+		}
+		await this.connect(input);
 	}
 
 	#mountIdentity(): SyncedFolderMountIdentity {
@@ -438,7 +746,10 @@ export class SyncedFolderService {
 			this.#now(),
 		);
 		this.#pendingOperationCount = manifest.operations.length;
-		if (manifest.operations.length === 0) {
+		const blockers = manifest.operations.filter(
+			(operation) => operation.kind !== "trash-undo",
+		);
+		if (blockers.length === 0) {
 			this.#startupProjectionPlan = plan;
 			this.#startupProjectionSnapshot = await captureProjectionSnapshot(
 				this.#fs,
@@ -592,6 +903,8 @@ export class SyncedFolderService {
 		this.#index = {};
 		this.#indexManifest = null;
 		this.#pendingOperationCount = 0;
+		this.#connectInput = null;
+		this.#startupIncomplete = false;
 		this.#verificationReason = null;
 		this.#startupProjectionPlan = null;
 		this.#startupProjectionSnapshot = null;
@@ -641,15 +954,59 @@ export class SyncedFolderService {
 		const previous = this.#index;
 		const snapshot = this.#startupProjectionSnapshot;
 		this.#startupProjectionSnapshot = null;
+		const materializeBackend = snapshot
+			? backend
+			: memoizeProjectionBackend(backend);
+		if (!snapshot) {
+			const plan = this.#mountFolderId
+				? await planMountFolder(materializeBackend, {
+						syncRoot,
+						folderId: this.#mountFolderId,
+					})
+				: await planSyncedFolder(materializeBackend, { syncRoot });
+			const comparison = await compareProjectionPlanWithDisk(
+				this.#fs,
+				syncRoot,
+				plan,
+				previous,
+			);
+			if (comparison.collisions.length > 0) {
+				for (const { path, file } of comparison.collisions) {
+					const entry = plan[path];
+					if (!entry) continue;
+					await upsertProjectionOperation(
+						this.#fs,
+						syncRoot,
+						{
+							kind: "path-collision",
+							documentId: entry.documentId,
+							workspaceId: entry.workspaceId,
+							folderId: entry.folderId,
+							path,
+							localHash: file.hash,
+							desiredHash: entry.hash,
+						},
+						this.#now(),
+					);
+				}
+				const manifest = await loadProjectionOperations(this.#fs, syncRoot);
+				this.#pendingOperationCount = manifest.operations.length;
+				this.#state = "pending-review";
+				this.#lastError =
+					"Cloud restore paused because its local path is occupied; both versions were preserved.";
+				this.#recordEvent({ kind: "error" });
+				return;
+			}
+		}
 		const projectionFs = snapshot
 			? guardProjectionFileSystem(this.#fs, snapshot)
 			: this.#fs;
 		const result = this.#mountFolderId
-			? await materializeMountFolder(backend, projectionFs, {
+			? await materializeMountFolder(materializeBackend, projectionFs, {
 					syncRoot,
 					folderId: this.#mountFolderId,
 				})
-			: await materializeSyncedFolder(backend, projectionFs, {
+			: await materializeSyncedFolder(materializeBackend, projectionFs, {
 					syncRoot,
 				});
 		if (
@@ -839,7 +1196,14 @@ export class SyncedFolderService {
 		if (shouldIgnoreSyncedPath(event.absPath, this.#syncRoot)) return;
 
 		if (this.#isOffline()) {
-			void this.#enqueue(event);
+			if (event.type === "unlink" && this.#index[event.absPath]) {
+				void this.#queueDeletionReview(
+					[{ absPath: event.absPath, entry: this.#index[event.absPath] }],
+					"offline",
+				);
+			} else {
+				void this.#enqueue(event);
+			}
 			return;
 		}
 
@@ -865,7 +1229,15 @@ export class SyncedFolderService {
 	async handleRawEvent(event: RawWatcherEvent): Promise<void> {
 		if (!this.#backend || !this.#syncRoot) return;
 		if (this.#isOffline()) {
-			await this.#enqueue(event);
+			const entry = this.#index[event.absPath];
+			if (event.type === "unlink" && entry) {
+				await this.#queueDeletionReview(
+					[{ absPath: event.absPath, entry }],
+					"offline",
+				);
+			} else {
+				await this.#enqueue(event);
+			}
 			return;
 		}
 		await this.#handleRawEventOnline(event, true);
@@ -1002,7 +1374,12 @@ export class SyncedFolderService {
 					});
 				}
 				if (result?.status === "confirmation-required") {
-					await this.#recordConsequentialMove(decision, result, title, folderId);
+					await this.#recordConsequentialMove(
+						decision,
+						result,
+						title,
+						folderId,
+					);
 					return;
 				}
 				this.#rekey(decision.fromPath, decision.toPath, { folderId });
@@ -1051,15 +1428,147 @@ export class SyncedFolderService {
 				// soft-delete; access-loss (materialize-origin) is handled in
 				// `#materialize` and NEVER reaches here. Keeping the two directions
 				// in two distinct routes is the data-loss-critical guarantee.
-				// One-way in v1: restore via the cloud trash UI (§6 case 2).
-				await backend.removeDocument(decision.documentId, "synced-folder");
-				delete this.#index[decision.absPath];
-				await this.#dropBaseCache(decision.documentId);
-				await this.#saveCurrentIndex();
-				this.#recordEvent({ kind: "removed-local" });
+				await this.#trashDocument(decision.absPath, decision.entry);
 				return;
 			}
 		}
+	}
+
+	async #replaceDeletionReview(
+		operation: DeletionReviewOperation,
+		items: DeletionReviewOperation["items"],
+	): Promise<void> {
+		const syncRoot = this.#syncRoot;
+		if (!syncRoot) return;
+		const remainingIds = new Set(items.map((item) => item.documentId));
+		const resolvedIds = new Set(
+			operation.items
+				.filter((item) => !remainingIds.has(item.documentId))
+				.map((item) => item.documentId),
+		);
+		const before = await loadProjectionOperations(this.#fs, syncRoot);
+		for (const blocker of before.operations) {
+			if (
+				blocker.kind === "missing-document" &&
+				resolvedIds.has(blocker.documentId)
+			) {
+				await removeProjectionOperation(this.#fs, syncRoot, blocker.id);
+			}
+		}
+		if (items.length === 0) {
+			await removeProjectionOperation(this.#fs, syncRoot, operation.id);
+		} else {
+			await upsertProjectionOperation(
+				this.#fs,
+				syncRoot,
+				{
+					kind: "deletion-review",
+					documentId: operation.documentId,
+					workspaceId: operation.workspaceId,
+					folderId: operation.folderId,
+					path: operation.path,
+					reason: operation.reason,
+					items,
+				},
+				this.#now(),
+			);
+		}
+		const manifest = await loadProjectionOperations(this.#fs, syncRoot);
+		this.#pendingOperationCount = manifest.operations.length;
+		const hasBlocker = manifest.operations.some(
+			(candidate) => candidate.kind !== "trash-undo",
+		);
+		if (!hasBlocker && this.connected) this.#state = "connected";
+	}
+
+	async #trashDocument(
+		path: string,
+		entry: SyncedFolderIndexEntry,
+	): Promise<void> {
+		const syncRoot = this.#syncRoot;
+		const backend = this.#backend;
+		if (!syncRoot || !backend) return;
+		const pending = await upsertProjectionOperation(
+			this.#fs,
+			syncRoot,
+			{
+				kind: "trash-undo",
+				documentId: entry.documentId,
+				workspaceId: entry.workspaceId,
+				folderId: entry.folderId,
+				path,
+				phase: "pending-trash",
+				trashedAt: null,
+			},
+			this.#now(),
+		);
+		this.#pendingOperationCount = pending.operations.length;
+		delete this.#index[path];
+		await this.#dropBaseCache(entry.documentId);
+		await this.#saveCurrentIndex();
+		await backend.removeDocument(entry.documentId, "synced-folder");
+		const available = await upsertProjectionOperation(
+			this.#fs,
+			syncRoot,
+			{
+				kind: "trash-undo",
+				documentId: entry.documentId,
+				workspaceId: entry.workspaceId,
+				folderId: entry.folderId,
+				path,
+				phase: "undo-available",
+				trashedAt: this.#now(),
+			},
+			this.#now(),
+		);
+		this.#pendingOperationCount = available.operations.length;
+		const operation = pending.operations.find(
+			(candidate) =>
+				candidate.kind === "trash-undo" &&
+				candidate.documentId === entry.documentId,
+		);
+		this.#recordEvent({
+			kind: "trashed-local",
+			operationId: operation?.id ?? "",
+		});
+	}
+
+	async #resumePendingTrashOperations(): Promise<void> {
+		const syncRoot = this.#syncRoot;
+		const backend = this.#backend;
+		if (!syncRoot || !backend) return;
+		const current = await loadProjectionOperations(this.#fs, syncRoot);
+		for (const operation of current.operations) {
+			if (
+				operation.kind !== "trash-undo" ||
+				operation.phase !== "pending-trash"
+			) {
+				continue;
+			}
+			delete this.#index[operation.path];
+			await this.#dropBaseCache(operation.documentId);
+			await this.#saveCurrentIndex();
+			await backend.removeDocument(
+				operation.documentId,
+				"synced-folder-resume",
+			);
+			await upsertProjectionOperation(
+				this.#fs,
+				syncRoot,
+				{
+					kind: "trash-undo",
+					documentId: operation.documentId,
+					workspaceId: operation.workspaceId,
+					folderId: operation.folderId,
+					path: operation.path,
+					phase: "undo-available",
+					trashedAt: this.#now(),
+				},
+				this.#now(),
+			);
+		}
+		const manifest = await loadProjectionOperations(this.#fs, syncRoot);
+		this.#pendingOperationCount = manifest.operations.length;
 	}
 
 	async #recordConsequentialMove(
@@ -1068,7 +1577,9 @@ export class SyncedFolderService {
 			{ kind: "rename" | "move" }
 		>,
 		result: Extract<
-			Awaited<ReturnType<NonNullable<SyncBackend["prepareDocumentRelocation"]>>>,
+			Awaited<
+				ReturnType<NonNullable<SyncBackend["prepareDocumentRelocation"]>>
+			>,
 			{ status: "confirmation-required" }
 		>,
 		title: string,
@@ -1160,14 +1671,98 @@ export class SyncedFolderService {
 			CORRELATION_WINDOW_MS,
 		);
 		this.#heldUnlinks = remaining;
-		for (const decision of expired) {
-			await this.#route(decision, {
+		const deletions = expired.filter((decision) => decision.kind === "delete");
+		const writable = deletions.filter(
+			({ entry }) => entry.role === "owner" || entry.role === "editor",
+		);
+		const rootAvailable = this.#isPathAvailable(this.#syncRoot ?? "");
+		const parentsAvailable = deletions.every(({ absPath }) =>
+			this.#isPathAvailable(dirname(absPath)),
+		);
+		if (!rootAvailable) {
+			await this.#recordDeletionReview(deletions, "root");
+		} else if (!parentsAvailable) {
+			await this.#recordDeletionReview(deletions, "storage");
+		} else if (deletions.length === 1 && writable.length === 1) {
+			await this.#route(deletions[0], {
 				type: "unlink",
-				absPath: decision.kind === "delete" ? decision.absPath : "",
+				absPath: deletions[0].absPath,
 				at: now,
 			});
+		} else if (deletions.length > 0) {
+			await this.#recordDeletionReview(
+				deletions,
+				deletions.length > 1 ? "bulk" : "read-only",
+			);
 		}
 		if (remaining.length > 0) this.#scheduleFlush();
+	}
+
+	async #recordDeletionReview(
+		deletions: Array<{
+			absPath: string;
+			entry: SyncedFolderIndexEntry;
+		}>,
+		reason: "offline" | "bulk" | "read-only" | "storage" | "root",
+	): Promise<void> {
+		const syncRoot = this.#syncRoot;
+		const first = deletions[0];
+		if (!syncRoot || !first) return;
+		const current = await loadProjectionOperations(this.#fs, syncRoot);
+		const offlineCandidate =
+			reason === "offline"
+				? current.operations.find(
+						(operation) =>
+							operation.kind === "deletion-review" &&
+							operation.reason === "offline",
+					)
+				: undefined;
+		const existingOffline =
+			offlineCandidate?.kind === "deletion-review"
+				? offlineCandidate
+				: undefined;
+		const items = new Map(
+			(existingOffline?.items ?? []).map((item) => [item.documentId, item]),
+		);
+		for (const { absPath, entry } of deletions) {
+			items.set(entry.documentId, {
+				documentId: entry.documentId,
+				path: absPath,
+				role: entry.role,
+				workspaceId: entry.workspaceId,
+				folderId: entry.folderId,
+			});
+		}
+		const manifest = await upsertProjectionOperation(
+			this.#fs,
+			syncRoot,
+			{
+				kind: "deletion-review",
+				documentId: existingOffline?.documentId ?? first.entry.documentId,
+				workspaceId: existingOffline?.workspaceId ?? first.entry.workspaceId,
+				folderId: existingOffline?.folderId ?? first.entry.folderId,
+				path: existingOffline?.path ?? first.absPath,
+				reason,
+				items: [...items.values()],
+			},
+			this.#now(),
+		);
+		this.#pendingOperationCount = manifest.operations.length;
+		this.#state = "pending-review";
+		this.#recordEvent({ kind: "deletion-review-required" });
+	}
+
+	#queueDeletionReview(
+		deletions: Array<{ absPath: string; entry: SyncedFolderIndexEntry }>,
+		reason: "offline" | "bulk" | "read-only" | "storage" | "root",
+	): Promise<void> {
+		// Watcher callbacks are intentionally fire-and-forget. Serialize journal
+		// updates so simultaneous offline unlinks cannot overwrite one another.
+		const task = this.#operationTask.then(() =>
+			this.#recordDeletionReview(deletions, reason),
+		);
+		this.#operationTask = task.catch(() => {});
+		return task;
 	}
 
 	#markWrittenByUs(absPath: string, markdown: string): void {
@@ -1274,14 +1869,19 @@ export class SyncedFolderService {
 		const syncRoot = this.#syncRoot;
 		if (!syncRoot) return;
 
+		const trashState = this.#backend?.getDocumentTrashState
+			? await this.#backend.getDocumentTrashState(entry.documentId)
+			: "inaccessible";
 		const bytes = await this.#fs.readFileOrNull(absPath);
 		if (bytes !== null) {
-			const trashDir = `${syncRoot}/${TRASH_DIR_REL}`;
-			await this.#fs.ensureDir(trashDir);
-			await this.#fs.writeFile(
-				`${trashDir}/${entry.documentId}__${basename(absPath)}`,
-				bytes,
-			);
+			if (trashState !== "trashed") {
+				const trashDir = `${syncRoot}/${TRASH_DIR_REL}`;
+				await this.#fs.ensureDir(trashDir);
+				await this.#fs.writeFile(
+					`${trashDir}/${entry.documentId}__${basename(absPath)}`,
+					bytes,
+				);
+			}
 			if (this.#fs.setReadOnly) {
 				await this.#fs.setReadOnly(absPath, false).catch(() => {});
 			}
@@ -1291,7 +1891,10 @@ export class SyncedFolderService {
 		delete this.#index[absPath];
 		await this.#dropBaseCache(entry.documentId);
 		await this.#saveCurrentIndex();
-		this.#recordEvent({ kind: "removed-access" });
+		this.#recordEvent({
+			kind:
+				trashState === "trashed" ? "removed-remote-trash" : "removed-access",
+		});
 	}
 
 	/**
@@ -1507,6 +2110,11 @@ function dir(absPath: string): string {
 function basename(absPath: string): string {
 	const slash = absPath.lastIndexOf("/");
 	return slash === -1 ? absPath : absPath.slice(slash + 1);
+}
+
+function dirname(absPath: string): string {
+	const slash = absPath.lastIndexOf("/");
+	return slash === -1 ? "" : absPath.slice(0, slash);
 }
 
 function relPath(syncRoot: string, absPath: string): string {

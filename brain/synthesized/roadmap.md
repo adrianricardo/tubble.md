@@ -147,6 +147,51 @@ pass 44/44, desktop tests pass 125/125, and `pnpm build:desktop` passes. Next: #
 the coordinator/IPC review path with approval, stale-impact refresh, cancellation, and
 collision recovery.
 
+**Desktop consequential-move review is implemented at code/test/build level**
+(working tree, 2026-07-11; issue #171): typed coordinator and IPC APIs list, approve,
+and cancel durable moves. Confirmation revalidates the fingerprint and refreshes stale
+impact without moving; cancellation restores the latest destination bytes to the
+source, while an occupied source preserves both files and leaves a durable recovery
+item. Hubble foregrounds an accessible review dialog with the safe action focused,
+Escape/dismissal as cancellation, and an OS notification fallback. Desktop tests pass
+128/128 and the desktop production build passes. The current backend impact contract
+provides bounded people counts plus public-link/repo-exposure booleans, not named role
+changes or individual repo paths; expanding that preview and packaged live acceptance
+remain before #171 can be considered fully accepted. Next implementation slice: #172,
+deletion classification, while #171's richer impact payload can proceed independently.
+
+**Deletion classification safety is implemented at code/test/build level** (working
+tree, 2026-07-11; issue #172): the existing move-correlation window is now the bounded
+deletion aggregation gate. Exactly one online writable document unlink may reach cloud
+Trash; rapid/bulk bursts, read-only copies, offline deletions, a missing projection
+root, and inaccessible storage/parents become durable deletion-review operations
+without cloud mutation. Offline bursts coalesce into one bounded item list, startup
+refresh retains deletion intent, and pending work contributes to `pending-review`
+status. Existing launch-time missing-file guards remain the distinct quit-time path;
+moving a file outside the root naturally enters the safe single-unlink policy while
+leaving the external copy detached. Desktop tests pass 133/133, sync tests pass 45/45,
+and `pnpm build:desktop` passes. Packaged filesystem-event acceptance remains. Next:
+#173, cloud Trash plus durable Undo/local restoration over these classified operations.
+
+**Trash, durable Undo, and deletion recovery are implemented at code/test/build
+level** (working tree, 2026-07-13; issue #173): watcher deletes journal stable intent
+before the cloud mutation, resume idempotently after a crash/reconnect, and retain a
+non-blocking Undo item across restart. Offline and bulk reviews can restore local files
+without cloud mutation or approve Trash in bounded 25-document coordinator calls.
+Desktop IPC/UI foregrounds the safe recovery action and uses an OS notification when
+backgrounded. Cloud Trash is now distinguished from access loss so remote Trash removes
+a clean managed copy, while remote restore rematerializes after a no-write collision
+preflight; occupied paths preserve both versions as durable recovery work. Sync tests
+pass 46/46, desktop tests pass 135/135, backend tests pass 69/69, and
+`pnpm build:desktop` passes after the required simplify/review-readiness pass.
+Isolated Electron real-filesystem acceptance passed on 2026-07-13 for single-delete
+Undo across restart, offline/restart review, bulk recovery, quit-time review, remote
+Trash, and collision-safe remote restore. That run also wired the production offline
+predicate and fixed restart-only pending-count/startup-resume gaps; see
+`specs/realtime-collab/runs/2026-07-13-phase-3-trash-undo-acceptance.md`. Issue #173 is
+accepted. Issue #171 still needs the richer named-role/repository-path impact preview
+before the Phase 3 bundle is fully accepted.
+
 Desktop IA follow-up (direction settled 2026-07-11): replace the simultaneous
 **Folders** / **Live Documents** / **On this computer** sidebar with one current
 context and one folder/document tree. Repo-linked projections become contextual

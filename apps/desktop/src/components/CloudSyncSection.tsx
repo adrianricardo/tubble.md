@@ -633,10 +633,16 @@ function formatSyncedFolderEvent(event: SyncedFolderTelemetryEvent) {
 			return "Move synced";
 		case "created":
 			return "Document added";
-		case "removed-local":
-			return "Document removed";
+		case "trashed-local":
+			return "Document moved to Trash";
+		case "removed-remote-trash":
+			return "Cloud Trash synced";
 		case "removed-access":
 			return "Access removed";
+		case "move-review-required":
+			return "Move review required";
+		case "deletion-review-required":
+			return "Deletion review required";
 		case "read-only-rejected":
 			return "Read-only edit preserved";
 		case "backstop":
@@ -662,9 +668,15 @@ function showSyncedFolderToast(event: SyncedFolderEvent) {
 		case "created":
 			toast.success("Document added to the cloud");
 			return;
-		case "removed-local":
-			toast("Removed from the cloud", {
-				description: "You can restore it from Trash.",
+		case "trashed-local":
+		case "move-review-required":
+		case "deletion-review-required":
+			// Durable review UI owns these outcomes; duplicating it with a toast
+			// would split the user's attention between two actions.
+			return;
+		case "removed-remote-trash":
+			toast("Cloud Trash synced", {
+				description: "The clean managed copy was removed from this computer.",
 			});
 			return;
 		case "removed-access":

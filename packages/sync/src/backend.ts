@@ -188,10 +188,17 @@ export interface SyncBackend {
 	 * This is the cloud-side half of the direction-aware removal split
 	 * (SYNCED-FOLDER §6 case 1): only a watcher-origin disappearance reaches here.
 	 * An **access-loss** (a doc leaving the cloud query while still existing) must
-	 * NEVER call this — it is trashed locally instead. v1 keeps local deletes
-	 * one-way and relies on the cloud trash UI for restore (§6 case 2).
+	 * NEVER call this — it is removed locally instead. The desktop persists an
+	 * Undo operation before calling this mutation and restores through
+	 * `restoreDocument` (§6 case 2).
 	 */
 	removeDocument(documentId: string, actor?: string): Promise<void>;
+	/** Restore a soft-deleted Live Document from cloud Trash. */
+	restoreDocument?(documentId: string, actor?: string): Promise<void>;
+	/** Distinguish cloud Trash from access loss when a document leaves a projection. */
+	getDocumentTrashState?(
+		documentId: string,
+	): Promise<"active" | "trashed" | "inaccessible">;
 
 	getDocumentForAgent(documentId: string): Promise<AgentDocument | null>;
 	applyDocumentPatch(args: {

@@ -463,6 +463,19 @@ describe("permission regressions", () => {
 		expect(viewerTrash.map((document) => document._id)).toEqual([documentId]);
 		expect(memberTrash.map((document) => document._id)).toEqual([documentId]);
 	});
+
+	test("projection clients can distinguish cloud Trash from access loss", async () => {
+		const t = testInstance();
+		const { ownerId, documentId } = await setupSharedDocument(t);
+
+		await expect(
+			asUser(t, ownerId).query(api.documents.getTrashState, { documentId }),
+		).resolves.toBe("active");
+		await asUser(t, ownerId).mutation(api.documents.remove, { documentId });
+		await expect(
+			asUser(t, ownerId).query(api.documents.getTrashState, { documentId }),
+		).resolves.toBe("trashed");
+	});
 });
 
 describe("inherited folder roles across surfaces", () => {
@@ -561,10 +574,11 @@ describe("inherited folder roles across surfaces", () => {
 		const t = testInstance();
 		const commenter = await setupInherited(t, "commenter");
 		await expect(
-			asUser(t, commenter.guestId).mutation(
-				api.documents.createCommentThread,
-				{ documentId: commenter.documentId, anchor: null, body: "hi" },
-			),
+			asUser(t, commenter.guestId).mutation(api.documents.createCommentThread, {
+				documentId: commenter.documentId,
+				anchor: null,
+				body: "hi",
+			}),
 		).resolves.toBeDefined();
 
 		const viewer = await setupInherited(t, "viewer");

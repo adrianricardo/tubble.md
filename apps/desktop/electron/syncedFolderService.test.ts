@@ -103,6 +103,10 @@ type Calls = {
 		title: string;
 		path: string;
 	}>;
+	confirmRelocation: Array<{
+		documentId: string;
+		fingerprint: string;
+	}>;
 	import: Array<{
 		workspaceId: string;
 		path: string;
@@ -111,6 +115,7 @@ type Calls = {
 	}>;
 	patch: Array<{ documentId: string }>;
 	remove: Array<{ documentId: string }>;
+	restore: Array<{ documentId: string }>;
 };
 
 /**
@@ -123,6 +128,7 @@ type BackendState = {
 	canWrite: boolean;
 	patchError?: Error | null;
 	relocationResult?: DocumentRelocationResult;
+	trashState?: "active" | "trashed" | "inaccessible";
 	/** RB4: subtree "Shared with me" payload (steerable to simulate revoke). */
 	shared: SharedWithMe;
 	/** RB3: per-folder subtree docs served to a mount engine instance. */
@@ -166,7 +172,7 @@ function fakeBackend(
 		async getLiveDocuments() {
 			calls.getLiveDocuments += 1;
 			onGetLiveDocuments?.(calls.getLiveDocuments);
-			return state.docs;
+			return state.docs.filter((document) => document.deletedAt === undefined);
 		},
 		async getSharedWithMe() {
 			return state.shared;
@@ -188,8 +194,32 @@ function fakeBackend(
 			calls.prepareRelocation.push(args);
 			return state.relocationResult ?? { status: "completed" };
 		},
+		async confirmDocumentRelocation(args) {
+			calls.confirmRelocation.push({
+				documentId: args.documentId,
+				fingerprint: args.fingerprint,
+			});
+			return state.relocationResult ?? { status: "completed" };
+		},
 		async removeDocument(documentId) {
 			calls.remove.push({ documentId });
+			state.trashState = "trashed";
+			state.docs = state.docs.map((document) =>
+				document._id === documentId
+					? { ...document, deletedAt: NOW }
+					: document,
+			);
+		},
+		async restoreDocument(documentId) {
+			calls.restore.push({ documentId });
+			state.docs = state.docs.map((document) => ({
+				...document,
+				deletedAt: undefined,
+			}));
+			state.trashState = "active";
+		},
+		async getDocumentTrashState() {
+			return state.trashState ?? "inaccessible";
 		},
 		async importLiveDocument(args) {
 			calls.import.push({
@@ -252,6 +282,7 @@ function makeService(
 	overrides: Partial<BackendState> = {},
 	options: {
 		isOffline?: () => boolean;
+		isPathAvailable?: (path: string) => boolean;
 		mountFolderId?: string;
 		statInode?: (path: string) => number | null;
 		onGetLiveDocuments?: (call: number, fs: MemoryFs) => void;
@@ -307,6 +338,7 @@ function makeService(
 		deviceId: "device-test",
 		statInode: options.statInode ?? (() => 111),
 		isOffline: options.isOffline,
+		isPathAvailable: options.isPathAvailable,
 		mountFolderId: options.mountFolderId,
 		emit: (event) => events.push(event),
 		// No createWatcher → no chokidar; events are driven directly.
@@ -339,9 +371,11 @@ describe("SyncedFolderService routing", () => {
 			rename: [],
 			move: [],
 			prepareRelocation: [],
+			confirmRelocation: [],
 			import: [],
 			patch: [],
 			remove: [],
+			restore: [],
 		};
 		events = [];
 	});
@@ -539,8 +573,9 @@ describe("SyncedFolderService routing", () => {
 	});
 
 	it("self-write: a change whose hash matches our own write is suppressed", async () => {
-		const { service } = makeService(calls, events);
+		const { service, fs } = makeService(calls, events);
 		await service.connect(CONNECT_INPUT);
+		await fs.deleteFile(`${SYNC_ROOT}/WS/Doc.md`);
 
 		await service.handleRawEvent({
 			type: "change",
@@ -647,6 +682,137 @@ describe("SyncedFolderService routing", () => {
 		const refreshed = JSON.parse(await fs.readFile(OPERATIONS_MANIFEST));
 		expect(refreshed.operations[0].latestHash).toBe(
 			await contentHash("hello world"),
+		);
+	});
+
+	it("cancelling a consequential move restores edits made during review", async () => {
+		const { service, fs } = makeService(calls, events, {
+			relocationResult: {
+				status: "confirmation-required",
+				fingerprint: "impact-v1",
+				impact: {
+					gainingUserCount: 1,
+					losingUserCount: 0,
+					publicAccessChanged: false,
+					repoExposureChanged: true,
+				},
+			},
+		});
+		await service.connect(CONNECT_INPUT);
+		await fs.writeFile(`${SYNC_ROOT}/WS/Renamed.md`, "edited during review");
+		await fs.deleteFile(`${SYNC_ROOT}/WS/Doc.md`);
+		await service.handleRawEvent({
+			type: "unlink",
+			absPath: `${SYNC_ROOT}/WS/Doc.md`,
+			at: NOW,
+		});
+		await service.handleRawEvent({
+			type: "add",
+			absPath: `${SYNC_ROOT}/WS/Renamed.md`,
+			inode: 111,
+			at: NOW + 100,
+		});
+
+		const [operation] = await service.listPendingOperations();
+		expect(operation?.kind).toBe("consequential-move");
+		const result = await service.cancelPendingMove(operation?.id ?? "missing");
+
+		expect(result).toEqual({ status: "cancelled" });
+		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe(
+			"edited during review",
+		);
+		expect(await fs.readFileOrNull(`${SYNC_ROOT}/WS/Renamed.md`)).toBeNull();
+		expect(await service.listPendingOperations()).toEqual([]);
+	});
+
+	it("cancelling into an occupied source preserves both files for recovery", async () => {
+		const { service, fs } = makeService(calls, events, {
+			relocationResult: {
+				status: "confirmation-required",
+				fingerprint: "impact-v1",
+				impact: {
+					gainingUserCount: 1,
+					losingUserCount: 0,
+					publicAccessChanged: false,
+					repoExposureChanged: true,
+				},
+			},
+		});
+		await service.connect(CONNECT_INPUT);
+		await fs.writeFile(`${SYNC_ROOT}/WS/Renamed.md`, "pending bytes");
+		await fs.deleteFile(`${SYNC_ROOT}/WS/Doc.md`);
+		await service.handleRawEvent({
+			type: "unlink",
+			absPath: `${SYNC_ROOT}/WS/Doc.md`,
+			at: NOW,
+		});
+		await service.handleRawEvent({
+			type: "add",
+			absPath: `${SYNC_ROOT}/WS/Renamed.md`,
+			inode: 111,
+			at: NOW + 100,
+		});
+		const [operation] = await service.listPendingOperations();
+		await fs.writeFile(`${SYNC_ROOT}/WS/Doc.md`, "occupying bytes");
+
+		expect(await service.cancelPendingMove(operation?.id ?? "missing")).toEqual(
+			{ status: "collision" },
+		);
+		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe("occupying bytes");
+		expect(await fs.readFile(`${SYNC_ROOT}/WS/Renamed.md`)).toBe(
+			"pending bytes",
+		);
+		expect(await service.listPendingOperations()).toContainEqual(
+			expect.objectContaining({ kind: "path-collision" }),
+		);
+	});
+
+	it("approval refreshes stale impact and keeps the move pending", async () => {
+		const { service, fs, state } = makeService(calls, events, {
+			relocationResult: {
+				status: "confirmation-required",
+				fingerprint: "impact-v1",
+				impact: {
+					gainingUserCount: 1,
+					losingUserCount: 0,
+					publicAccessChanged: false,
+					repoExposureChanged: false,
+				},
+			},
+		});
+		await service.connect(CONNECT_INPUT);
+		await fs.writeFile(`${SYNC_ROOT}/WS/Renamed.md`, "hello");
+		await fs.deleteFile(`${SYNC_ROOT}/WS/Doc.md`);
+		await service.handleRawEvent({
+			type: "unlink",
+			absPath: `${SYNC_ROOT}/WS/Doc.md`,
+			at: NOW,
+		});
+		await service.handleRawEvent({
+			type: "add",
+			absPath: `${SYNC_ROOT}/WS/Renamed.md`,
+			inode: 111,
+			at: NOW + 100,
+		});
+		const [operation] = await service.listPendingOperations();
+		state.relocationResult = {
+			status: "confirmation-required",
+			fingerprint: "impact-v2",
+			impact: {
+				gainingUserCount: 2,
+				losingUserCount: 1,
+				publicAccessChanged: true,
+				repoExposureChanged: true,
+			},
+		};
+
+		const result = await service.approvePendingMove(operation?.id ?? "missing");
+		expect(result).toMatchObject({ status: "refreshed" });
+		expect(calls.confirmRelocation).toEqual([
+			{ documentId: "d1", fingerprint: "impact-v1" },
+		]);
+		expect(await service.listPendingOperations()).toContainEqual(
+			expect.objectContaining({ fingerprint: "impact-v2" }),
 		);
 	});
 
@@ -947,13 +1113,44 @@ describe("SyncedFolderService routing", () => {
 			{ isOffline: () => true },
 		);
 		await fs.writeFile(`${SYNC_ROOT}/WS/Doc.md`, "local bytes");
+		await fs.writeFile(
+			OPERATIONS_MANIFEST,
+			JSON.stringify({
+				version: 1,
+				operations: [
+					{
+						kind: "deletion-review",
+						documentId: "d1",
+						workspaceId: "ws",
+						folderId: null,
+						path: `${SYNC_ROOT}/WS/Doc.md`,
+						reason: "offline",
+						items: [
+							{
+								documentId: "d1",
+								workspaceId: "ws",
+								folderId: null,
+								path: `${SYNC_ROOT}/WS/Doc.md`,
+								role: "editor",
+							},
+						],
+						id: "op_offline-review",
+						state: "pending",
+						createdAt: NOW,
+						updatedAt: NOW,
+					},
+				],
+			}),
+		);
 
 		const status = await service.connect(CONNECT_INPUT);
 
 		expect(status).toMatchObject({
 			state: "offline",
 			verificationReason: "offline",
+			pendingOperationCount: 1,
 		});
+		expect(await service.listPendingOperations()).toHaveLength(1);
 		expect(calls.getLiveDocuments).toBe(0);
 		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe("local bytes");
 		expect(
@@ -968,11 +1165,16 @@ describe("SyncedFolderService routing", () => {
 	});
 
 	it("access verification failure: preserves local bytes and reports review state", async () => {
-		const { service, fs } = makeService(calls, events, {}, {
-			onGetLiveDocuments() {
-				throw new Error("permission denied");
+		const { service, fs } = makeService(
+			calls,
+			events,
+			{},
+			{
+				onGetLiveDocuments() {
+					throw new Error("permission denied");
+				},
 			},
-		});
+		);
 		await fs.writeFile(`${SYNC_ROOT}/WS/Doc.md`, "local bytes");
 
 		const status = await service.connect(CONNECT_INPUT);
@@ -1020,8 +1222,9 @@ describe("SyncedFolderService routing", () => {
 	});
 
 	it("local-delete: an expired watcher unlink soft-deletes the cloud doc", async () => {
-		const { service } = makeService(calls, events);
+		const { service, fs } = makeService(calls, events);
 		await service.connect(CONNECT_INPUT);
+		await fs.deleteFile(`${SYNC_ROOT}/WS/Doc.md`);
 
 		// Watcher unlink with no correlated add → held, then window expires.
 		await service.handleRawEvent({
@@ -1034,7 +1237,227 @@ describe("SyncedFolderService routing", () => {
 		// WATCHER-origin direction → removeDocument exactly once, entry gone.
 		expect(calls.remove).toEqual([{ documentId: "d1" }]);
 		expect(service.isLiveDocument(`${SYNC_ROOT}/WS/Doc.md`)).toBe(false);
-		expect(events).toContainEqual({ kind: "removed-local" });
+		expect(events).toContainEqual({
+			kind: "trashed-local",
+			operationId: expect.any(String),
+		});
+		const undo = (await service.listPendingOperations()).find(
+			(operation) => operation.kind === "trash-undo",
+		);
+		expect(undo).toMatchObject({
+			phase: "undo-available",
+			path: `${SYNC_ROOT}/WS/Doc.md`,
+		});
+		if (!undo) throw new Error("Expected durable Trash undo");
+		expect(await service.undoTrashedDocument(undo.id)).toEqual({
+			status: "restored",
+		});
+		expect(calls.restore).toEqual([{ documentId: "d1" }]);
+		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe("hello");
+	});
+
+	it("rapid deletion burst creates one durable review without cloud Trash", async () => {
+		const { service, fs } = makeService(calls, events, {
+			docs: [doc1(), doc1({ _id: "d2", path: "WS/Other.md", title: "Other" })],
+		});
+		await service.connect(CONNECT_INPUT);
+		await fs.deleteFile(`${SYNC_ROOT}/WS/Doc.md`);
+		await fs.deleteFile(`${SYNC_ROOT}/WS/Other.md`);
+		await service.handleRawEvent({
+			type: "unlink",
+			absPath: `${SYNC_ROOT}/WS/Doc.md`,
+			at: NOW,
+		});
+		await service.handleRawEvent({
+			type: "unlink",
+			absPath: `${SYNC_ROOT}/WS/Other.md`,
+			at: NOW + 10,
+		});
+		await service.flushHeldUnlinks(NOW + 5_000);
+
+		expect(calls.remove).toEqual([]);
+		expect(await service.listPendingOperations()).toContainEqual(
+			expect.objectContaining({
+				kind: "deletion-review",
+				reason: "bulk",
+				items: expect.arrayContaining([
+					expect.objectContaining({ documentId: "d1" }),
+					expect.objectContaining({ documentId: "d2" }),
+				]),
+			}),
+		);
+		expect(service.getStatus()).toMatchObject({
+			state: "pending-review",
+			pendingOperationCount: 1,
+		});
+	});
+
+	it("approved deletion batches are bounded to 25 documents", async () => {
+		const docs = Array.from({ length: 26 }, (_, index) =>
+			doc1({
+				_id: `d${index + 1}`,
+				path: `WS/Doc ${index + 1}.md`,
+				title: `Doc ${index + 1}`,
+			}),
+		);
+		const { service, fs } = makeService(calls, events, { docs });
+		await service.connect(CONNECT_INPUT);
+		for (let index = 0; index < docs.length; index += 1) {
+			const path = `${SYNC_ROOT}/WS/Doc ${index + 1}.md`;
+			await fs.deleteFile(path);
+			await service.handleRawEvent({ type: "unlink", absPath: path, at: NOW });
+		}
+		await service.flushHeldUnlinks(NOW + 5_000);
+		const review = (await service.listPendingOperations()).find(
+			(operation) => operation.kind === "deletion-review",
+		);
+		if (!review) throw new Error("Expected bulk deletion review");
+
+		expect(await service.approvePendingDeletion(review.id)).toEqual({
+			processed: 25,
+			remaining: 1,
+		});
+		expect(calls.remove).toHaveLength(25);
+		expect(await service.listPendingOperations()).toContainEqual(
+			expect.objectContaining({
+				kind: "deletion-review",
+				items: [expect.objectContaining({ documentId: "d26" })],
+			}),
+		);
+	});
+
+	it("read-only deletion remains pending and never reaches cloud Trash", async () => {
+		const { service, fs } = makeService(calls, events, {
+			docs: [doc1({ role: "viewer", canWrite: false })],
+		});
+		await service.connect(CONNECT_INPUT);
+		await fs.deleteFile(`${SYNC_ROOT}/WS/Doc.md`);
+		await service.handleRawEvent({
+			type: "unlink",
+			absPath: `${SYNC_ROOT}/WS/Doc.md`,
+			at: NOW,
+		});
+		await service.flushHeldUnlinks(NOW + 5_000);
+
+		expect(calls.remove).toEqual([]);
+		expect(await service.listPendingOperations()).toContainEqual(
+			expect.objectContaining({ kind: "deletion-review", reason: "read-only" }),
+		);
+	});
+
+	it("offline deletion is journaled instead of replayed as cloud Trash", async () => {
+		let offline = false;
+		const { service, fs } = makeService(
+			calls,
+			events,
+			{
+				docs: [
+					doc1(),
+					doc1({ _id: "d2", path: "WS/Other.md", title: "Other" }),
+				],
+			},
+			{ isOffline: () => offline },
+		);
+		await service.connect(CONNECT_INPUT);
+		offline = true;
+		await fs.deleteFile(`${SYNC_ROOT}/WS/Doc.md`);
+		await fs.deleteFile(`${SYNC_ROOT}/WS/Other.md`);
+		await Promise.all([
+			service.handleRawEvent({
+				type: "unlink",
+				absPath: `${SYNC_ROOT}/WS/Doc.md`,
+				at: NOW,
+			}),
+			service.handleRawEvent({
+				type: "unlink",
+				absPath: `${SYNC_ROOT}/WS/Other.md`,
+				at: NOW + 10,
+			}),
+		]);
+
+		expect(calls.remove).toEqual([]);
+		const operations = await service.listPendingOperations();
+		expect(operations).toHaveLength(1);
+		expect(operations).toContainEqual(
+			expect.objectContaining({
+				kind: "deletion-review",
+				reason: "offline",
+				items: expect.arrayContaining([
+					expect.objectContaining({ documentId: "d1" }),
+					expect.objectContaining({ documentId: "d2" }),
+				]),
+			}),
+		);
+		expect(service.getStatus()).toMatchObject({ state: "pending-review" });
+
+		offline = false;
+		await service.connect(CONNECT_INPUT);
+		const persisted = (await service.listPendingOperations()).find(
+			(operation) => operation.kind === "deletion-review",
+		);
+		if (!persisted) throw new Error("Expected persisted offline review");
+		await service.approvePendingDeletion(persisted.id);
+		expect(calls.remove).toEqual([{ documentId: "d1" }, { documentId: "d2" }]);
+		expect(service.getStatus()).toMatchObject({
+			state: "connected",
+			lastError: null,
+		});
+		expect(await service.listPendingOperations()).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					kind: "trash-undo",
+					phase: "undo-available",
+				}),
+			]),
+		);
+	});
+
+	it("a missing projection root never becomes cloud Trash", async () => {
+		const { service, fs } = makeService(
+			calls,
+			events,
+			{},
+			{
+				isPathAvailable: () => false,
+			},
+		);
+		await service.connect(CONNECT_INPUT);
+		await fs.deleteFile(`${SYNC_ROOT}/WS/Doc.md`);
+		await service.handleRawEvent({
+			type: "unlink",
+			absPath: `${SYNC_ROOT}/WS/Doc.md`,
+			at: NOW,
+		});
+		await service.flushHeldUnlinks(NOW + 5_000);
+
+		expect(calls.remove).toEqual([]);
+		expect(await service.listPendingOperations()).toContainEqual(
+			expect.objectContaining({ kind: "deletion-review", reason: "root" }),
+		);
+	});
+
+	it("an inaccessible document parent never becomes cloud Trash", async () => {
+		const { service, fs } = makeService(
+			calls,
+			events,
+			{},
+			{
+				isPathAvailable: (path) => path === SYNC_ROOT,
+			},
+		);
+		await service.connect(CONNECT_INPUT);
+		await fs.deleteFile(`${SYNC_ROOT}/WS/Doc.md`);
+		await service.handleRawEvent({
+			type: "unlink",
+			absPath: `${SYNC_ROOT}/WS/Doc.md`,
+			at: NOW,
+		});
+		await service.flushHeldUnlinks(NOW + 5_000);
+
+		expect(calls.remove).toEqual([]);
+		expect(await service.listPendingOperations()).toContainEqual(
+			expect.objectContaining({ kind: "deletion-review", reason: "storage" }),
+		);
 	});
 
 	it("access-loss: a doc leaving the cloud set is trashed, never cloud-deleted", async () => {
@@ -1056,6 +1479,40 @@ describe("SyncedFolderService routing", () => {
 		expect(calls.remove).toEqual([]);
 		expect(service.isLiveDocument(`${SYNC_ROOT}/WS/Doc.md`)).toBe(false);
 		expect(events).toContainEqual({ kind: "removed-access" });
+	});
+
+	it("remote Trash removes a clean copy and remote restore preserves a path collision", async () => {
+		const { service, fs, state } = makeService(calls, events);
+		await service.connect(CONNECT_INPUT);
+
+		state.trashState = "trashed";
+		state.docs = state.docs.map((document) => ({
+			...document,
+			deletedAt: NOW,
+		}));
+		await service.refresh();
+
+		expect(await fs.readFileOrNull(`${SYNC_ROOT}/WS/Doc.md`)).toBeNull();
+		expect(findPath(fs, /\/\.hubble\/trash\/d1__Doc\.md$/)).toBeUndefined();
+		expect(events).toContainEqual({ kind: "removed-remote-trash" });
+
+		await fs.writeFile(`${SYNC_ROOT}/WS/Doc.md`, "untracked local version");
+		state.trashState = "active";
+		state.docs = state.docs.map((document) => ({
+			...document,
+			deletedAt: undefined,
+		}));
+		await service.refresh();
+
+		expect(await fs.readFile(`${SYNC_ROOT}/WS/Doc.md`)).toBe(
+			"untracked local version",
+		);
+		expect(await service.listPendingOperations()).toContainEqual(
+			expect.objectContaining({
+				kind: "path-collision",
+				documentId: "d1",
+			}),
+		);
 	});
 
 	it("cloud materialize: documentId path changes are not mistaken for access loss", async () => {

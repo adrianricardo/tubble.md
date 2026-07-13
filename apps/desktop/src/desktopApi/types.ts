@@ -1,9 +1,39 @@
 import type {
 	LiveDocumentImportResult,
+	PendingProjectionOperation,
 	ReconcileOutcome,
 } from "@hubble.md/sync";
 
 export type { ReconcileOutcome };
+export type ConsequentialMoveOperation = Extract<
+	PendingProjectionOperation,
+	{ kind: "consequential-move" }
+>;
+export type DeletionReviewOperation = Extract<
+	PendingProjectionOperation,
+	{ kind: "deletion-review" }
+>;
+export type TrashUndoOperation = Extract<
+	PendingProjectionOperation,
+	{ kind: "trash-undo" }
+> & { phase: "undo-available" };
+
+export type PendingMoveApprovalResult =
+	| { status: "completed" }
+	| { status: "refreshed" };
+
+export type PendingMoveCancellationResult = {
+	status: "cancelled" | "collision";
+};
+
+export type PendingDeletionResult = {
+	processed: number;
+	remaining: number;
+};
+
+export type TrashUndoResult = {
+	status: "restored" | "collision";
+};
 
 export type FileEntry = {
 	path: string;
@@ -229,13 +259,14 @@ export type SyncedFolderEvent =
 	| { kind: "renamed" }
 	| { kind: "moved" }
 	| { kind: "move-review-required"; operationId: string }
+	| { kind: "deletion-review-required" }
+	| { kind: "trashed-local"; operationId: string }
+	| { kind: "removed-remote-trash" }
 	| { kind: "created" }
-	/** A local `unlink` (watcher-origin) soft-deleted the cloud document (§6 case 1). */
-	| { kind: "removed-local" }
 	/**
 	 * The user lost access to a doc that still exists in the cloud (materialize-
 	 * origin); the local file was moved to `.hubble/trash/`, the cloud doc was
-	 * left untouched (§6 case 1). Direction-aware counterpart of `removed-local`.
+	 * left untouched (§6 case 1).
 	 */
 	| { kind: "removed-access" }
 	/** Reconcile could not be safely scoped; the on-disk edit was backstopped (§6 case 3). */
@@ -337,6 +368,23 @@ export type DesktopApi = {
 	): Promise<LiveDocumentImportResult>;
 	disconnectSyncedFolder(): Promise<SyncedFolderStatus>;
 	getSyncedFolderStatus(): Promise<SyncedFolderStatus>;
+	listPendingProjectionOperations(): Promise<PendingProjectionOperation[]>;
+	approvePendingProjectionMove(
+		operationId: string,
+	): Promise<PendingMoveApprovalResult>;
+	cancelPendingProjectionMove(
+		operationId: string,
+	): Promise<PendingMoveCancellationResult>;
+	approvePendingProjectionDeletion(
+		operationId: string,
+	): Promise<PendingDeletionResult>;
+	cancelPendingProjectionDeletion(
+		operationId: string,
+	): Promise<PendingDeletionResult>;
+	undoTrashedProjectionDocument(operationId: string): Promise<TrashUndoResult>;
+	dismissProjectionTrashUndo(
+		operationId: string,
+	): Promise<{ status: "dismissed" }>;
 	/**
 	 * Link a cloud folder to a local git repo (RB3 / D11): materialize the
 	 * folder's subtree at the mount path, register a per-mount sync engine, append

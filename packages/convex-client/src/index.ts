@@ -208,9 +208,7 @@ export function createConvexBackend(
 		async prepareDocumentRelocation(args) {
 			return client.mutation(api.folders.prepareDocumentRelocation, {
 				documentId: args.documentId as Id<"documents">,
-				folderId: args.folderId
-					? (args.folderId as Id<"folders">)
-					: undefined,
+				folderId: args.folderId ? (args.folderId as Id<"folders">) : undefined,
 				title: args.title,
 				path: args.path,
 			});
@@ -218,9 +216,7 @@ export function createConvexBackend(
 		async confirmDocumentRelocation(args) {
 			return client.mutation(api.folders.confirmDocumentRelocation, {
 				documentId: args.documentId as Id<"documents">,
-				folderId: args.folderId
-					? (args.folderId as Id<"folders">)
-					: undefined,
+				folderId: args.folderId ? (args.folderId as Id<"folders">) : undefined,
 				title: args.title,
 				path: args.path,
 				fingerprint: args.fingerprint,
@@ -230,6 +226,17 @@ export function createConvexBackend(
 			await client.mutation(api.documents.remove, {
 				documentId: documentId as Id<"documents">,
 				actor,
+			});
+		},
+		async restoreDocument(documentId, actor) {
+			await client.mutation(api.documents.restoreRemoved, {
+				documentId: documentId as Id<"documents">,
+				actor,
+			});
+		},
+		async getDocumentTrashState(documentId) {
+			return client.query(api.documents.getTrashState, {
+				documentId: documentId as Id<"documents">,
 			});
 		},
 		async getDocumentForAgent(documentId) {
