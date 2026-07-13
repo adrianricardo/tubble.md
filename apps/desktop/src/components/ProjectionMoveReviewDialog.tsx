@@ -4,6 +4,14 @@ import { toast } from "sonner";
 import { desktopApi } from "../desktopApi";
 import type { ConsequentialMoveOperation } from "../desktopApi/types";
 
+function roleLabel(role: string | null) {
+	return role ? role[0]?.toUpperCase() + role.slice(1) : "No access";
+}
+
+function userLabel(change: { name: string | null; email: string | null }) {
+	return change.name ?? change.email ?? "Unknown collaborator";
+}
+
 export function ProjectionMoveReviewDialog({
 	operation,
 	onResolved,
@@ -82,28 +90,62 @@ export function ProjectionMoveReviewDialog({
 					<dt className="text-muted-foreground">To</dt>
 					<dd className="break-all">{operation.toPath}</dd>
 				</dl>
-				<ul className="flex list-disc flex-col gap-1 ps-5 text-sm">
-					<li>
-						{impact.gainingUserCount}{" "}
-						{impact.gainingUserCount === 1 ? "person gains" : "people gain"}{" "}
-						access
-					</li>
-					<li>
-						{impact.losingUserCount}{" "}
-						{impact.losingUserCount === 1 ? "person loses" : "people lose"}{" "}
-						access
-					</li>
-					<li>
-						{impact.publicAccessChanged
-							? "Public-link access changes"
-							: "Public-link access does not change"}
-					</li>
-					<li>
-						{impact.repoExposureChanged
-							? "Linked repository exposure changes"
-							: "Linked repository exposure does not change"}
-					</li>
-				</ul>
+				<div className="flex flex-col gap-3 text-sm">
+					{impact.userChanges?.length ? (
+						<section aria-labelledby="move-people-heading">
+							<h3 id="move-people-heading" className="font-medium">
+								People
+							</h3>
+							<ul className="mt-1 flex list-disc flex-col gap-1 ps-5">
+								{impact.userChanges.map((change) => (
+									<li key={change.userId}>
+										{userLabel(change)}: {roleLabel(change.fromRole)} →{" "}
+										{roleLabel(change.toRole)}
+									</li>
+								))}
+								{impact.userChangesTruncated ? (
+									<li>Additional people are affected</li>
+								) : null}
+							</ul>
+						</section>
+					) : impact.userChanges === undefined ? (
+						<p>
+							{impact.gainingUserCount} gain access; {impact.losingUserCount}{" "}
+							lose access
+						</p>
+					) : null}
+					{impact.publicAccessChanged ? (
+						<p>
+							Public link:{" "}
+							{roleLabel(impact.publicAccessChange?.fromRole ?? null)} →{" "}
+							{roleLabel(impact.publicAccessChange?.toRole ?? null)}
+						</p>
+					) : null}
+					{impact.repositoryChanges?.length ? (
+						<section aria-labelledby="move-repositories-heading">
+							<h3 id="move-repositories-heading" className="font-medium">
+								Linked repositories
+							</h3>
+							<ul className="mt-1 flex list-disc flex-col gap-1 ps-5">
+								{impact.repositoryChanges.map((repository) => (
+									<li key={`${repository.change}:${repository.folderId}`}>
+										{repository.change === "added"
+											? "Added to"
+											: "Removed from"}{" "}
+										{repository.repoName ??
+											repository.repoRemoteUrl ??
+											"repository"}{" "}
+										<span className="text-muted-foreground">
+											({repository.folderPath})
+										</span>
+									</li>
+								))}
+							</ul>
+						</section>
+					) : impact.repoExposureChanged ? (
+						<p>Linked repository exposure changes</p>
+					) : null}
+				</div>
 				<div className="flex justify-end gap-2">
 					<Button
 						ref={cancelButtonRef}

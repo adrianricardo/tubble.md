@@ -95,12 +95,15 @@ every local byte, and surface `verifying`, `offline`, and `pending-review` statu
 Sync tests pass 43/43, desktop tests pass 123/123, and the desktop production build
 passes. Packaged live acceptance remains outstanding.
 
-**Next build step:** begin Phase 3 filesystem operation policy and review: neutral
-moves first, then consequential-move confirmation and deletion/Trash recovery. Add
-the internal development flag when the new coordinator or unified UI first has a
-runtime path to gate; the safety fix itself applies to the current engine. Also keep
-`cloud create` in a scratch cwd because it connects its cwd as the workspace path. Publishing
-`desktop-dev-latest` and clean-machine Phase 3 acceptance are separate operator gates.
+**Next build step:** deploy the richer consequential-move impact contract to dev and
+run #171's isolated Electron acceptance: move a real projection across user-role,
+public-link, and repo-link boundaries; verify the named/path-specific preview, stale
+impact refresh, approval, and cancellation. This is the final Phase 3 acceptance gate.
+After it passes, close #171 and begin the desktop cloud-workspace implementation from
+`specs/desktop-cloud-workspace/TECH.md` by rerunning its HEAD revalidation gate. Keep
+`cloud create` in a scratch cwd because it connects its cwd as the workspace path.
+Publishing `desktop-dev-latest` and clean-machine Phase 3 acceptance remain separate
+operator gates.
 
 **Phase 3 topology slice is implemented** (working tree, 2026-07-11): whole-workspace
 materialization now persists explicit folder topology from the cloud folder tree,
@@ -154,11 +157,14 @@ impact without moving; cancellation restores the latest destination bytes to the
 source, while an occupied source preserves both files and leaves a durable recovery
 item. Hubble foregrounds an accessible review dialog with the safe action focused,
 Escape/dismissal as cancellation, and an OS notification fallback. Desktop tests pass
-128/128 and the desktop production build passes. The current backend impact contract
-provides bounded people counts plus public-link/repo-exposure booleans, not named role
-changes or individual repo paths; expanding that preview and packaged live acceptance
-remain before #171 can be considered fully accepted. Next implementation slice: #172,
-deletion classification, while #171's richer impact payload can proceed independently.
+128/128 and the desktop production build passes. The richer impact contract landed at
+code/test/build level on 2026-07-13: it detects inherited role upgrades/downgrades as
+consequential, returns exact gain/loss counts plus up to 25 named role changes, shows
+public-link before/after roles, and identifies added/removed repo-linked folders by
+cloud path and repository metadata. Older device journals remain readable. Backend
+tests pass 70/70 and the desktop production build passes after simplify and
+review-readiness. Dev deployment and isolated Electron acceptance of the rendered
+preview, stale refresh, approval, and cancellation remain before #171 is accepted.
 
 **Deletion classification safety is implemented at code/test/build level** (working
 tree, 2026-07-11; issue #172): the existing move-correlation window is now the bounded
@@ -189,8 +195,8 @@ Undo across restart, offline/restart review, bulk recovery, quit-time review, re
 Trash, and collision-safe remote restore. That run also wired the production offline
 predicate and fixed restart-only pending-count/startup-resume gaps; see
 `specs/realtime-collab/runs/2026-07-13-phase-3-trash-undo-acceptance.md`. Issue #173 is
-accepted. Issue #171 still needs the richer named-role/repository-path impact preview
-before the Phase 3 bundle is fully accepted.
+accepted. Issue #171's richer impact preview is implemented at code/test/build level;
+its deployed isolated-Electron acceptance is the final Phase 3 bundle gate.
 
 Desktop IA follow-up (direction settled 2026-07-11): replace the simultaneous
 **Folders** / **Live Documents** / **On this computer** sidebar with one current

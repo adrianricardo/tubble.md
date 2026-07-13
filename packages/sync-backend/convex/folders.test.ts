@@ -393,7 +393,25 @@ describe("guest create + move", () => {
 		);
 		expect(result).toMatchObject({
 			status: "confirmation-required",
-			impact: { gainingUserCount: 1, repoExposureChanged: true },
+			impact: {
+				gainingUserCount: 1,
+				repoExposureChanged: true,
+				userChanges: [
+					{
+						name: "Stranger",
+						email: "stranger@example.com",
+						fromRole: null,
+						toRole: "viewer",
+					},
+				],
+				repositoryChanges: [
+					{
+						change: "added",
+						folderPath: "External",
+						repoName: "external-repo",
+					},
+				],
+			},
 		});
 		const doc = await t.run((ctx) => ctx.db.get(rootDocId));
 		expect(doc?.folderId).toBe(rootFolderId);
@@ -486,6 +504,49 @@ describe("guest create + move", () => {
 		expect(refreshed.fingerprint).not.toBe(prepared.fingerprint);
 		const doc = await t.run((ctx) => ctx.db.get(rootDocId));
 		expect(doc?.folderId).toBe(rootFolderId);
+	});
+
+	test("prepare relocation reviews inherited role changes for named people", async () => {
+		const t = testInstance();
+		const { ownerId, strangerId, workspaceId, rootDocId, rootFolderId } =
+			await setupFolderTree(t);
+		const destinationId = await t.run((ctx) =>
+			ctx.db.insert("folders", {
+				workspaceId,
+				name: "Editors",
+				createdAt: 1,
+				updatedAt: 1,
+			}),
+		);
+		await shareFolder(t, rootFolderId, strangerId, "viewer");
+		await shareFolder(t, destinationId, strangerId, "editor");
+
+		const result = await asUser(t, ownerId).mutation(
+			api.folders.prepareDocumentRelocation,
+			{
+				documentId: rootDocId,
+				folderId: destinationId,
+				title: "Root Doc",
+				path: "Editors/Root Doc.md",
+			},
+		);
+
+		expect(result).toMatchObject({
+			status: "confirmation-required",
+			impact: {
+				gainingUserCount: 0,
+				losingUserCount: 0,
+				userChanges: [
+					{
+						name: "Stranger",
+						fromRole: "viewer",
+						toRole: "editor",
+					},
+				],
+			},
+		});
+		const document = await t.run((ctx) => ctx.db.get(rootDocId));
+		expect(document?.folderId).toBe(rootFolderId);
 	});
 });
 

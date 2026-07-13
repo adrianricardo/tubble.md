@@ -61,11 +61,33 @@ export type DocumentPatchResult = {
 	markdown: string;
 };
 
+export type DocumentAccessRole = "owner" | "editor" | "commenter" | "viewer";
+
 export type DocumentRelocationImpact = {
 	gainingUserCount: number;
 	losingUserCount: number;
 	publicAccessChanged: boolean;
 	repoExposureChanged: boolean;
+	/** Optional so pending moves written by older desktop builds remain readable. */
+	userChanges?: Array<{
+		userId: string;
+		name: string | null;
+		email: string | null;
+		fromRole: DocumentAccessRole | null;
+		toRole: DocumentAccessRole | null;
+	}>;
+	userChangesTruncated?: boolean;
+	publicAccessChange?: {
+		fromRole: DocumentAccessRole | null;
+		toRole: DocumentAccessRole | null;
+	};
+	repositoryChanges?: Array<{
+		change: "added" | "removed";
+		folderId: string;
+		folderPath: string;
+		repoName: string | null;
+		repoRemoteUrl: string | null;
+	}>;
 };
 
 export type DocumentRelocationResult =

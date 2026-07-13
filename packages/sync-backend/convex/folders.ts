@@ -498,17 +498,38 @@ export const moveDocument = mutation({
 });
 
 type RelocationBoundary = {
-	users: string[];
+	users: Array<{ userId: Id<"users">; role: DocumentRole }>;
 	publicRole: DocumentRole | null;
-	repoRoots: string[];
+	repoRoots: Array<{
+		folderId: Id<"folders">;
+		folderPath: string;
+		repoName: string | null;
+		repoRemoteUrl: string | null;
+	}>;
 };
+
+const relocationRoleRank: Record<DocumentRole, number> = {
+	viewer: 1,
+	commenter: 2,
+	editor: 3,
+	owner: 4,
+};
+
+function strongerRelocationRole(
+	current: DocumentRole | null | undefined,
+	candidate: DocumentRole,
+): DocumentRole {
+	return !current || relocationRoleRank[candidate] > relocationRoleRank[current]
+		? candidate
+		: current;
+}
 
 async function relocationBoundary(
 	ctx: MutationCtx,
 	folderId: Id<"folders"> | undefined,
 ): Promise<RelocationBoundary> {
-	const users = new Set<string>();
-	const repoRoots = new Set<string>();
+	const users = new Map<Id<"users">, DocumentRole>();
+	const chain: Doc<"folders">[] = [];
 	let publicRole: DocumentRole | null = null;
 	let current = folderId;
 	let depth = 0;
@@ -516,21 +537,43 @@ async function relocationBoundary(
 		const folderId = current;
 		const folder = await ctx.db.get(folderId);
 		if (!folder || folder.deletedAt !== undefined) break;
-		if (folder.repoName || folder.repoRemoteUrl) repoRoots.add(folder._id);
+		chain.push(folder);
 		for (const share of await ctx.db
 			.query("folderShares")
 			.withIndex("by_folder", (q) => q.eq("folderId", folderId))
 			.take(256)) {
-			if (share.userId) users.add(share.userId);
-			if (share.linkScope === "public") publicRole = share.role;
+			if (share.userId) {
+				users.set(
+					share.userId,
+					strongerRelocationRole(users.get(share.userId), share.role),
+				);
+			}
+			if (share.linkScope === "public") {
+				publicRole = strongerRelocationRole(publicRole, share.role);
+			}
 		}
 		current = folder.parentId;
 		depth++;
 	}
 	return {
-		users: [...users].sort(),
+		users: [...users]
+			.map(([userId, role]) => ({ userId, role }))
+			.sort((a, b) => a.userId.localeCompare(b.userId)),
 		publicRole,
-		repoRoots: [...repoRoots].sort(),
+		repoRoots: chain
+			.map((folder, index) => ({ folder, index }))
+			.filter(({ folder }) => folder.repoName || folder.repoRemoteUrl)
+			.map(({ folder, index }) => ({
+				folderId: folder._id,
+				folderPath: chain
+					.slice(index)
+					.reverse()
+					.map((ancestor) => ancestor.name)
+					.join("/"),
+				repoName: folder.repoName ?? null,
+				repoRemoteUrl: folder.repoRemoteUrl ?? null,
+			}))
+			.sort((a, b) => a.folderId.localeCompare(b.folderId)),
 	};
 }
 
@@ -541,18 +584,72 @@ function relocationFingerprint(
 	return JSON.stringify({ source, destination });
 }
 
-function relocationImpact(
+async function relocationImpact(
+	ctx: MutationCtx,
 	source: RelocationBoundary,
 	destination: RelocationBoundary,
 ) {
-	const sourceUsers = new Set(source.users);
-	const destinationUsers = new Set(destination.users);
+	const sourceUsers = new Map(
+		source.users.map(({ userId, role }) => [userId, role]),
+	);
+	const destinationUsers = new Map(
+		destination.users.map(({ userId, role }) => [userId, role]),
+	);
+	const changedUserIds = [
+		...new Set([...sourceUsers.keys(), ...destinationUsers.keys()]),
+	]
+		.filter(
+			(userId) => sourceUsers.get(userId) !== destinationUsers.get(userId),
+		)
+		.sort((a, b) => a.localeCompare(b));
+	// Counts stay exact, while identity details are capped to keep the mutation
+	// response and the device-local review journal bounded.
+	const detailedUserIds = changedUserIds.slice(0, 25);
+	const userDetails = await Promise.all(
+		detailedUserIds.map(async (userId) => ({
+			userId,
+			user: await ctx.db.get(userId),
+		})),
+	);
+	const sourceRepos = new Map(
+		source.repoRoots.map((repository) => [repository.folderId, repository]),
+	);
+	const destinationRepos = new Map(
+		destination.repoRoots.map((repository) => [
+			repository.folderId,
+			repository,
+		]),
+	);
+	const repositoryChanges = [
+		...source.repoRoots
+			.filter(({ folderId }) => !destinationRepos.has(folderId))
+			.map((repository) => ({ change: "removed" as const, ...repository })),
+		...destination.repoRoots
+			.filter(({ folderId }) => !sourceRepos.has(folderId))
+			.map((repository) => ({ change: "added" as const, ...repository })),
+	];
 	return {
-		gainingUserCount: destination.users.filter((id) => !sourceUsers.has(id)).length,
-		losingUserCount: source.users.filter((id) => !destinationUsers.has(id)).length,
+		gainingUserCount: changedUserIds.filter(
+			(userId) => !sourceUsers.has(userId) && destinationUsers.has(userId),
+		).length,
+		losingUserCount: changedUserIds.filter(
+			(userId) => sourceUsers.has(userId) && !destinationUsers.has(userId),
+		).length,
 		publicAccessChanged: source.publicRole !== destination.publicRole,
-		repoExposureChanged:
-			JSON.stringify(source.repoRoots) !== JSON.stringify(destination.repoRoots),
+		repoExposureChanged: repositoryChanges.length > 0,
+		userChanges: userDetails.map(({ userId, user }) => ({
+			userId,
+			name: user?.name ?? null,
+			email: user?.email ?? null,
+			fromRole: sourceUsers.get(userId) ?? null,
+			toRole: destinationUsers.get(userId) ?? null,
+		})),
+		userChangesTruncated: changedUserIds.length > detailedUserIds.length,
+		publicAccessChange: {
+			fromRole: source.publicRole,
+			toRole: destination.publicRole,
+		},
+		repositoryChanges,
 	};
 }
 
@@ -575,21 +672,22 @@ export const prepareDocumentRelocation = mutation({
 				!destination ||
 				destination.deletedAt !== undefined ||
 				destination.workspaceId !== document.workspaceId
-			) throw new Error("Folder not found");
+			)
+				throw new Error("Folder not found");
 		}
 		const member = await isWorkspaceMember(ctx, document.workspaceId);
 		if (!member) {
 			if (!args.folderId) throw new Error("Unauthorized");
 			const role = await folderRole(ctx, args.folderId);
-			if (role !== "owner" && role !== "editor") throw new Error("Unauthorized");
+			if (role !== "owner" && role !== "editor")
+				throw new Error("Unauthorized");
 		}
 		const source = await relocationBoundary(ctx, document.folderId);
 		const destination = await relocationBoundary(ctx, args.folderId);
 		const fingerprint = relocationFingerprint(source, destination);
-		const impact = relocationImpact(source, destination);
+		const impact = await relocationImpact(ctx, source, destination);
 		if (
-			impact.gainingUserCount === 0 &&
-			impact.losingUserCount === 0 &&
+			impact.userChanges.length === 0 &&
 			!impact.publicAccessChanged &&
 			!impact.repoExposureChanged
 		) {
@@ -629,19 +727,21 @@ export const confirmDocumentRelocation = mutation({
 				!destination ||
 				destination.deletedAt !== undefined ||
 				destination.workspaceId !== document.workspaceId
-			) throw new Error("Folder not found");
+			)
+				throw new Error("Folder not found");
 		}
 		const member = await isWorkspaceMember(ctx, document.workspaceId);
 		if (!member) {
 			if (!args.folderId) throw new Error("Unauthorized");
 			const role = await folderRole(ctx, args.folderId);
-			if (role !== "owner" && role !== "editor") throw new Error("Unauthorized");
+			if (role !== "owner" && role !== "editor")
+				throw new Error("Unauthorized");
 		}
 
 		const source = await relocationBoundary(ctx, document.folderId);
 		const destination = await relocationBoundary(ctx, args.folderId);
 		const fingerprint = relocationFingerprint(source, destination);
-		const impact = relocationImpact(source, destination);
+		const impact = await relocationImpact(ctx, source, destination);
 		if (fingerprint !== args.fingerprint) {
 			return {
 				status: "confirmation-required" as const,
