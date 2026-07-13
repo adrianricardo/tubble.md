@@ -201,6 +201,31 @@ export type RepoMount = {
 	lastReconcileAt: number | null;
 };
 
+export type BlockedRepoMountCleanliness = {
+	state: "blocked";
+	reason: LiveSyncStatusState | "disconnected" | "dirty";
+	message: string;
+};
+
+export type RepoMountCleanliness =
+	| { state: "clean" }
+	| BlockedRepoMountCleanliness;
+
+export type RepoMountStopResult =
+	| { status: "stopped"; mountPath: string; keptFiles: boolean }
+	| { status: "blocked"; cleanliness: BlockedRepoMountCleanliness };
+
+export type RepoMountRelocateInput = {
+	folderId: string;
+	mountPath: string;
+	deploymentUrl: string;
+	authToken: string;
+};
+
+export type RepoMountRelocateResult =
+	| { status: "relocated"; mount: RepoMount }
+	| { status: "blocked"; cleanliness: BlockedRepoMountCleanliness };
+
 export type DesktopAuthState = {
 	deploymentUrl: string;
 	email?: string;
@@ -408,6 +433,16 @@ export type DesktopApi = {
 	undoRepoLink(input: { folderId: string }): Promise<RepoLinkUndoResult>;
 	/** Deregister a repo mount and leave the materialized files on disk. */
 	unlinkRepoFolder(folderId: string): Promise<void>;
+	inspectRepoMount(folderId: string): Promise<RepoMountCleanliness>;
+	stopRepoMount(input: {
+		folderId: string;
+		keepFiles: boolean;
+		deploymentUrl: string;
+		authToken: string;
+	}): Promise<RepoMountStopResult>;
+	relocateRepoMount(
+		input: RepoMountRelocateInput,
+	): Promise<RepoMountRelocateResult>;
 	/** All persisted repo mounts on this machine, with live engine status. */
 	listRepoMounts(): Promise<RepoMount[]>;
 	/** Reconnect persisted mounts (post sign-in) so their engines resume syncing. */

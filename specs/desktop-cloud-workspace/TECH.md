@@ -1,8 +1,8 @@
 # Desktop cloud workspace
 
 > **Architecture snapshot:** revalidated on `v1-release` at
-> [`05fd66e63e123150503e3fd0fc7c090797dd8d60`](https://github.com/bholmesdev/hubble.md/tree/05fd66e63e123150503e3fd0fc7c090797dd8d60)
-> on 2026-07-13 after the completed Phase 4 root-scoping/status slice.
+> [`2f3fb6f`](https://github.com/bholmesdev/hubble.md/tree/2f3fb6f)
+> on 2026-07-13 after the second flag-gated Phase 5 unified-shell slice.
 > The product contract is durable; re-run the gate after material architectural changes.
 
 ## Context
@@ -98,6 +98,16 @@ only `selectedSpaceId`, and there is no internal unified-tree flag, context unio
 cloud-ID tree component. The existing `ProjectionManager` and `listRepoMounts` API are
 the current local-availability join boundary; do not infer device state from folder
 repo metadata.
+
+**2026-07-13 Phase 5 controls revalidation:** re-run against `2f3fb6f`. The unified
+tree and scoped mount-status join are present behind the internal flag. Existing
+`listRepoMounts` remains the renderer boundary for local availability, while mount
+lifecycle mutations remain in `apps/desktop/electron/main.ts` behind typed preload
+IPC. Contextual reveal/copy can stay renderer-local; relocate and stop-local require
+explicit lifecycle APIs so cleanliness, engine ownership, overlap validation, config
+updates, and filesystem changes remain main-process responsibilities. Existing
+`folders.list` and `sync.listWorkspaceMembers` queries are sufficient for the
+multi-member create destination prompt; no backend contract change is required.
 
 ### Architecture principles
 
@@ -379,6 +389,28 @@ Documents**, **On this computer**, or local open/create controls. The dev Convex
 was returning a transient 500, so populated-tree interaction remains an acceptance
 gate rather than a completed live test.
 
+The contextual-control slice is complete at code/test/build level. Directly available
+folder roots now expose reveal, copy-path, relocate, and stop-local actions from the
+unified tree; tree rows retain roving focus and expose their action menu through
+Shift+F10/ContextMenu. Relocation requires a connected, byte-clean projection,
+re-checks after closing the watcher, rejects an occupied/overlapping destination, and
+re-keys both legacy and v2 absolute-path indexes before reconnecting. Stop-local uses
+the same two-stage cleanliness gate and offers either removal of verified managed
+files or retention as a detached Markdown copy. Multi-member Workspace creation now
+prompts for Workspace root or a named folder path and identifies root access as
+available to Workspace members. Focused desktop tests pass 7/7, cloud UI tests pass
+4/4, and `pnpm build:desktop` passes. Populated-tree keyboard/screen-reader and real
+filesystem acceptance remain before removing the flag.
+
+The 2026-07-13 acceptance preflight made tree-item screen-reader names explicit,
+including named local state and menu availability, and moved initial destination-dialog
+focus from the header close control to the selected Workspace-root choice. Focused
+tests and the flagged desktop build pass. The managed session could not launch an
+interactive Electron/CDP target because process inspection, local listeners, Unix
+sockets, and direct Electron startup were restricted. The flag remains until the host
+operator gate in
+`runs/2026-07-13-phase-5-acceptance-preflight.md` passes.
+
 1. Add the cloud context state and migration from `selectedSpaceId`.
 2. Build `CloudContentTree` from cloud IDs. Render root folders and documents in one
    hierarchy and preserve expansion/selection by stable ID.
@@ -395,6 +427,11 @@ gate rather than a completed live test.
    product spec.
 
 ### Phase 6 — Import, unlink, and recovery completion
+
+**Progress 2026-07-13:** the clean stop-local portion of step 3 is implemented behind
+the unified-tree flag, including remove-versus-detached-copy choice and dirty/status
+blocking. Import, authorization-loss recovery, minimal recovery controls, and live
+clean/dirty stop acceptance remain.
 
 1. Route import through the chosen destination and folder-aware idempotent creation.
 2. Keep originals for **Import a copy**. For **Move into Hubble**, delete the source

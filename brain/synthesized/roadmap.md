@@ -242,9 +242,40 @@ mounts stay quiet; exception states are named. Desktop tests pass 150/150, cloud
 tests pass 4/4, and `pnpm build:desktop` passes. A real flagged Electron smoke pass
 confirmed the local-authority labels/actions are absent while an already-open local
 document remains editable; populated-cloud interaction was blocked by a transient dev
-Convex push 500. Next: add contextual reveal/copy/relocate/stop controls with Phase 6
-cleanliness gates, complete multi-member destination prompting, then run populated-tree
-keyboard and screen-reader acceptance before removing the internal flag.
+Convex push 500. The contextual controls and destination prompt left by this foundation
+are completed below; populated-tree acceptance remains.
+
+**Phase 5 contextual controls and destination prompting are implemented at
+code/test/build level** (working tree, 2026-07-13): directly available folder roots in
+the unified tree expose reveal, copy-path, relocate, and stop-local actions, with
+Shift+F10/ContextMenu access from keyboard-focused tree rows. Relocate and stop require
+a connected byte-clean engine, re-check after the watcher closes, and preserve local
+bytes when status or content cannot be proven clean. Relocation rejects occupied or
+overlapping roots and re-keys legacy/v2 absolute-path indexes before reconnecting.
+Clean stop offers removal or a detached Markdown copy; cloud content and sharing stay
+unchanged. Global create in a multi-member Workspace now prompts for Workspace root or
+a labeled folder path and names root access explicitly. Focused desktop tests pass
+7/7, cloud UI tests pass 4/4, and `pnpm build:desktop` passes after
+simplify/review-readiness. **Acceptance remains:** use the desktop-app testing workflow
+with the unified flag and populated dev data to run keyboard + screen-reader acceptance for
+tree navigation, local action menus, the multi-member destination dialog, relocation,
+and clean/dirty stop. Record real-filesystem results, fix any findings, then decide
+whether the internal flag can be removed. Phase 6 import, revocation, and minimal
+recovery completion remain after that gate.
+
+**Phase 5 populated-tree acceptance preflight is complete** (working tree,
+2026-07-13): static accessibility review found and fixed unstable tree-item accessible
+names caused by nested action controls, added explicit named local state/menu semantics,
+and made the selected Workspace-root destination the create dialog's initial focus.
+Cloud UI tests pass 5/5, focused cleanliness/destination tests pass 7/7, changed-file
+Biome and `git diff --check` pass, and the flagged production desktop build passes.
+The managed session could not run the interactive Electron gate: macOS process
+inspection, localhost/Unix-socket listeners, and direct Electron startup were denied
+before app interaction. The internal flag remains. Run record and exact host checklist:
+`specs/desktop-cloud-workspace/runs/2026-07-13-phase-5-acceptance-preflight.md`.
+**Next:** run that checklist in a host session with Electron/CDP and populated dev data,
+fix any finding, then remove the flag if the gate passes. Do not begin Phase 6 ahead of
+this gate.
 
 Desktop IA follow-up (direction settled 2026-07-11): replace the simultaneous
 **Folders** / **Live Documents** / **On this computer** sidebar with one current

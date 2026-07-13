@@ -119,6 +119,11 @@ const desktopApi = {
 	undoRepoLink: (input) => ipcRenderer.invoke("desktop:repo-link:undo", input),
 	unlinkRepoFolder: (folderId) =>
 		ipcRenderer.invoke("desktop:repo-link:unlink", folderId),
+	inspectRepoMount: (folderId) =>
+		ipcRenderer.invoke("desktop:repo-link:inspect", folderId),
+	stopRepoMount: (input) => ipcRenderer.invoke("desktop:repo-link:stop", input),
+	relocateRepoMount: (input) =>
+		ipcRenderer.invoke("desktop:repo-link:relocate", input),
 	listRepoMounts: () => ipcRenderer.invoke("desktop:repo-link:list"),
 	reconnectRepoMounts: (input) =>
 		ipcRenderer.invoke("desktop:repo-link:reconnect", input),

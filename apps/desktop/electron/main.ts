@@ -40,7 +40,11 @@ import type {
 	RepoLinkInput,
 	RepoLinkResult,
 	RepoMount,
+	RepoMountCleanliness,
 	RepoMountReconnectInput,
+	RepoMountRelocateInput,
+	RepoMountRelocateResult,
+	RepoMountStopResult,
 	SyncedFolderConnectInput,
 	SyncedFolderEvent,
 	SyncedFolderImportInput,
@@ -70,7 +74,11 @@ import {
 	resolveGitRepo,
 	sanitizeMountSegment,
 } from "./repoLink";
-import { isMountClean } from "./repoMountClean";
+import {
+	isMountClean,
+	mountCleanliness,
+	rewriteProjectionIndexRoot,
+} from "./repoMountClean";
 import {
 	classifySyncedFolderRoot,
 	SYNCED_FOLDER_INDEX_REL,
@@ -388,6 +396,18 @@ const desktopAuthHandoffSchema = z.object({
 });
 const repoLinkUndoSchema = z.object({
 	folderId: z.string().min(1),
+});
+const repoMountStopSchema = z.object({
+	folderId: z.string().min(1),
+	keepFiles: z.boolean(),
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+});
+const repoMountRelocateSchema = z.object({
+	folderId: z.string().min(1),
+	mountPath: z.string().min(1),
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
 });
 const defaultWindowState: WindowState = { width: 920, height: 720 };
 const windowStateSchema = z.object({
@@ -782,6 +802,193 @@ async function undoRepoMount(folderId: string): Promise<{
 		mountPath: mount.mountPath,
 		removedFiles: clean,
 	};
+}
+
+async function inspectRepoMountCleanliness(
+	folderId: string,
+): Promise<RepoMountCleanliness> {
+	const mount = (await loadRepoMountConfig()).find(
+		(entry) => entry.folderId === folderId,
+	);
+	if (!mount) throw new Error(`Local availability not found: ${folderId}`);
+	const status = repoMountStatus(mount).status;
+	const filesClean =
+		status === "connected" && (await isMountClean(mount.mountPath));
+	return mountCleanliness(status, filesClean);
+}
+
+async function stopRepoMount(input: unknown): Promise<RepoMountStopResult> {
+	const parsed = repoMountStopSchema.parse(input);
+	const mounts = await loadRepoMountConfig();
+	const mount = mounts.find((entry) => entry.folderId === parsed.folderId);
+	if (!mount)
+		throw new Error(`Local availability not found: ${parsed.folderId}`);
+	const cleanliness = await inspectRepoMountCleanliness(parsed.folderId);
+	if (cleanliness.state === "blocked") {
+		return { status: "blocked", cleanliness };
+	}
+	// The dialog inspection is advisory. Stop the watcher and verify the bytes
+	// once more so an intervening edit is preserved instead of detached/removed.
+	await projectionManager.disconnectMount(parsed.folderId);
+	const stoppedCleanliness = mountCleanliness(
+		"connected",
+		await isMountClean(mount.mountPath),
+	);
+	if (stoppedCleanliness.state === "blocked") {
+		await connectRepoMountEngine(
+			parsed.folderId,
+			mount.workspaceId,
+			mount.mountPath,
+			parsed.deploymentUrl,
+			parsed.authToken,
+		);
+		return { status: "blocked", cleanliness: stoppedCleanliness };
+	}
+	await removeRepoMountConfig(parsed.folderId);
+	if (parsed.keepFiles) {
+		await fs.rm(path.join(mount.mountPath, ".hubble"), {
+			recursive: true,
+			force: true,
+		});
+	} else {
+		await fs.rm(mount.mountPath, { recursive: true, force: true });
+	}
+	if (
+		projectionManager.mountCount === 0 &&
+		!projectionManager.wholeWorkspaceConnected
+	) {
+		setBackgroundActive(false);
+	}
+	return {
+		status: "stopped",
+		mountPath: mount.mountPath,
+		keptFiles: parsed.keepFiles,
+	};
+}
+
+async function moveProjectionRoot(
+	fromPath: string,
+	toPath: string,
+): Promise<void> {
+	// The picker creates the destination. rmdir fails safely if anything arrived
+	// after validation; recursive removal here could destroy an unrelated file.
+	await fs.rmdir(toPath);
+	try {
+		await fs.rename(fromPath, toPath);
+	} catch (error) {
+		if (
+			!(error instanceof Error) ||
+			!("code" in error) ||
+			error.code !== "EXDEV"
+		) {
+			throw error;
+		}
+		try {
+			await fs.cp(fromPath, toPath, {
+				recursive: true,
+				errorOnExist: true,
+				force: false,
+			});
+			await fs.rm(fromPath, { recursive: true, force: true });
+		} catch (copyError) {
+			await fs.rm(toPath, { recursive: true, force: true });
+			throw copyError;
+		}
+	}
+}
+
+async function relocateRepoMount(
+	input: RepoMountRelocateInput,
+): Promise<RepoMountRelocateResult> {
+	const parsed = repoMountRelocateSchema.parse(input);
+	const mounts = await loadRepoMountConfig();
+	const mount = mounts.find((entry) => entry.folderId === parsed.folderId);
+	if (!mount)
+		throw new Error(`Local availability not found: ${parsed.folderId}`);
+	const cleanliness = await inspectRepoMountCleanliness(parsed.folderId);
+	if (cleanliness.state === "blocked") {
+		return { status: "blocked", cleanliness };
+	}
+	const nextPath = assertGrantedRoot(parsed.mountPath);
+	if (resolvePath(mount.mountPath) === resolvePath(nextPath)) {
+		throw new Error("Choose a different folder for local availability.");
+	}
+	const entries = await fs.readdir(nextPath);
+	if (entries.length > 0) {
+		throw new Error("Choose a new empty folder for local availability.");
+	}
+	await assertLocalProjectionRootsDisjoint(
+		toProjectionMount({ ...mount, mountPath: nextPath }),
+		mounts
+			.filter((entry) => entry.folderId !== parsed.folderId)
+			.map(toProjectionMount),
+		{
+			realpath: fs.realpath,
+			caseInsensitive:
+				process.platform === "darwin" || process.platform === "win32",
+		},
+	);
+	await projectionManager.disconnectMount(parsed.folderId);
+	// Close the watcher, then compare indexed bytes again before changing either
+	// path. This catches edits made after the renderer's initial inspection.
+	const stoppedCleanliness = mountCleanliness(
+		"connected",
+		await isMountClean(mount.mountPath),
+	);
+	if (stoppedCleanliness.state === "blocked") {
+		await connectRepoMountEngine(
+			parsed.folderId,
+			mount.workspaceId,
+			mount.mountPath,
+			parsed.deploymentUrl,
+			parsed.authToken,
+		);
+		return { status: "blocked", cleanliness: stoppedCleanliness };
+	}
+	try {
+		await rewriteProjectionIndexRoot(
+			mount.mountPath,
+			mount.mountPath,
+			nextPath,
+		);
+	} catch (error) {
+		await connectRepoMountEngine(
+			parsed.folderId,
+			mount.workspaceId,
+			mount.mountPath,
+			parsed.deploymentUrl,
+			parsed.authToken,
+		);
+		throw error;
+	}
+	try {
+		await moveProjectionRoot(mount.mountPath, nextPath);
+	} catch (error) {
+		await rewriteProjectionIndexRoot(
+			mount.mountPath,
+			nextPath,
+			mount.mountPath,
+		);
+		await connectRepoMountEngine(
+			parsed.folderId,
+			mount.workspaceId,
+			mount.mountPath,
+			parsed.deploymentUrl,
+			parsed.authToken,
+		);
+		throw error;
+	}
+	const relocated = { ...mount, mountPath: nextPath };
+	await upsertRepoMountConfig(relocated);
+	grantRoot(nextPath);
+	await connectRepoMountEngine(
+		parsed.folderId,
+		mount.workspaceId,
+		nextPath,
+		parsed.deploymentUrl,
+		parsed.authToken,
+	);
+	return { status: "relocated", mount: repoMountStatus(relocated) };
 }
 
 async function startCliCommandServer(): Promise<void> {
@@ -2166,6 +2373,17 @@ function registerIpc() {
 		async (_event, folderId: string) => {
 			await unlinkRepoMount(folderId);
 		},
+	);
+
+	ipcMain.handle("desktop:repo-link:inspect", (_event, folderId: string) =>
+		inspectRepoMountCleanliness(z.string().min(1).parse(folderId)),
+	);
+	ipcMain.handle("desktop:repo-link:stop", (_event, input: unknown) =>
+		stopRepoMount(input),
+	);
+	ipcMain.handle(
+		"desktop:repo-link:relocate",
+		(_event, input: RepoMountRelocateInput) => relocateRepoMount(input),
 	);
 
 	ipcMain.handle("desktop:repo-link:undo", async (_event, input: unknown) => {

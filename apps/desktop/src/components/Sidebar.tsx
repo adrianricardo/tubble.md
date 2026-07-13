@@ -1,11 +1,14 @@
+import { useAuthToken } from "@convex-dev/auth/react";
 import {
 	CloudContentTree,
+	type CloudFolderAvailability,
 	FoldersSection,
 	LiveDocumentsSection,
 } from "@hubble.md/cloud-ui";
 import { api } from "@hubble.md/sync-backend";
 import {
 	Button,
+	Modal,
 	Sidebar as SharedSidebar,
 	type SidebarFocusedItem,
 	SidebarFrame,
@@ -18,10 +21,17 @@ import {
 	useMutation,
 	useQuery,
 } from "convex/react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
 import { toast } from "sonner";
 import MingcuteAddLine from "~icons/mingcute/add-line";
 import MingcuteCloudLine from "~icons/mingcute/cloud-line";
+import { desktopConvexUrl } from "../convex";
 import { desktopApi } from "../desktopApi";
 import type { RepoMount } from "../desktopApi/types";
 import { unifiedCloudTreeEnabled } from "../featureFlags";
@@ -297,23 +307,24 @@ function UnifiedAuthenticatedCloudSidebar({
 	onOpenDocument?: (documentId: string) => void;
 }) {
 	const { spaces, sharedFolders, context } = useSelectedCloudContext();
+	const authToken = useAuthToken();
 	const [mounts, setMounts] = useState<RepoMount[]>([]);
+	const [stopTarget, setStopTarget] = useState<CloudFolderAvailability | null>(
+		null,
+	);
+	const [stopping, setStopping] = useState(false);
+	const refreshMounts = useCallback(() => {
+		void desktopApi.listRepoMounts().then(setMounts);
+	}, []);
 	useEffect(() => {
-		let active = true;
-		const refresh = () => {
-			void desktopApi.listRepoMounts().then((next) => {
-				if (active) setMounts(next);
-			});
-		};
-		refresh();
-		const unsubscribeLinked = desktopApi.onRepoLinkLinked(refresh);
-		const unsubscribeSync = desktopApi.onSyncedFolderEvent(refresh);
+		refreshMounts();
+		const unsubscribeLinked = desktopApi.onRepoLinkLinked(refreshMounts);
+		const unsubscribeSync = desktopApi.onSyncedFolderEvent(refreshMounts);
 		return () => {
-			active = false;
 			unsubscribeLinked();
 			unsubscribeSync();
 		};
-	}, []);
+	}, [refreshMounts]);
 	const localFolders = useMemo(
 		() =>
 			mounts.map((mount) => ({
@@ -334,6 +345,98 @@ function UnifiedAuthenticatedCloudSidebar({
 	const openDocument = (documentId: string) => {
 		if (onOpenDocument) onOpenDocument(documentId);
 		else toast("Document opening is unavailable in this window");
+	};
+	const copyLocalPath = async (availability: CloudFolderAvailability) => {
+		try {
+			await navigator.clipboard.writeText(availability.localPath);
+			toast.success("Local path copied");
+		} catch {
+			toast.error("Failed to copy local path");
+		}
+	};
+	const relocateLocalFolder = async (availability: CloudFolderAvailability) => {
+		if (!authToken || !desktopConvexUrl) {
+			toast.error("Sign in before relocating local availability");
+			return;
+		}
+		const mountPath = await desktopApi.createFolderPicker();
+		if (!mountPath) return;
+		try {
+			const result = await desktopApi.relocateRepoMount({
+				folderId: availability.folderId,
+				mountPath,
+				deploymentUrl: desktopConvexUrl,
+				authToken,
+			});
+			if (result.status === "blocked") {
+				toast.error("Local availability can’t be relocated yet", {
+					description: result.cleanliness.message,
+				});
+				return;
+			}
+			refreshMounts();
+			toast.success("Local availability relocated", {
+				description: result.mount.mountPath,
+			});
+		} catch (error) {
+			refreshMounts();
+			toast.error("Failed to relocate local availability", {
+				description: error instanceof Error ? error.message : String(error),
+			});
+		}
+	};
+	const requestStop = async (availability: CloudFolderAvailability) => {
+		try {
+			const cleanliness = await desktopApi.inspectRepoMount(
+				availability.folderId,
+			);
+			if (cleanliness.state === "blocked") {
+				toast.error("Local availability can’t stop yet", {
+					description: cleanliness.message,
+				});
+				return;
+			}
+			setStopTarget(availability);
+		} catch (error) {
+			toast.error("Could not inspect local availability", {
+				description: error instanceof Error ? error.message : String(error),
+			});
+		}
+	};
+	const confirmStop = async (keepFiles: boolean) => {
+		if (!stopTarget || stopping) return;
+		if (!authToken || !desktopConvexUrl) {
+			toast.error("Sign in before stopping local availability");
+			return;
+		}
+		setStopping(true);
+		try {
+			const result = await desktopApi.stopRepoMount({
+				folderId: stopTarget.folderId,
+				keepFiles,
+				deploymentUrl: desktopConvexUrl,
+				authToken,
+			});
+			if (result.status === "blocked") {
+				toast.error("Local availability can’t stop yet", {
+					description: result.cleanliness.message,
+				});
+				return;
+			}
+			setStopTarget(null);
+			refreshMounts();
+			toast.success("Local availability stopped", {
+				description: keepFiles
+					? `The files at ${result.mountPath} are now a detached copy.`
+					: "The clean managed files were removed from this computer.",
+			});
+		} catch (error) {
+			toast.error("Failed to stop local availability", {
+				description: error instanceof Error ? error.message : String(error),
+			});
+		} finally {
+			setStopping(false);
+		}
 	};
 
 	if (!spaces || !sharedFolders) {
@@ -368,6 +471,14 @@ function UnifiedAuthenticatedCloudSidebar({
 						selectedDocumentId={activeDocumentId}
 						onSelectDocument={openDocument}
 						localFolders={localFolders}
+						onRevealLocalFolder={(availability) =>
+							void desktopApi.revealFile(availability.localPath)
+						}
+						onCopyLocalPath={(availability) => void copyLocalPath(availability)}
+						onRelocateLocalFolder={(availability) =>
+							void relocateLocalFolder(availability)
+						}
+						onStopLocalFolder={(availability) => void requestStop(availability)}
 					/>
 				</>
 			) : (
@@ -375,6 +486,51 @@ function UnifiedAuthenticatedCloudSidebar({
 					Create a Workspace or ask someone to share a folder with you.
 				</p>
 			)}
+			<Modal
+				open={stopTarget !== null}
+				onOpenChange={(open) => {
+					if (!open && !stopping) setStopTarget(null);
+				}}
+				title="Stop making this folder available?"
+				description="This changes only this computer. Cloud documents and sharing stay unchanged."
+			>
+				<div className="flex flex-col gap-3">
+					<p className="m-0 break-all rounded-sm bg-muted text-[11px] text-muted-foreground [padding-block:0.5rem] [padding-inline:0.625rem]">
+						{stopTarget?.localPath}
+					</p>
+					<p className="m-0 text-xs text-foreground">
+						Hubble verified that the managed files match the synchronized cloud
+						content. You can keep them as a detached Markdown copy or remove
+						them from this computer.
+					</p>
+					<div className="flex flex-wrap justify-end gap-2 [padding-block-start:0.25rem]">
+						<Button
+							type="button"
+							variant="ghost"
+							onClick={() => setStopTarget(null)}
+							disabled={stopping}
+						>
+							Cancel
+						</Button>
+						<Button
+							type="button"
+							variant="destructive"
+							onClick={() => void confirmStop(false)}
+							disabled={stopping}
+						>
+							Remove local files
+						</Button>
+						<Button
+							type="button"
+							onClick={() => void confirmStop(true)}
+							disabled={stopping}
+							autoFocus
+						>
+							{stopping ? "Stopping…" : "Keep detached copy"}
+						</Button>
+					</div>
+				</div>
+			</Modal>
 		</div>
 	);
 }

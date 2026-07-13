@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildCloudContentTree, searchCloudContent } from "./CloudContentTree";
+import {
+	buildCloudContentTree,
+	cloudTreeItemAccessibleLabel,
+	searchCloudContent,
+} from "./CloudContentTree";
 
 describe("buildCloudContentTree", () => {
 	it("renders root folders and documents in one stable hierarchy", () => {
@@ -60,5 +64,27 @@ describe("buildCloudContentTree", () => {
 		expect(searchCloudContent(tree, "launch")).toEqual([
 			{ id: "match", name: "Launch brief", path: "Research" },
 		]);
+	});
+});
+
+describe("cloudTreeItemAccessibleLabel", () => {
+	it("keeps the item name and local state explicit for screen readers", () => {
+		expect(cloudTreeItemAccessibleLabel("Projects")).toBe("Projects");
+		expect(
+			cloudTreeItemAccessibleLabel("Projects", {
+				folderId: "folder",
+				localPath: "/repo/brain/cloud",
+				status: "connected",
+			}),
+		).toBe(
+			"Projects. Available at /repo/brain/cloud. Local availability actions available.",
+		);
+		expect(
+			cloudTreeItemAccessibleLabel("Projects", {
+				folderId: "folder",
+				localPath: "/repo/brain/cloud",
+				status: "pending-review",
+			}),
+		).toContain("needs review");
 	});
 });

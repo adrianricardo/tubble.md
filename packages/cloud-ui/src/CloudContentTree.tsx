@@ -1,11 +1,18 @@
+import { Menu } from "@base-ui/react/menu";
 import { api } from "@hubble.md/sync-backend";
 import type { Id } from "@hubble.md/sync-backend/types";
+import { Button } from "@hubble.md/ui";
 import { useQuery } from "convex/react";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import MingcuteComputerLine from "~icons/mingcute/computer-line";
+import MingcuteCopy2Line from "~icons/mingcute/copy-2-line";
 import MingcuteFileLine from "~icons/mingcute/file-line";
 import MingcuteFolderLine from "~icons/mingcute/folder-line";
+import MingcuteFolderOpenLine from "~icons/mingcute/folder-open-line";
+import MingcuteMore2Line from "~icons/mingcute/more-2-line";
+import MingcuteMoveLine from "~icons/mingcute/move-line";
 import MingcuteRightLine from "~icons/mingcute/right-line";
+import MingcuteUnlinkLine from "~icons/mingcute/unlink-line";
 
 export type CloudContentContext =
 	| { kind: "workspace"; workspaceId: string }
@@ -40,6 +47,22 @@ export type CloudFolderAvailability = {
 		| "error"
 		| "disconnected";
 };
+
+export function cloudTreeItemAccessibleLabel(
+	name: string,
+	availability?: CloudFolderAvailability,
+): string {
+	if (!availability) return name;
+	const state =
+		availability.status === "connected"
+			? `Available at ${availability.localPath}`
+			: availability.status === "pending-review"
+				? `${availability.localPath}, needs review`
+				: availability.status === "disconnected"
+					? `${availability.localPath}, not connected`
+					: `${availability.localPath}, ${availability.status}`;
+	return `${name}. ${state}. Local availability actions available.`;
+}
 
 export type CloudDocumentSearchResult = {
 	id: string;
@@ -144,11 +167,19 @@ export function CloudContentTree({
 	selectedDocumentId,
 	onSelectDocument,
 	localFolders = [],
+	onRevealLocalFolder,
+	onCopyLocalPath,
+	onRelocateLocalFolder,
+	onStopLocalFolder,
 }: {
 	context: CloudContentContext;
 	selectedDocumentId: string | null;
 	onSelectDocument: (documentId: string) => void;
 	localFolders?: readonly CloudFolderAvailability[];
+	onRevealLocalFolder?: (availability: CloudFolderAvailability) => void;
+	onCopyLocalPath?: (availability: CloudFolderAvailability) => void;
+	onRelocateLocalFolder?: (availability: CloudFolderAvailability) => void;
+	onStopLocalFolder?: (availability: CloudFolderAvailability) => void;
 }) {
 	const workspaceId = context.workspaceId as Id<"workspaces">;
 	const workspaceFolders = useQuery(
@@ -169,7 +200,8 @@ export function CloudContentTree({
 	const [focusedId, setFocusedId] = useState<string | null>(null);
 	const [search, setSearch] = useState("");
 	const deferredSearch = useDeferredValue(search);
-	const itemRefs = useRef(new Map<string, HTMLButtonElement>());
+	const itemRefs = useRef(new Map<string, HTMLDivElement>());
+	const actionRefs = useRef(new Map<string, HTMLButtonElement>());
 
 	const nodes = useMemo(() => {
 		if (context.kind === "workspace") {
@@ -265,7 +297,14 @@ export function CloudContentTree({
 					className="w-full rounded-sm border border-border bg-background text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring [padding-block:0.3rem] [padding-inline:0.5rem]"
 				/>
 				{rootAvailability ? (
-					<AvailabilityMarker availability={rootAvailability} showPath />
+					<AvailabilityControl
+						availability={rootAvailability}
+						showPath
+						onReveal={onRevealLocalFolder}
+						onCopyPath={onCopyLocalPath}
+						onRelocate={onRelocateLocalFolder}
+						onStop={onStopLocalFolder}
+					/>
 				) : null}
 			</div>
 			{search.trim() ? (
@@ -341,6 +380,15 @@ export function CloudContentTree({
 								event.preventDefault();
 								focusItem(current.parentId);
 							}
+						} else if (
+							(event.key === "F10" && event.shiftKey) ||
+							event.key === "ContextMenu"
+						) {
+							const action = actionRefs.current.get(current.node.id);
+							if (action) {
+								event.preventDefault();
+								action.click();
+							}
 						}
 					}}
 				>
@@ -353,14 +401,14 @@ export function CloudContentTree({
 						const isSelected =
 							node.kind === "document" && node.id === selectedDocumentId;
 						return (
-							<button
+							<div
 								key={node.id}
-								ref={(element) => {
-									if (element) itemRefs.current.set(node.id, element);
-									else itemRefs.current.delete(node.id);
-								}}
-								type="button"
 								role="treeitem"
+								aria-label={cloudTreeItemAccessibleLabel(
+									node.name,
+									availability,
+								)}
+								aria-haspopup={availability ? "menu" : undefined}
 								aria-level={depth}
 								aria-expanded={isFolder ? isOpen : undefined}
 								aria-selected={isSelected}
@@ -370,7 +418,7 @@ export function CloudContentTree({
 										? 0
 										: -1
 								}
-								className={`group flex min-h-7 w-full items-center gap-1 rounded-sm text-start text-[length:var(--font-size-sidebar)] outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-ring ${
+								className={`group flex min-h-7 min-w-0 items-center rounded-sm text-[length:var(--font-size-sidebar)] outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-ring ${
 									isSelected
 										? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
 										: "text-sidebar-foreground hover:bg-sidebar-accent/70"
@@ -378,35 +426,182 @@ export function CloudContentTree({
 								style={{
 									paddingInlineStart: `${0.375 + (depth - 1) * 0.75}rem`,
 								}}
+								ref={(element) => {
+									if (element) itemRefs.current.set(node.id, element);
+									else itemRefs.current.delete(node.id);
+								}}
 								onFocus={() => setFocusedId(node.id)}
-								onClick={() => {
+								onClick={(event) => {
+									if (
+										(event.target as HTMLElement).closest(
+											"[data-local-actions]",
+										)
+									)
+										return;
+									if (node.kind === "folder") toggleFolder(node.id);
+									else onSelectDocument(node.id);
+								}}
+								onKeyDown={(event) => {
+									if (
+										event.target !== event.currentTarget ||
+										(event.key !== "Enter" && event.key !== " ")
+									)
+										return;
+									event.preventDefault();
 									if (node.kind === "folder") toggleFolder(node.id);
 									else onSelectDocument(node.id);
 								}}
 							>
-								{node.kind === "folder" ? (
-									<>
-										<MingcuteRightLine
-											className={`size-3 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none ${isOpen ? "rotate-90" : ""}`}
-										/>
-										<MingcuteFolderLine className="size-3.5 shrink-0 text-muted-foreground" />
-									</>
-								) : (
-									<>
-										<span className="size-3 shrink-0" />
-										<MingcuteFileLine className="size-3.5 shrink-0 text-muted-foreground" />
-									</>
-								)}
-								<span className="truncate">{node.name}</span>
+								<span className="flex min-w-0 flex-1 items-center gap-1 text-start">
+									{node.kind === "folder" ? (
+										<>
+											<MingcuteRightLine
+												className={`size-3 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none ${isOpen ? "rotate-90" : ""}`}
+											/>
+											<MingcuteFolderLine className="size-3.5 shrink-0 text-muted-foreground" />
+										</>
+									) : (
+										<>
+											<span className="size-3 shrink-0" />
+											<MingcuteFileLine className="size-3.5 shrink-0 text-muted-foreground" />
+										</>
+									)}
+									<span className="truncate">{node.name}</span>
+									{availability ? (
+										<AvailabilityMarker availability={availability} />
+									) : null}
+								</span>
 								{availability ? (
-									<AvailabilityMarker availability={availability} />
+									<AvailabilityActions
+										availability={availability}
+										triggerRef={(element) => {
+											if (element) actionRefs.current.set(node.id, element);
+											else actionRefs.current.delete(node.id);
+										}}
+										onReveal={onRevealLocalFolder}
+										onCopyPath={onCopyLocalPath}
+										onRelocate={onRelocateLocalFolder}
+										onStop={onStopLocalFolder}
+									/>
 								) : null}
-							</button>
+							</div>
 						);
 					})}
 				</div>
 			)}
 		</div>
+	);
+}
+
+function AvailabilityControl({
+	availability,
+	showPath,
+	onReveal,
+	onCopyPath,
+	onRelocate,
+	onStop,
+}: {
+	availability: CloudFolderAvailability;
+	showPath?: boolean;
+	onReveal?: (availability: CloudFolderAvailability) => void;
+	onCopyPath?: (availability: CloudFolderAvailability) => void;
+	onRelocate?: (availability: CloudFolderAvailability) => void;
+	onStop?: (availability: CloudFolderAvailability) => void;
+}) {
+	return (
+		<div className="flex min-w-0 items-center rounded-sm hover:bg-sidebar-accent/70">
+			<AvailabilityMarker availability={availability} showPath={showPath} />
+			<AvailabilityActions
+				availability={availability}
+				onReveal={onReveal}
+				onCopyPath={onCopyPath}
+				onRelocate={onRelocate}
+				onStop={onStop}
+			/>
+		</div>
+	);
+}
+
+const availabilityActionClass =
+	"flex w-full cursor-pointer items-center gap-2 rounded-sm text-start text-[11px] outline-hidden select-none data-highlighted:bg-accent [padding-block:0.375rem] [padding-inline:0.5rem]";
+
+function AvailabilityActions({
+	availability,
+	triggerRef,
+	onReveal,
+	onCopyPath,
+	onRelocate,
+	onStop,
+}: {
+	availability: CloudFolderAvailability;
+	triggerRef?: (element: HTMLButtonElement | null) => void;
+	onReveal?: (availability: CloudFolderAvailability) => void;
+	onCopyPath?: (availability: CloudFolderAvailability) => void;
+	onRelocate?: (availability: CloudFolderAvailability) => void;
+	onStop?: (availability: CloudFolderAvailability) => void;
+}) {
+	if (!onReveal && !onCopyPath && !onRelocate && !onStop) return null;
+	return (
+		<Menu.Root>
+			<Menu.Trigger
+				render={
+					<Button
+						ref={triggerRef}
+						data-local-actions
+						tabIndex={triggerRef ? -1 : 0}
+						variant="ghost"
+						size="icon-xs"
+						aria-label={`Local availability actions for ${availability.localPath}`}
+						title="Local availability actions"
+						className="shrink-0 opacity-70 transition-opacity duration-150 hover:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
+					/>
+				}
+			>
+				<MingcuteMore2Line className="size-3.5" />
+			</Menu.Trigger>
+			<Menu.Portal>
+				<Menu.Positioner align="end" side="bottom" sideOffset={4}>
+					<Menu.Popup className="z-50 w-52 origin-(--transform-origin) rounded-sm border border-border bg-popover p-1 text-popover-foreground shadow-overlay outline-hidden transition-[transform,opacity] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+						{onReveal ? (
+							<Menu.Item
+								className={availabilityActionClass}
+								onClick={() => onReveal(availability)}
+							>
+								<MingcuteFolderOpenLine className="size-3.5" />
+								Reveal in file browser
+							</Menu.Item>
+						) : null}
+						{onCopyPath ? (
+							<Menu.Item
+								className={availabilityActionClass}
+								onClick={() => onCopyPath(availability)}
+							>
+								<MingcuteCopy2Line className="size-3.5" />
+								Copy local path
+							</Menu.Item>
+						) : null}
+						{onRelocate ? (
+							<Menu.Item
+								className={availabilityActionClass}
+								onClick={() => onRelocate(availability)}
+							>
+								<MingcuteMoveLine className="size-3.5" />
+								Relocate local availability…
+							</Menu.Item>
+						) : null}
+						{onStop ? (
+							<Menu.Item
+								className={availabilityActionClass}
+								onClick={() => onStop(availability)}
+							>
+								<MingcuteUnlinkLine className="size-3.5" />
+								Stop making available…
+							</Menu.Item>
+						) : null}
+					</Menu.Popup>
+				</Menu.Positioner>
+			</Menu.Portal>
+		</Menu.Root>
 	);
 }
 
