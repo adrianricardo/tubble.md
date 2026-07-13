@@ -309,6 +309,38 @@ menu; Cmd+N announced the destination dialog with **Workspace root** selected/fo
 rerun focused checks/build, then begin Phase 6 import, revocation, and minimal recovery
 completion.
 
+**Phase 5 is complete and ungated** (working tree, 2026-07-13):
+`VITE_UNIFIED_CLOUD_TREE`, its feature-flag module, and the legacy signed-in cloud
+sidebar/create/dashboard branches are removed. Every cloud-enabled desktop build now
+uses the accepted unified context/tree; the no-cloud development fallback keeps the
+reusable local editor and filesystem primitives needed for import. Desktop tests pass
+154/154, changed-file Biome and `git diff --check` pass, and `pnpm build:desktop`
+passes after simplify/comments/review-readiness. Run record:
+`specs/desktop-cloud-workspace/runs/2026-07-13-phase-5-flag-removal.md`.
+**Next:** begin Phase 6 at import destination-first semantics. Replace the existing
+workspace-root-only `importLiveDocuments`/`importSyncedFolderMarkdown` seam with a
+folder-aware, idempotent import contract, then route file-open/drop entry points to an
+Import a copy / Move into Hubble flow. Source deletion must wait for verified cloud
+creation and managed materialization.
+
+**Phase 6 destination-first import is implemented at code/test/build level**
+(working tree, 2026-07-13): opening or dropping unrelated Markdown in the cloud shell
+now prompts for a Workspace-root/folder/shared-subtree destination, previews its
+audience, and offers **Import a copy** or **Move into Hubble**. Folder editors can
+import through an idempotency-keyed backend mutation; retries reuse the created
+document, while a distinct operation at an occupied folder/path preserves the
+existing document. Copy leaves the source detached. Move requires a connected owning
+projection before creation, refreshes it afterward, verifies the indexed document's
+materialized bytes against cloud Markdown, and only then removes the source. Backend
+tests pass 72/72, desktop tests pass 155/155, and the desktop production build passes
+after simplify/comments/review-readiness. Run record:
+`specs/desktop-cloud-workspace/runs/2026-07-13-phase-6-import.md`.
+**Next:** implement authorization-loss/role-downgrade recovery so rejected queued
+writes become a clearly detached preserved copy and can never republish after access
+is removed, then add inspect/retry/defer/keep-detached controls. The import slice also
+needs an authorized dev deploy plus real-file keyboard/VoiceOver acceptance before
+packaged completion.
+
 Desktop IA follow-up (direction settled 2026-07-11): replace the simultaneous
 **Folders** / **Live Documents** / **On this computer** sidebar with one current
 context and one folder/document tree. Repo-linked projections become contextual

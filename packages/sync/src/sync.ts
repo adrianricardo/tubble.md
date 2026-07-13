@@ -504,7 +504,10 @@ export async function materializeSyncedFolder(
 				folderId: folder._id,
 				workspaceId: workspace._id,
 				parentFolderId: folder.parentId,
-				relativePath: joinRel(workspaceName, folderRelPaths.get(folder._id) ?? ""),
+				relativePath: joinRel(
+					workspaceName,
+					folderRelPaths.get(folder._id) ?? "",
+				),
 			});
 		}
 
@@ -793,7 +796,13 @@ function sanitizeRelPath(relativePath: string): string {
 export async function importLiveDocuments(
 	backend: SyncBackend,
 	fs: Pick<FileSystem, "listMarkdownFiles">,
-	opts: { workspaceId: string; workspacePath: string; actor?: string },
+	opts: {
+		workspaceId: string;
+		workspacePath: string;
+		folderId?: string;
+		idempotencyKey: string;
+		actor?: string;
+	},
 ): Promise<LiveDocumentImportResult> {
 	const localFiles = await fs.listMarkdownFiles(opts.workspacePath);
 	for (const local of localFiles) {
@@ -805,22 +814,24 @@ export async function importLiveDocuments(
 	const result: LiveDocumentImportResult = {
 		imported: [],
 		created: [],
-		updated: [],
+		reused: [],
 	};
 
 	for (const local of localFiles) {
 		const imported = await backend.importLiveDocument({
 			workspaceId: opts.workspaceId,
+			folderId: opts.folderId,
 			path: normalizeRelativePath(local.relativePath),
 			title: titleFromPath(local.relativePath),
 			markdown: local.content,
+			idempotencyKey: `${opts.idempotencyKey}:${normalizeRelativePath(local.relativePath)}`,
 			actor: opts.actor,
 		});
 		result.imported.push(imported.path);
 		if (imported.created) {
 			result.created.push(imported.path);
 		} else {
-			result.updated.push(imported.path);
+			result.reused.push(imported.path);
 		}
 	}
 

@@ -19,7 +19,9 @@ type ProjectionEngine = Pick<
 	| "dismissTrashUndo"
 	| "getStatus"
 	| "isLiveDocument"
+	| "findDocumentPath"
 	| "listPendingOperations"
+	| "refresh"
 	| "undoTrashedDocument"
 >;
 
@@ -90,6 +92,10 @@ export class ProjectionManager {
 		return this.#wholeWorkspace.getStatus();
 	}
 
+	refreshWholeWorkspace() {
+		return this.#wholeWorkspace.refresh();
+	}
+
 	async connectMount(
 		folderId: string,
 		workspaceId: string,
@@ -112,6 +118,20 @@ export class ProjectionManager {
 		if (!mount) return;
 		this.#mounts.delete(folderId);
 		await mount.engine.disconnect();
+	}
+
+	refreshMount(folderId: string) {
+		const mount = this.#mounts.get(folderId);
+		if (!mount) throw new Error(`Local availability not found: ${folderId}`);
+		return mount.engine.refresh();
+	}
+
+	findDocumentPath(documentId: string): string | null {
+		for (const engine of this.#engines()) {
+			const path = engine.findDocumentPath(documentId);
+			if (path) return path;
+		}
+		return null;
 	}
 
 	listStatuses(): ProjectionStatus[] {

@@ -1849,46 +1849,96 @@ export const create = mutation({
 export const importMarkdown = mutation({
 	args: {
 		workspaceId: v.id("workspaces"),
+		folderId: v.optional(v.id("folders")),
 		path: v.string(),
 		title: v.string(),
 		markdown: v.string(),
+		idempotencyKey: v.string(),
 		actor: v.optional(v.string()),
 	},
-	handler: async (ctx, { workspaceId, path, title, markdown, actor }) => {
-		await requireWorkspaceMember(ctx, workspaceId);
+	handler: async (
+		ctx,
+		{ workspaceId, folderId, path, title, markdown, idempotencyKey, actor },
+	) => {
+		const isMember = (await workspaceRole(ctx, workspaceId)) !== null;
+		if (folderId) {
+			const folder = await ctx.db.get(folderId);
+			if (
+				!folder ||
+				folder.deletedAt !== undefined ||
+				folder.workspaceId !== workspaceId
+			) {
+				throw new Error("Folder not found");
+			}
+			if (!isMember) {
+				const role = await folderRole(ctx, folderId);
+				if (role !== "owner" && role !== "editor") {
+					throw new Error("Unauthorized");
+				}
+			}
+		} else {
+			await requireWorkspaceMember(ctx, workspaceId);
+		}
 		const resolvedActor = await currentActorName(ctx, actor);
 		const normalizedTitle = normalizeTitle(title);
 		const normalizedPath = path.trim();
 		if (!normalizedPath) throw new Error("Document path is required");
+		const normalizedImportKey = idempotencyKey.trim();
+		if (!normalizedImportKey)
+			throw new Error("Import idempotency key is required");
+		const priorImports = await ctx.db
+			.query("documents")
+			.withIndex("by_workspace_import_key", (q) =>
+				q.eq("workspaceId", workspaceId).eq("importKey", normalizedImportKey),
+			)
+			.order("desc")
+			.take(1);
+		const priorImport = priorImports[0];
+		// Trashing finishes the old operation, so the same source may be imported
+		// again without reviving a document the user intentionally removed.
+		if (priorImport && priorImport.deletedAt === undefined) {
+			if (
+				priorImport.folderId !== folderId ||
+				priorImport.path !== normalizedPath
+			) {
+				throw new Error(
+					"Import idempotency key does not match its destination",
+				);
+			}
+			return {
+				documentId: priorImport._id,
+				path: priorImport.path ?? normalizedPath,
+				title: priorImport.title,
+				created: false,
+			};
+		}
 		const pathMatches = await ctx.db
 			.query("documents")
-			.withIndex("by_workspace_path", (q) =>
-				q.eq("workspaceId", workspaceId).eq("path", normalizedPath),
+			.withIndex("by_workspace_folder_path", (q) =>
+				q
+					.eq("workspaceId", workspaceId)
+					.eq("folderId", folderId)
+					.eq("path", normalizedPath),
 			)
-			.collect();
-		const existing = pathMatches.find(
-			(document) => document.deletedAt === undefined,
-		);
+			.take(2);
+		if (pathMatches.some((document) => document.deletedAt === undefined)) {
+			throw new Error(
+				`A document named "${normalizedPath}" already exists in that destination`,
+			);
+		}
 		const now = Date.now();
-		const documentId = existing
-			? existing._id
-			: await ctx.db.insert("documents", {
-					workspaceId,
-					title: normalizedTitle,
-					path: normalizedPath,
-					createdBy: resolvedActor,
-					createdAt: now,
-					updatedBy: resolvedActor,
-					updatedAt: now,
-				});
-		if (existing) {
-			await ctx.db.patch(documentId, {
-				title: normalizedTitle,
-				path: normalizedPath,
-				updatedBy: resolvedActor,
-				updatedAt: now,
-			});
-		} else {
+		const documentId = await ctx.db.insert("documents", {
+			workspaceId,
+			folderId,
+			title: normalizedTitle,
+			path: normalizedPath,
+			importKey: normalizedImportKey,
+			createdBy: resolvedActor,
+			createdAt: now,
+			updatedBy: resolvedActor,
+			updatedAt: now,
+		});
+		if (!folderId) {
 			await ensureCurrentUserOwnerShare(ctx, documentId);
 		}
 		await replaceLiveDocumentMarkdown(ctx, documentId, markdown);
@@ -1896,7 +1946,7 @@ export const importMarkdown = mutation({
 			documentId,
 			path: normalizedPath,
 			title: normalizedTitle,
-			created: !existing,
+			created: true,
 		};
 	},
 });

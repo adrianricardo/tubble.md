@@ -194,6 +194,7 @@ export function createConvexBackend(
 			return client.mutation(api.documents.importMarkdown, {
 				...args,
 				workspaceId: args.workspaceId as Id<"workspaces">,
+				folderId: args.folderId ? (args.folderId as Id<"folders">) : undefined,
 			});
 		},
 		async renameDocument(documentId, args) {

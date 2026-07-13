@@ -114,11 +114,14 @@ export default defineSchema({
 		createdAt: v.number(),
 		updatedBy: v.optional(v.string()),
 		updatedAt: v.number(),
+		importKey: v.optional(v.string()),
 		deletedAt: v.optional(v.number()),
 	})
 		.index("by_workspace", ["workspaceId", "updatedAt"])
 		.index("by_workspace_folder", ["workspaceId", "folderId"])
-		.index("by_workspace_path", ["workspaceId", "path"]),
+		.index("by_workspace_path", ["workspaceId", "path"])
+		.index("by_workspace_folder_path", ["workspaceId", "folderId", "path"])
+		.index("by_workspace_import_key", ["workspaceId", "importKey"]),
 
 	folders: defineTable({
 		workspaceId: v.id("workspaces"),

@@ -234,10 +234,105 @@ describe("Live Document cap UX", () => {
 				path: "large.md",
 				title: "Large",
 				markdown: "a".repeat(256 * 1024 + 1),
+				idempotencyKey: "large-import",
 			}),
 		).rejects.toThrow(
 			"Live Documents currently support up to 256 KiB of markdown",
 		);
+	});
+});
+
+describe("importMarkdown", () => {
+	async function setupFolderImport() {
+		const t = testInstance();
+		const setup = await t.run(async (ctx) => {
+			const ownerId = await ctx.db.insert("users", {
+				email: "import-owner@example.com",
+				name: "Owner",
+			});
+			const guestId = await ctx.db.insert("users", {
+				email: "import-guest@example.com",
+				name: "Guest",
+			});
+			const workspaceId = await ctx.db.insert("workspaces", {
+				name: "Team",
+				ownerId,
+				createdAt: 1,
+			});
+			const folderId = await ctx.db.insert("folders", {
+				workspaceId,
+				name: "Shared",
+				createdAt: 1,
+				updatedAt: 1,
+			});
+			await ctx.db.insert("folderShares", {
+				folderId,
+				userId: guestId,
+				role: "editor",
+				createdAt: 1,
+				updatedAt: 1,
+			});
+			return { ownerId, guestId, workspaceId, folderId };
+		});
+		return { t, ...setup };
+	}
+
+	test("folder editors can retry an import without replacing its content", async () => {
+		const { t, guestId, workspaceId, folderId } = await setupFolderImport();
+		const first = await asUser(t, guestId).mutation(
+			api.documents.importMarkdown,
+			{
+				workspaceId,
+				folderId,
+				path: "note.md",
+				title: "Note",
+				markdown: "# Original",
+				idempotencyKey: "operation-1",
+			},
+		);
+		const retry = await asUser(t, guestId).mutation(
+			api.documents.importMarkdown,
+			{
+				workspaceId,
+				folderId,
+				path: "note.md",
+				title: "Changed title",
+				markdown: "# Replacement",
+				idempotencyKey: "operation-1",
+			},
+		);
+
+		expect(first.created).toBe(true);
+		expect(retry).toMatchObject({
+			documentId: first.documentId,
+			created: false,
+		});
+		const imported = await asUser(t, guestId).query(api.documents.getForAgent, {
+			documentId: first.documentId,
+		});
+		expect(imported?.markdown).toContain("Original");
+		expect(imported?.markdown).not.toContain("Replacement");
+	});
+
+	test("a different import key preserves an existing destination collision", async () => {
+		const { t, ownerId, workspaceId, folderId } = await setupFolderImport();
+		const input = {
+			workspaceId,
+			folderId,
+			path: "note.md",
+			title: "Note",
+			markdown: "# Original",
+			idempotencyKey: "operation-1",
+		};
+		await asUser(t, ownerId).mutation(api.documents.importMarkdown, input);
+
+		await expect(
+			asUser(t, ownerId).mutation(api.documents.importMarkdown, {
+				...input,
+				markdown: "# Other",
+				idempotencyKey: "operation-2",
+			}),
+		).rejects.toThrow("already exists in that destination");
 	});
 });
 

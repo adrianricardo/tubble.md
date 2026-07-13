@@ -1,5 +1,5 @@
 import os from "node:os";
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { DesktopApi } from "../src/desktopApi/types";
 
 function subscribe<T extends unknown[]>(
@@ -30,6 +30,11 @@ const desktopApi = {
 		}),
 	readFileText: (path) =>
 		ipcRenderer.invoke("desktop:read-file-text", { path }),
+	pathForDroppedFile: (file) =>
+		ipcRenderer.invoke(
+			"desktop:path-for-dropped-file",
+			webUtils.getPathForFile(file),
+		),
 	writeFileText: (path, content) =>
 		ipcRenderer.invoke("desktop:write-file-text", { path, content }),
 	renameFile: (fromPath, toPath) =>
@@ -84,6 +89,8 @@ const desktopApi = {
 		ipcRenderer.invoke("desktop:live-sync:inspect-root", { syncRoot }),
 	importSyncedFolderMarkdown: (input) =>
 		ipcRenderer.invoke("desktop:live-sync:import-folder-markdown", input),
+	importMarkdownFile: (input) =>
+		ipcRenderer.invoke("desktop:cloud:import-markdown", input),
 	connectSyncedFolder: (input) =>
 		ipcRenderer.invoke("desktop:live-sync:connect-folder", input),
 	disconnectSyncedFolder: () =>

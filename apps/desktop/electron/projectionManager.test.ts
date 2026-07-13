@@ -72,7 +72,12 @@ function engine(
 		isLiveDocument: vi.fn(
 			(path: string) => options.paths?.includes(path) ?? false,
 		),
+		findDocumentPath: vi.fn(
+			(documentId: string) =>
+				options.paths?.find((path) => path.includes(documentId)) ?? null,
+		),
 		listPendingOperations: vi.fn(async () => operations),
+		refresh: vi.fn(async () => currentStatus),
 		undoTrashedDocument: vi.fn(async () => ({ status: "restored" as const })),
 	};
 }
@@ -119,6 +124,22 @@ describe("ProjectionManager", () => {
 				byKind: { "missing-document": 1 },
 			},
 		});
+	});
+
+	it("refreshes the owning engine and resolves a materialized document path", async () => {
+		const whole = engine();
+		const mount = engine({ paths: ["/repo/brain/document-1.md"] });
+		const manager = new ProjectionManager({
+			wholeWorkspace: whole,
+			createMount: () => mount,
+		});
+		await manager.connectMount("folder-a", "workspace-a", input);
+
+		await manager.refreshMount("folder-a");
+		expect(mount.refresh).toHaveBeenCalledOnce();
+		expect(manager.findDocumentPath("document-1")).toBe(
+			"/repo/brain/document-1.md",
+		);
 	});
 
 	it("routes operation actions to the engine that owns the operation", async () => {

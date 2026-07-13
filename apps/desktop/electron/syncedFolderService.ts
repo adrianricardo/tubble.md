@@ -309,6 +309,14 @@ export class SyncedFolderService {
 		return this.#index[absPath] ?? null;
 	}
 
+	findDocumentPath(documentId: string): string | null {
+		return (
+			Object.entries(this.#index).find(
+				([, entry]) => entry.documentId === documentId,
+			)?.[0] ?? null
+		);
+	}
+
 	getStatus(): SyncedFolderStatus {
 		return {
 			state: this.#state,
@@ -1399,19 +1407,19 @@ export class SyncedFolderService {
 
 			case "create": {
 				const markdown = await this.#fs.readFile(decision.absPath);
+				const markdownHash = await contentHash(markdown);
 				const workspaceRelativePath = stripTopLevelWorkspaceDir(
 					decision.relPath,
 				);
 				const imported = await backend.importLiveDocument({
 					workspaceId: decision.workspaceId,
+					folderId: decision.folderId ?? undefined,
 					path: workspaceRelativePath,
 					title: titleFromPath(decision.absPath),
 					markdown,
+					idempotencyKey: `synced-folder:${decision.workspaceId}:${decision.folderId ?? "root"}:${workspaceRelativePath}:${markdownHash}`,
 					actor: "synced-folder",
 				});
-				if (decision.folderId !== null) {
-					await backend.moveDocument(imported.documentId, decision.folderId);
-				}
 				await writeReconcileBase(this.#fs, syncRoot, imported.documentId, {
 					markdown,
 					revision: 0,
@@ -1422,7 +1430,7 @@ export class SyncedFolderService {
 					workspaceId: decision.workspaceId,
 					folderId: decision.folderId,
 					inode: this.#statInode(decision.absPath),
-					hash: await contentHash(markdown),
+					hash: markdownHash,
 					role: "editor",
 				};
 				this.#markWrittenByUs(decision.absPath, markdown);

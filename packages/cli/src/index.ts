@@ -495,11 +495,12 @@ async function runImport(workspacePath: string, parsed: CliArgs) {
 	const result = await importLiveDocuments(backend, fs, {
 		workspaceId: cloudSync.workspaceId,
 		workspacePath,
+		idempotencyKey: `cli:${cloudSync.deviceId}:${workspacePath}`,
 		actor: `device:${cloudSync.deviceId}`,
 	});
 	console.log(
 		`live import: ${result.imported.length} file${result.imported.length === 1 ? "" : "s"} ` +
-			`(${result.created.length} created, ${result.updated.length} updated)`,
+			`(${result.created.length} created, ${result.reused.length} already imported)`,
 	);
 }
 

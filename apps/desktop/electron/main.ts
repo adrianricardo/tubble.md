@@ -7,6 +7,7 @@ import { createConvexBackend } from "@hubble.md/convex-client";
 import hubbleRuntime from "@hubble.md/runtime/global.js?raw";
 import htmlAppTheme from "@hubble.md/runtime/html-app-theme.css?raw";
 import {
+	assertLiveDocumentMarkdownWithinCap,
 	contentHash,
 	type Folder,
 	importLiveDocuments,
@@ -33,6 +34,7 @@ import electronUpdater from "electron-updater";
 import ignore from "ignore";
 import { z } from "zod/v4";
 import type {
+	CloudMarkdownImportInput,
 	DesktopUpdateState,
 	DirectoryListing,
 	LiveSyncConnectInput,
@@ -62,6 +64,7 @@ import { ProjectionManager } from "./projectionManager";
 import {
 	assertCloudProjectionRootsDisjoint,
 	assertLocalProjectionRootsDisjoint,
+	isFolderWithinProjection,
 	type ProjectionMount,
 } from "./projectionMounts";
 import {
@@ -526,6 +529,16 @@ const repoMountConfigSchema = z.object({
 	mounts: z.array(storedRepoMountSchema),
 });
 
+const cloudMarkdownImportSchema = z.object({
+	sourcePath: z.string().min(1),
+	deploymentUrl: z.string().min(1),
+	authToken: z.string().min(1),
+	workspaceId: z.string().min(1),
+	folderId: z.string().min(1).optional(),
+	idempotencyKey: z.string().min(1),
+	mode: z.enum(["copy", "move"]),
+});
+
 function repoMountsPath(): string {
 	return path.join(app.getPath("userData"), "repo-mounts.json");
 }
@@ -602,6 +615,95 @@ async function accessibleFolderTopology(
 				})),
 			]);
 	}
+}
+
+async function projectionForImport(
+	backend: SyncBackend,
+	workspaceId: string,
+	folderId?: string,
+): Promise<
+	{ kind: "workspace" } | { kind: "folder"; folderId: string } | null
+> {
+	if (projectionManager.wholeWorkspaceConnected) return { kind: "workspace" };
+	if (!folderId) return null;
+	const mounts = (await loadRepoMountConfig()).filter(
+		(mount) =>
+			mount.workspaceId === workspaceId &&
+			projectionManager.getMountStatus(mount.folderId)?.connected,
+	);
+	if (mounts.length === 0) return null;
+	const parentById = new Map(
+		(await accessibleFolderTopology(backend, workspaceId)).map((folder) => [
+			folder._id,
+			folder.parentId,
+		]),
+	);
+	const mount = mounts.find((candidate) =>
+		isFolderWithinProjection(candidate.folderId, folderId, parentById),
+	);
+	return mount ? { kind: "folder", folderId: mount.folderId } : null;
+}
+
+async function performCloudMarkdownImport(input: CloudMarkdownImportInput) {
+	const parsed = cloudMarkdownImportSchema.parse(input);
+	const sourcePath = assertGranted(parsed.sourcePath);
+	if (!/\.(md|markdown|mdown)$/i.test(sourcePath)) {
+		throw new Error("Hubble can bring in Markdown files only");
+	}
+	const markdown = await fs.readFile(sourcePath, "utf8");
+	assertLiveDocumentMarkdownWithinCap(markdown, "Markdown file");
+	const backend = createConvexBackend(parsed.deploymentUrl, parsed.authToken);
+	const projection = await projectionForImport(
+		backend,
+		parsed.workspaceId,
+		parsed.folderId,
+	);
+	if (parsed.mode === "move" && !projection) {
+		throw new Error(
+			"Make this destination available on this computer before moving the source. Import a copy works without local availability.",
+		);
+	}
+	const fileName = path.basename(sourcePath);
+	const imported = await backend.importLiveDocument({
+		workspaceId: parsed.workspaceId,
+		folderId: parsed.folderId,
+		path: fileName,
+		title: path.basename(fileName, path.extname(fileName)),
+		markdown,
+		idempotencyKey: parsed.idempotencyKey,
+		actor: "desktop-import",
+	});
+	if (projection?.kind === "workspace") {
+		await projectionManager.refreshWholeWorkspace();
+	} else if (projection?.kind === "folder") {
+		await projectionManager.refreshMount(projection.folderId);
+	}
+	const connectedPath = projectionManager.findDocumentPath(imported.documentId);
+	if (connectedPath) {
+		const cloudDocument = await backend.getDocumentForAgent(
+			imported.documentId,
+		);
+		const materialized = await fs.readFile(connectedPath, "utf8");
+		if (!cloudDocument || materialized !== cloudDocument.markdown) {
+			throw new Error(
+				"Hubble created the cloud document but could not verify its connected local copy. The source was left untouched.",
+			);
+		}
+	}
+	if (parsed.mode === "move") {
+		if (!connectedPath) {
+			throw new Error(
+				"Hubble created the cloud document but could not verify its connected local copy. The source was left untouched.",
+			);
+		}
+		if (path.resolve(connectedPath) !== path.resolve(sourcePath)) {
+			await fs.rm(sourcePath);
+		}
+	}
+	return {
+		documentId: imported.documentId,
+		connectedPath,
+	};
 }
 
 async function assertRepoMountAvailable(
@@ -1162,6 +1264,7 @@ function grantFileWithParent(filePath: string) {
 	const resolved = resolvePath(filePath);
 	grantFile(resolved);
 	grantRoot(path.dirname(resolved));
+	return resolved;
 }
 
 function isWithin(rootPath: string, candidatePath: string): boolean {
@@ -1924,6 +2027,15 @@ function registerIpc() {
 			return await fs.readFile(resolved, "utf8");
 		},
 	);
+	ipcMain.handle(
+		"desktop:path-for-dropped-file",
+		(_event, filePath: unknown) => {
+			if (typeof filePath !== "string" || !filePath) {
+				throw new Error("Dropped file path is required");
+			}
+			return grantFileWithParent(filePath);
+		},
+	);
 
 	ipcMain.handle(
 		"desktop:write-file-text",
@@ -2289,9 +2401,16 @@ function registerIpc() {
 			return importLiveDocuments(backend, createNodeFileSystem(), {
 				workspaceId: parsed.workspaceId,
 				workspacePath: syncRoot,
+				idempotencyKey: `desktop-folder:${parsed.workspaceId}:${syncRoot}`,
 				actor: "synced-folder-first-run-import",
 			});
 		},
+	);
+
+	ipcMain.handle(
+		"desktop:cloud:import-markdown",
+		(_event, input: CloudMarkdownImportInput) =>
+			performCloudMarkdownImport(input),
 	);
 
 	ipcMain.handle("desktop:live-sync:disconnect-folder", async () => {

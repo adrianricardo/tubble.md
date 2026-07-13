@@ -278,6 +278,21 @@ export type SyncedFolderImportInput = {
 	authToken: string;
 };
 
+export type CloudMarkdownImportInput = {
+	sourcePath: string;
+	deploymentUrl: string;
+	authToken: string;
+	workspaceId: string;
+	folderId?: string;
+	idempotencyKey: string;
+	mode: "copy" | "move";
+};
+
+export type CloudMarkdownImportResult = {
+	documentId: string;
+	connectedPath: string | null;
+};
+
 /** Pushed to the renderer over `desktop:live-sync:event` as the mirror changes. */
 export type ProjectionRootScope = {
 	kind: "workspace-mirror" | "folder";
@@ -339,6 +354,7 @@ export type DesktopApi = {
 		config: WorkspaceConfig,
 	): Promise<void>;
 	readFileText(path: string): Promise<string>;
+	pathForDroppedFile(file: File): Promise<string>;
 	writeFileText(path: string, content: string): Promise<void>;
 	renameFile(fromPath: string, toPath: string): Promise<void>;
 	pathExists(path: string): Promise<boolean>;
@@ -402,6 +418,9 @@ export type DesktopApi = {
 	importSyncedFolderMarkdown(
 		input: SyncedFolderImportInput,
 	): Promise<LiveDocumentImportResult>;
+	importMarkdownFile(
+		input: CloudMarkdownImportInput,
+	): Promise<CloudMarkdownImportResult>;
 	disconnectSyncedFolder(): Promise<SyncedFolderStatus>;
 	getSyncedFolderStatus(): Promise<SyncedFolderStatus>;
 	listPendingProjectionOperations(): Promise<PendingProjectionOperation[]>;

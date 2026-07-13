@@ -116,7 +116,7 @@ export type LiveDocumentProjectionWriteResult = {
 export type LiveDocumentImportResult = {
 	imported: string[];
 	created: string[];
-	updated: string[];
+	reused: string[];
 };
 
 export type RemoteFile = {

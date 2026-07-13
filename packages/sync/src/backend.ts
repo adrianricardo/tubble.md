@@ -171,9 +171,11 @@ export interface SyncBackend {
 	}): Promise<string>;
 	importLiveDocument(args: {
 		workspaceId: string;
+		folderId?: string;
 		path: string;
 		title: string;
 		markdown: string;
+		idempotencyKey: string;
 		actor?: string;
 	}): Promise<LiveDocumentImport>;
 

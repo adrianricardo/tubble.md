@@ -109,6 +109,17 @@ updates, and filesystem changes remain main-process responsibilities. Existing
 `folders.list` and `sync.listWorkspaceMembers` queries are sufficient for the
 multi-member create destination prompt; no backend contract change is required.
 
+**2026-07-13 Phase 6 import revalidation:** re-run against current `v1-release`
+after Phase 5 flag removal. Local file associations still enter through
+`App.tsx`'s `openLocalPath`, while the cloud shell intentionally hides its local
+file picker. The remaining import seam is `importLiveDocuments` →
+`SyncBackend.importLiveDocument` → `documents.importMarkdown`; it targets only a
+Workspace root, requires membership, and updates an existing live document on a
+path match. Phase 6 therefore starts by making this contract folder-authorized,
+idempotency-keyed, and collision-preserving. Electron remains responsible for
+source deletion: a move may complete only after the owning projection engine has
+refreshed and its document-ID index plus on-disk bytes match the imported content.
+
 ### Architecture principles
 
 1. Cloud document identity is authoritative; a path is mutable presentation metadata.
@@ -419,6 +430,14 @@ VoiceOver/physical Shift+F10 acceptance and the confirmed clean-remove branch re
 so the flag is intentionally still present. Evidence and the exact final checklist:
 `runs/2026-07-13-phase-5-populated-tree-acceptance.md`.
 
+The final host gate and removal checkpoint passed on 2026-07-13. The confirmed clean
+remove path preserved cloud content, physical Fn+Shift+F10 and literal VoiceOver
+announcements passed, and the internal flag plus legacy signed-in cloud shell were
+removed. Cloud-enabled builds now always use the unified context/tree; the no-cloud
+development fallback retains reusable local editor and filesystem primitives for the
+Phase 6 import path. Desktop tests pass 154/154 and `pnpm build:desktop` passes.
+Evidence: `runs/2026-07-13-phase-5-flag-removal.md`.
+
 1. Add the cloud context state and migration from `selectedSpaceId`.
 2. Build `CloudContentTree` from cloud IDs. Render root folders and documents in one
    hierarchy and preserve expansion/selection by stable ID.
@@ -436,10 +455,15 @@ so the flag is intentionally still present. Evidence and the exact final checkli
 
 ### Phase 6 — Import, unlink, and recovery completion
 
-**Progress 2026-07-13:** the clean stop-local portion of step 3 is implemented behind
-the unified-tree flag, including remove-versus-detached-copy choice and dirty/status
-blocking. Import, authorization-loss recovery, minimal recovery controls, and live
-clean/dirty stop acceptance remain.
+**Progress 2026-07-13:** steps 1–3 are implemented at code/test/build level. Opening
+or dropping unrelated Markdown now prompts for a destination and copy/move intent.
+The import mutation is folder-authorized, retry-idempotent, and collision-preserving.
+Move preflights a connected owning projection and removes the source only after a
+refresh, document-ID lookup, and byte comparison against authoritative cloud
+Markdown. Clean stop-local retains its two-stage cleanliness proof and detached-copy
+option. Dev deployment and real-file/keyboard/screen-reader import acceptance remain;
+authorization-loss recovery and the minimal recovery controls are the next build
+slice. Evidence: `runs/2026-07-13-phase-6-import.md`.
 
 1. Route import through the chosen destination and folder-aware idempotent creation.
 2. Keep originals for **Import a copy**. For **Move into Hubble**, delete the source

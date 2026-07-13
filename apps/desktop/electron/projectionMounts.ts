@@ -84,7 +84,7 @@ export async function assertLocalProjectionRootsDisjoint(
 	}
 }
 
-function isFolderAncestor(
+export function isFolderWithinProjection(
 	ancestorId: string,
 	descendantId: string,
 	parentById: Map<string, string | null>,
@@ -128,8 +128,12 @@ export function assertCloudProjectionRootsDisjoint(
 			);
 		}
 		if (
-			isFolderAncestor(candidate.folderId, mount.folderId, parentById) ||
-			isFolderAncestor(mount.folderId, candidate.folderId, parentById)
+			isFolderWithinProjection(
+				candidate.folderId,
+				mount.folderId,
+				parentById,
+			) ||
+			isFolderWithinProjection(mount.folderId, candidate.folderId, parentById)
 		) {
 			throw new Error(
 				"This cloud folder overlaps an existing projection on this computer. Choose a disjoint folder.",
