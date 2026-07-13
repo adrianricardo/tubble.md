@@ -144,6 +144,11 @@ type VisibleNode = {
 	parentId: string | null;
 };
 
+type AvailabilityActionRefs = {
+	trigger: HTMLButtonElement | null;
+	firstItem: HTMLDivElement | null;
+};
+
 function visibleNodes(
 	nodes: CloudContentNode[],
 	expanded: Set<string>,
@@ -201,7 +206,7 @@ export function CloudContentTree({
 	const [search, setSearch] = useState("");
 	const deferredSearch = useDeferredValue(search);
 	const itemRefs = useRef(new Map<string, HTMLDivElement>());
-	const actionRefs = useRef(new Map<string, HTMLButtonElement>());
+	const actionRefs = useRef(new Map<string, AvailabilityActionRefs>());
 
 	const nodes = useMemo(() => {
 		if (context.kind === "workspace") {
@@ -262,6 +267,19 @@ export function CloudContentTree({
 			else next.delete(id);
 			return next;
 		});
+	};
+	const setActionRef = <Key extends keyof AvailabilityActionRefs>(
+		id: string,
+		key: Key,
+		element: AvailabilityActionRefs[Key],
+	) => {
+		const refs = actionRefs.current.get(id) ?? {
+			trigger: null,
+			firstItem: null,
+		};
+		refs[key] = element;
+		if (refs.trigger || refs.firstItem) actionRefs.current.set(id, refs);
+		else actionRefs.current.delete(id);
 	};
 
 	if (nodes === undefined) {
@@ -385,9 +403,16 @@ export function CloudContentTree({
 							event.key === "ContextMenu"
 						) {
 							const action = actionRefs.current.get(current.node.id);
-							if (action) {
+							if (action?.trigger) {
 								event.preventDefault();
-								action.click();
+								action.trigger.click();
+								// Base UI does not consistently transfer focus for a synthetic
+								// Context Menu trigger, so wait for its portal item to mount.
+								setTimeout(
+									() =>
+										actionRefs.current.get(current.node.id)?.firstItem?.focus(),
+									0,
+								);
 							}
 						}
 					}}
@@ -475,8 +500,10 @@ export function CloudContentTree({
 									<AvailabilityActions
 										availability={availability}
 										triggerRef={(element) => {
-											if (element) actionRefs.current.set(node.id, element);
-											else actionRefs.current.delete(node.id);
+											setActionRef(node.id, "trigger", element);
+										}}
+										firstItemRef={(element) => {
+											setActionRef(node.id, "firstItem", element);
 										}}
 										onReveal={onRevealLocalFolder}
 										onCopyPath={onCopyLocalPath}
@@ -528,6 +555,7 @@ const availabilityActionClass =
 function AvailabilityActions({
 	availability,
 	triggerRef,
+	firstItemRef,
 	onReveal,
 	onCopyPath,
 	onRelocate,
@@ -535,6 +563,7 @@ function AvailabilityActions({
 }: {
 	availability: CloudFolderAvailability;
 	triggerRef?: (element: HTMLButtonElement | null) => void;
+	firstItemRef?: (element: HTMLDivElement | null) => void;
 	onReveal?: (availability: CloudFolderAvailability) => void;
 	onCopyPath?: (availability: CloudFolderAvailability) => void;
 	onRelocate?: (availability: CloudFolderAvailability) => void;
@@ -564,6 +593,7 @@ function AvailabilityActions({
 					<Menu.Popup className="z-50 w-52 origin-(--transform-origin) rounded-sm border border-border bg-popover p-1 text-popover-foreground shadow-overlay outline-hidden transition-[transform,opacity] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
 						{onReveal ? (
 							<Menu.Item
+								ref={firstItemRef}
 								className={availabilityActionClass}
 								onClick={() => onReveal(availability)}
 							>

@@ -2,7 +2,7 @@ import { api } from "@hubble.md/sync-backend";
 import type { Id } from "@hubble.md/sync-backend/types";
 import { Button, Modal } from "@hubble.md/ui";
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import MingcuteAddLine from "~icons/mingcute/add-line";
 import type { CloudContext } from "../store/persistence";
@@ -97,10 +97,6 @@ export function CloudDocumentCreateButton({
 	);
 	const destinationLoading =
 		context?.kind === "workspace" && (!members || !folders);
-	useEffect(() => {
-		if (destinationOpen) rootDestinationRef.current?.focus();
-	}, [destinationOpen]);
-
 	const create = async (folderId?: string | null) => {
 		if (!context || !canCreate || creating) return;
 		setCreating(true);
@@ -155,6 +151,7 @@ export function CloudDocumentCreateButton({
 			<Modal
 				open={destinationOpen}
 				onOpenChange={setDestinationOpen}
+				initialFocus={rootDestinationRef}
 				title="Where should this document live?"
 				description="Choose its access boundary before creating it."
 			>

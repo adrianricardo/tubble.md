@@ -277,6 +277,22 @@ before app interaction. The internal flag remains. Run record and exact host che
 fix any finding, then remove the flag if the gate passes. Do not begin Phase 6 ahead of
 this gate.
 
+**Phase 5 populated-tree host acceptance is mostly complete** (working tree,
+2026-07-13): real Electron/CDP and populated dev data passed hierarchical keyboard/AX
+semantics, multi-member root+nested creation, native scratch-root relocation with v2
+index rewrite/reconnect/post-move sync, dirty stop+relocate byte preservation, and the
+detached-copy clean stop. The run found and fixed three live-only gaps: unified mode
+did not reconnect persisted mounts unless Settings mounted, ContextMenu opening did
+not explicitly focus the first action, and the destination dialog used an effect
+instead of Base UI's native initial-focus contract. Focused tests, dependency builds,
+desktop typecheck, changed-file Biome/diff checks, and the flagged production desktop
+build pass. Run record:
+`specs/desktop-cloud-workspace/runs/2026-07-13-phase-5-populated-tree-acceptance.md`.
+**Next:** obtain action-time confirmation and exercise **Remove local files** on the
+clean `/tmp/scratch-repo/Scratch-remove` test projection, then record literal
+VoiceOver speech and a physical Shift+F10 pass. If both pass, remove the internal flag
+and legacy production branch; only then begin Phase 6.
+
 Desktop IA follow-up (direction settled 2026-07-11): replace the simultaneous
 **Folders** / **Live Documents** / **On this computer** sidebar with one current
 context and one folder/document tree. Repo-linked projections become contextual

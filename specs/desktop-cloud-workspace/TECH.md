@@ -411,6 +411,14 @@ sockets, and direct Electron startup were restricted. The flag remains until the
 operator gate in
 `runs/2026-07-13-phase-5-acceptance-preflight.md` passes.
 
+The host acceptance follow-up completed the populated tree, multi-member destination,
+native relocation, post-relocation sync, dirty blocking, and detached-copy stop paths.
+It found and fixed unified-shell mount reconnection, explicit first-menu-item focus,
+and dialog-native initial focus. The flagged production build passes. Literal
+VoiceOver/physical Shift+F10 acceptance and the confirmed clean-remove branch remain,
+so the flag is intentionally still present. Evidence and the exact final checklist:
+`runs/2026-07-13-phase-5-populated-tree-acceptance.md`.
+
 1. Add the cloud context state and migration from `selectedSpaceId`.
 2. Build `CloudContentTree` from cloud IDs. Render root folders and documents in one
    hierarchy and preserve expansion/selection by stable ID.

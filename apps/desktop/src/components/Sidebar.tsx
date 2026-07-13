@@ -26,6 +26,7 @@ import {
 	useCallback,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import { toast } from "sonner";
@@ -313,6 +314,7 @@ function UnifiedAuthenticatedCloudSidebar({
 		null,
 	);
 	const [stopping, setStopping] = useState(false);
+	const reconnectedForToken = useRef<string | null>(null);
 	const refreshMounts = useCallback(() => {
 		void desktopApi.listRepoMounts().then(setMounts);
 	}, []);
@@ -325,6 +327,23 @@ function UnifiedAuthenticatedCloudSidebar({
 			unsubscribeSync();
 		};
 	}, [refreshMounts]);
+	useEffect(() => {
+		// The unified shell does not mount RepoLinkSection, so it must restore
+		// persisted engines itself after sign-in or token refresh.
+		if (
+			!authToken ||
+			!desktopConvexUrl ||
+			reconnectedForToken.current === authToken
+		)
+			return;
+		reconnectedForToken.current = authToken;
+		void desktopApi
+			.reconnectRepoMounts({ deploymentUrl: desktopConvexUrl, authToken })
+			.then(setMounts)
+			.catch(() => {
+				reconnectedForToken.current = null;
+			});
+	}, [authToken]);
 	const localFolders = useMemo(
 		() =>
 			mounts.map((mount) => ({
