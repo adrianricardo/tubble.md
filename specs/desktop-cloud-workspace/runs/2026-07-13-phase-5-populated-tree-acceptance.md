@@ -24,10 +24,9 @@ The host run completed most of the gate and found three production issues:
    manager's contract. `Modal` now exposes Base UI's `initialFocus`; a clean,
    foreground Electron open focuses the selected **Workspace root** radio.
 
-The internal flag remains. The destructive clean-remove branch requires action-time
-confirmation before deleting `/tmp/scratch-repo/Scratch-remove`, and literal
-VoiceOver speech plus a physical Shift+F10 pass are still outstanding. Phase 6 stays
-gated.
+The internal flag remains. The destructive clean-remove branch and acceptance-data
+cleanup passed after action-time confirmation. Literal VoiceOver speech plus a
+physical Shift+F10 pass are still outstanding, so Phase 6 stays gated.
 
 ## Live acceptance evidence
 
@@ -57,12 +56,15 @@ gated.
 - Clean stop with **Keep detached copy** removed local availability while preserving
   the Markdown bytes at the relocated path. The Scratch cloud folder remained in the
   tree.
-- Scratch was re-linked at `/tmp/scratch-repo/Scratch-remove`, connected, and is ready
-  for the final clean-remove confirmation.
+- Scratch was re-linked at `/tmp/scratch-repo/Scratch-remove`, connected, and the real
+  **Remove local files** action removed the clean root. Hubble reported local
+  availability stopped; the Scratch cloud folder remained visible without a local
+  marker.
 - Synthetic picker probing also created one extra **Untitled** document in
-  `adrian's space`. It was left intact because deleting cloud data requires explicit
-  action-time confirmation; it should be removed with the acceptance documents during
-  cleanup if Adrian wants a clean dev corpus.
+  `adrian's space`. After explicit cleanup authorization, it and the two acceptance
+  documents created in Hubble Product Brain were moved to Hubble Trash. A timestamp
+  guard preserved older `Untitled` documents; a post-mutation query found no recent
+  acceptance `Untitled` documents remaining.
 
 ## Automated verification
 
@@ -78,15 +80,38 @@ gated.
 
 ## Remaining gate
 
-1. With explicit action-time confirmation, choose **Remove local files** for the clean
-   `/tmp/scratch-repo/Scratch-remove` projection. Confirm the local root disappears,
-   the Scratch cloud folder remains, and no document/share state changes.
-2. Run VoiceOver against the populated tree and dialog. Record the spoken level,
+1. Run VoiceOver against the populated tree and dialog. Record the spoken level,
    expanded/selected state, local path/status, action availability, destination access
    descriptions, and safe initial focus. Press physical Shift+F10 while the app is
    foregrounded; Context Menu key handling is already covered synthetically because
    the host keyboard has no such key.
-3. Decide whether to delete the acceptance **Untitled** documents (including the
-   accidental `adrian's space` document) from dev data.
-4. If those pass, rerun focused checks, remove the internal unified-tree flag and
+2. If those pass, rerun focused checks, remove the internal unified-tree flag and
    legacy production branch, then begin Phase 6.
+
+## Fresh-session follow-up (2026-07-13, implementation session 5)
+
+The flagged Electron app relaunched successfully with populated dev data and CDP.
+The persisted Scratch mount reconnected at `/tmp/scratch-repo/Scratch-remove`; the
+main-process cleanliness inspection reported `clean` immediately before the pending
+action. No local or cloud deletion was attempted because **Remove local files** still
+requires action-time human confirmation.
+
+VoiceOver launched, but macOS did not expose its scriptable `last phrase` or cursor
+text to this agent session, so literal spoken output could not be recorded without a
+human observer. The required physical Shift+F10 press likewise cannot be substituted
+by another synthetic event (those already passed). The projection remains intact for
+the operator gate.
+
+## Authorized cleanup follow-up
+
+After Adrian explicitly authorized both destructive cleanup actions, Hubble's real
+**Remove local files** control removed the byte-clean
+`/tmp/scratch-repo/Scratch-remove` root. The UI reported **Local availability
+stopped**, the local path no longer existed, and the Scratch cloud folder remained in
+the tree without a local marker.
+
+The two documents created during the Hubble Product Brain acceptance (Workspace root
+and `Hubble Brain/admin`) plus the accidental `adrian's space` document were moved to
+Hubble Trash. Cleanup selected only `Untitled` documents created after the acceptance
+run began, asserted that exactly three matched, and verified that no recent matching
+documents remained. Older `Untitled` documents were not touched.

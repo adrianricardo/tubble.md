@@ -293,6 +293,19 @@ clean `/tmp/scratch-repo/Scratch-remove` test projection, then record literal
 VoiceOver speech and a physical Shift+F10 pass. If both pass, remove the internal flag
 and legacy production branch; only then begin Phase 6.
 
+**Implementation session 5 + authorized cleanup follow-up (2026-07-13):** the flagged
+app relaunched with populated dev data, and the Scratch mount reconnected `connected`
+and inspected `clean`. After Adrian's action-time confirmation, the real Hubble
+**Remove local files** path removed `/tmp/scratch-repo/Scratch-remove`, reported local
+availability stopped, and left the Scratch cloud folder visible without a local
+marker. Exactly three documents created by this acceptance run (Workspace root,
+`Hubble Brain/admin`, and the accidental `adrian's space` document) were moved to
+Hubble Trash; older `Untitled` documents were preserved. The only remaining gate is
+now explicitly human-only: macOS did not expose VoiceOver's literal spoken phrase to
+the agent session, and a physical Shift+F10 cannot be replaced by the already-passing
+synthetic event. Record those two operator observations, then remove the flag only if
+they pass.
+
 Desktop IA follow-up (direction settled 2026-07-11): replace the simultaneous
 **Folders** / **Live Documents** / **On this computer** sidebar with one current
 context and one folder/document tree. Repo-linked projections become contextual
