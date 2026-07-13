@@ -12,6 +12,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 - Synced cloud folders now review consequential moves and provide durable recovery or Undo when local files are deleted
 
 ### Changed
+- Hubble now rejects overlapping local or cloud folder projections before changing files, repository settings, or cloud metadata
 
 ### Fixed
 - Choosing a folder inside a Git repository now resolves to the repository root, and repo-link mount suggestions refresh when the repository or cloud folder changes

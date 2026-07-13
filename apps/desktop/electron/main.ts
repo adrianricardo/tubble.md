@@ -6,7 +6,12 @@ import path from "node:path";
 import { createConvexBackend } from "@hubble.md/convex-client";
 import hubbleRuntime from "@hubble.md/runtime/global.js?raw";
 import htmlAppTheme from "@hubble.md/runtime/html-app-theme.css?raw";
-import { contentHash, importLiveDocuments } from "@hubble.md/sync";
+import {
+	contentHash,
+	type Folder,
+	importLiveDocuments,
+	type SyncBackend,
+} from "@hubble.md/sync";
 import { createNodeFileSystem } from "@hubble.md/sync/node";
 import tailwindRuntime from "@tailwindcss/browser?raw";
 import alpineRuntime from "alpinejs/dist/cdn.min.js?raw";
@@ -48,6 +53,11 @@ import {
 } from "../src/lib/filePath";
 import { type CliServer, startCliServer } from "./cliServer";
 import { LiveSyncService } from "./liveSync";
+import {
+	assertCloudProjectionRootsDisjoint,
+	assertLocalProjectionRootsDisjoint,
+	type ProjectionMount,
+} from "./projectionMounts";
 import {
 	BRAIN_DOC_FILENAME,
 	buildBrainMarkdown,
@@ -502,6 +512,74 @@ async function removeRepoMountConfig(folderId: string): Promise<void> {
 	await saveRepoMountConfig(mounts);
 }
 
+function toProjectionMount(mount: {
+	folderId: string;
+	workspaceId: string;
+	mountPath: string;
+}): ProjectionMount {
+	return {
+		folderId: mount.folderId,
+		workspaceId: mount.workspaceId,
+		localRoot: mount.mountPath,
+	};
+}
+
+async function accessibleFolderTopology(
+	backend: SyncBackend,
+	workspaceId: string,
+): Promise<Folder[]> {
+	try {
+		return await backend.getFolders(workspaceId);
+	} catch {
+		// Folder editors may mount a shared subtree without Workspace membership.
+		// Their Shared-with-me tree is the complete topology they can project.
+		const shared = await backend.getSharedWithMe();
+		return shared.folders
+			.filter((root) => root.workspaceId === workspaceId)
+			.flatMap((root) => [
+				{
+					_id: root.folderId,
+					name: root.name,
+					parentId: root.parentId,
+					workspaceId: root.workspaceId,
+				},
+				...root.folders.map((folder) => ({
+					_id: folder._id,
+					name: folder.name,
+					parentId: folder.parentId,
+					workspaceId: root.workspaceId,
+				})),
+			]);
+	}
+}
+
+async function assertRepoMountAvailable(
+	candidate: ProjectionMount,
+	backend: SyncBackend,
+): Promise<void> {
+	if (syncedFolder.connected) {
+		throw new Error(
+			"Disconnect the whole-workspace projection before making a folder available. Hubble manages one local copy per document on this computer.",
+		);
+	}
+	const configs = await loadRepoMountConfig();
+	const existing = configs
+		.filter((mount) => mount.folderId !== candidate.folderId)
+		.map(toProjectionMount);
+	await assertLocalProjectionRootsDisjoint(candidate, existing, {
+		realpath: fs.realpath,
+		caseInsensitive:
+			process.platform === "darwin" || process.platform === "win32",
+	});
+	if (existing.some((mount) => mount.workspaceId === candidate.workspaceId)) {
+		assertCloudProjectionRootsDisjoint(
+			candidate,
+			existing,
+			await accessibleFolderTopology(backend, candidate.workspaceId),
+		);
+	}
+}
+
 function repoMountStatus(stored: StoredRepoMount): RepoMount {
 	const service = repoMounts.get(stored.folderId);
 	const status = service?.getStatus();
@@ -552,15 +630,22 @@ async function performRepoLink(input: unknown): Promise<RepoLinkResult> {
 	const selectedRepoDir = resolvePath(parsed.repoDir);
 	const repo = await resolveGitRepo(selectedRepoDir);
 	const repoDir = repo?.repoDir ?? selectedRepoDir;
-	grantRoot(repoDir);
 	const mountPath = parsed.mountPath
 		? resolvePath(parsed.mountPath)
 		: path.join(repoDir, sanitizeMountSegment(parsed.folderName));
+	const backend = createConvexBackend(parsed.deploymentUrl, parsed.authToken);
+	await assertRepoMountAvailable(
+		toProjectionMount({
+			folderId: parsed.folderId,
+			workspaceId: parsed.workspaceId,
+			mountPath,
+		}),
+		backend,
+	);
+	grantRoot(repoDir);
 	grantRoot(mountPath);
 	await fs.mkdir(mountPath, { recursive: true });
 	await fs.rm(path.join(mountPath, ".hubble-export.json"), { force: true });
-
-	const backend = createConvexBackend(parsed.deploymentUrl, parsed.authToken);
 
 	// Read-only best-effort origin parse → cloud display metadata (D11).
 	const repoRemoteUrl = repo
@@ -1926,6 +2011,12 @@ function registerIpc() {
 		async (_event, input: SyncedFolderConnectInput) => {
 			const parsed = syncedFolderConnectSchema.parse(input);
 			const syncRoot = assertGrantedRoot(parsed.syncRoot);
+			const configuredMounts = await loadRepoMountConfig();
+			if (configuredMounts.length > 0) {
+				throw new Error(
+					"Disconnect folder projections before connecting the whole-workspace projection. Hubble manages one local copy per document on this computer.",
+				);
+			}
 			const status = await syncedFolder.connect({
 				syncRoot,
 				deploymentUrl: parsed.deploymentUrl,
@@ -2067,6 +2158,10 @@ function registerIpc() {
 				if (repoMounts.has(mount.folderId)) continue;
 				try {
 					grantRoot(mount.mountPath);
+					await assertRepoMountAvailable(
+						toProjectionMount(mount),
+						createConvexBackend(parsed.deploymentUrl, parsed.authToken),
+					);
 					await connectRepoMountEngine(
 						mount.folderId,
 						mount.mountPath,
@@ -2095,7 +2190,11 @@ function registerIpc() {
 				// An ungranted path is, by definition, not a synced Live Document.
 				return false;
 			}
-			return syncedFolder.isLiveDocument(resolved);
+			if (syncedFolder.isLiveDocument(resolved)) return true;
+			for (const mount of repoMounts.values()) {
+				if (mount.isLiveDocument(resolved)) return true;
+			}
+			return false;
 		},
 	);
 }

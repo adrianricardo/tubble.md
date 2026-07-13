@@ -199,6 +199,17 @@ predicate and fixed restart-only pending-count/startup-resume gaps; see
 accepted. Issue #171's richer impact preview is implemented at code/test/build level;
 its deployed isolated-Electron acceptance is the final Phase 3 bundle gate.
 
+**Desktop cloud-workspace HEAD revalidation and the first Phase 4 multi-root slice
+are complete** (working tree, 2026-07-13): TECH was revalidated against `51f0ee9`
+after the accepted Phase 3 bundle. New mount validation rejects identical,
+ancestor/descendant, and symlink-resolved local roots plus overlapping cloud folder
+subtrees before creating a directory or changing repo/cloud metadata. The legacy
+whole-workspace mirror and folder mounts are now mutually exclusive, and managed-path
+classification checks every active engine. Desktop tests pass 141/141 and
+`pnpm build:desktop` passes. Next: introduce the projection manager to own all engine
+lifecycle, pending-operation routing, and aggregate status, then replace workspace-global repo
+mount subscriptions with folder-scoped subscriptions.
+
 Desktop IA follow-up (direction settled 2026-07-11): replace the simultaneous
 **Folders** / **Live Documents** / **On this computer** sidebar with one current
 context and one folder/document tree. Repo-linked projections become contextual

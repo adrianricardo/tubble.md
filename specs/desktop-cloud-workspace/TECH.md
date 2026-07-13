@@ -1,8 +1,8 @@
 # Desktop cloud workspace
 
 > **Architecture snapshot:** revalidated on `v1-release` at
-> [`8f2fb06b924bfb6daa4b765bb2b8b4398bfe8cd2`](https://github.com/adrianricardo/hubble.md/tree/8f2fb06b924bfb6daa4b765bb2b8b4398bfe8cd2)
-> on 2026-07-11, plus the projection naming/self-write guard in the same working tree.
+> [`51f0ee93f9e2c3d5d8558d92a3dd11b606bc8406`](https://github.com/bholmesdev/hubble.md/tree/51f0ee93f9e2c3d5d8558d92a3dd11b606bc8406)
+> on 2026-07-13, plus the Phase 4 overlap guard in the same working tree.
 > The product contract is durable; re-run the gate after material architectural changes.
 
 ## Context
@@ -66,6 +66,18 @@ has landed. The module ownership table and phase ordering below therefore remain
 current. The naming prerequisite is now closed: `document.path` supplies the canonical
 filename (title fallback for legacy pathless documents), and watcher classification
 waits for materialize indexing/self-write hashes.
+
+**2026-07-13 result:** re-run against `51f0ee9`. Phase 2 startup drift, guarded
+materialization, the versioned operations journal, explicit topology, atomic
+relocation review, deletion classification, Trash/Undo, and collision-safe restore
+are now implemented and independently accepted in isolated Electron. The per-root
+engine is still `SyncedFolderService`; the whole-workspace instance and repo-mount map
+remain composed directly in Electron `main.ts`, and renderer review APIs still route
+only to the whole-workspace instance. Cloud subscriptions remain workspace-global,
+`packages/cli` still lacks projection status, and the desktop still renders the three
+legacy content sections. The ownership table remains current. Phase 4 now starts with
+a testable mount-validation seam; a projection manager is still required to own
+aggregate lifecycle, operations, and status before the unified UI lands.
 
 ### Architecture principles
 
@@ -291,6 +303,17 @@ unified “edit anywhere” presentation before it passes.
 8. Extend status with `offline`, `pending-review`, and per-root queued/recovery counts.
 
 ### Phase 4 — Multi-root correctness and agent status
+
+**Progress 2026-07-13:** local projection roots are canonicalized through their
+nearest existing ancestor and rejected when identical, ancestor/descendant, or
+symlink-resolved overlaps would occur. Folder mounts in the same Workspace are also
+rejected when their cloud roots are identical or ancestor/descendant; guest topology
+falls back to the accessible Shared-with-me tree. Whole-workspace and folder engines
+are now mutually exclusive, and the renderer managed-document guard consults every
+active engine. Validation happens before a new mount directory, repo exclusion, cloud
+repo metadata, or BRAIN seed is written. Next: introduce the projection manager and
+move mount lifecycle, pending-operation routing, and aggregate status out of
+`main.ts`, then add folder-scoped subscriptions.
 
 1. Validate existing and proposed local paths after normalization. Reject identical,
    ancestor, descendant, and symlink-resolved overlap.
