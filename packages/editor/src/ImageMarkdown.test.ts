@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { markdownToTiptapDoc } from "./markdownToProsemirror";
 import { tiptapDocToMarkdown } from "./prosemirrorToMarkdown";
+import { getHubbleEditorSchema } from "./schema";
 
 describe("image markdown conversion", () => {
 	it("parses markdown image into image node", () => {
@@ -75,6 +76,7 @@ describe("image markdown conversion", () => {
 	])("keeps $name", ({ markdown, expected }) => {
 		const doc = markdownToTiptapDoc(markdown);
 		expect(doc.content).toMatchObject(expected);
+		expect(() => getHubbleEditorSchema().nodeFromJSON(doc)).not.toThrow();
 		expect(tiptapDocToMarkdown(doc)).toContain(".png)");
 	});
 });

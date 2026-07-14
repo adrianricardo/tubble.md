@@ -1,4 +1,5 @@
 import { type AnyExtension, type Extensions, getSchema } from "@tiptap/core";
+import Image from "@tiptap/extension-image";
 import { TaskItem } from "@tiptap/extension-list";
 import {
 	Table,
@@ -72,7 +73,7 @@ export function createHubbleEditorExtensions(
 }
 
 export function getHubbleEditorSchema() {
-	return getSchema(createHubbleEditorExtensions());
+	return getSchema([...createHubbleEditorExtensions(), Image]);
 }
 
 function parseTableCellAlign(value: string | null | undefined) {
