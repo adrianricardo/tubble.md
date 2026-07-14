@@ -39,7 +39,8 @@ and deferred product candidates are recorded in
 candidate queue remains intact until implementation is verified and landed.
 
 **Selected improvements Milestones 1–4 completed; Milestone 5 acceptance in progress
-(implementation sessions 1–5, 2026-07-14):** commits `6d95b76` through `2bb2e5d` land every selected correctness,
+(implementation sessions 1–6, 2026-07-14):** commits `6d95b76` through `2bb2e5d`
+land every selected correctness,
 native-text, persistence/sync, editor-rhythm, and cloud-context creation slice as
 coherent local commits with the required `Upstream-commit` trailers. The correctness
 boundary now covers UTF-8
@@ -96,13 +97,14 @@ changed-file Biome and diff checks pass, and `pnpm build:desktop` passes after
 simplify/comments/review-readiness. Repository-wide `pnpm check`
 still reports only pre-existing/mounted formatting diagnostics under
 `brain/cloud/.hubble/**`, `convex/tsconfig.json`, and `skills-lock.json`, plus existing
-storyboard CSS specificity warnings. A fresh arm64 package also builds and opens, but
-authenticated packaged acceptance is externally gated: the packaged file origin does
-not inherit the signed-in development profile, and this account currently exposes no
-viewer-shared root. **Next:** interactively sign into the fresh package with access to
-a viewer-shared root, then finish viewer menu inspection, signed-in desktop/web
-Trash/restore, representative rich-document comparison, and macOS spelling/text
-services. Do not redeploy the backend.
+storyboard CSS specificity warnings. A fresh arm64 package also builds and opens. Its
+now-authenticated packaged profile completed member menu/create, signed-in desktop/web
+reactive Trash/Undo, representative rich-document comparison in light/dark, and the
+macOS spelling/text-service menu. The temporary fixtures were removed or soft-trashed,
+and no backend deployment occurred. The only remaining external gate is that this
+account exposes no viewer-shared root. **Next:** make a viewer-shared root available
+to the signed-in package and confirm its tree exposes no write/share/local actions or
+inaccessible ancestors/siblings. Do not redeploy the backend.
 
 ## ➤ NEXT STEP (updated 2026-07-13, cross-device checkpoint prioritized)
 

@@ -11,16 +11,17 @@ a folder row opened and selected correctly but left tree focus on the prior row.
 `5ddb7f5` now requests stable-ID tree focus for the returned document, and the repeated
 member and shared-editor flows focused the new reactive row after expanding its parent.
 
-Two external gates remain before Milestone 5 can be called complete:
+One external gate remains before Milestone 5 can be called complete: the signed-in
+account exposes editor-shared roots but no viewer-shared root. Automated capability
+and backend coverage passes, but the viewer menu must still be inspected in a real
+authenticated context.
 
-1. The signed-in account currently exposes editor-shared roots but no viewer-shared
-   root. Automated capability/backend coverage passes, but the viewer menu must still
-   be inspected in a real authenticated context.
-2. The freshly built packaged app opens signed out. Copying the development profile to
-   an isolated packaged profile does not carry auth across the dev HTTP and packaged
-   file origins. Authenticated packaged member/viewer checks, desktop/web reactive
-   Trash confirmation, and packaged native text-service acceptance therefore require
-   an interactive sign-in (and a viewer fixture or viewer account).
+The packaged profile became authenticated before implementation session 6 resumed.
+That pass completed the packaged member, signed-in web Trash/restore, representative
+rich-document, and native macOS text-service checks described below. The packaged
+binary was relaunched with its existing profile and the development diagnostic flag
+solely to expose CDP; it continued to load the packaged `file://` renderer from the
+app bundle. No backend deployment occurred.
 
 ## Live evidence
 
@@ -48,8 +49,29 @@ Two external gates remain before Milestone 5 can be called complete:
   the availability record returned `connected` with zero pending operations and zero
   recoveries. Trashing the canary removed its projected file.
 - The current arm64 packaged app launched from
-  `apps/desktop/release/mac-arm64/Hubble.app` and rendered its signed-out shell over
-  CDP. Authenticated packaged interaction stopped at the sign-in gate.
+  `apps/desktop/release/mac-arm64/Hubble.app`. Its authenticated member Workspace
+  exposed the compact root create controls and the expected Rename, Move…, and Move
+  to Trash document menu. A temporary root document went through the existing
+  destination dialog, create, rename, Trash confirmation, and Undo flow.
+- The signed-in web surface observed that packaged document disappear reactively and
+  return after Undo without a reload. The temporary document was then soft-trashed;
+  no permanent deletion was used. The existing package session was copied in memory
+  to localhost browser storage for this local acceptance only; no token value was
+  logged or written to the repository.
+- A temporary externally projected Markdown document exercised frontmatter, h1/h2,
+  paragraphs, emphasis/link, nested lists, blockquote, table, rule, code block, image,
+  and shared presence chrome on both packaged desktop and authenticated web. Both
+  renderers produced the same node counts and structure. Light/dark screenshots were
+  inspected on both surfaces; the theme-safe quote, rule, table, and code styling held,
+  and both reported the selected 12px (`0.75em`) top-level rhythm. Removing the
+  projected fixture removed it reactively from both surfaces.
+- The packaged macOS context menu on selected `spelingg` exposed the `spelling`
+  suggestion, Add to Dictionary, Cut/Copy/Paste/Select All, AutoFill, and the host's
+  Query GPT text service. The application Edit menu exposed Writing Tools. Add to
+  Dictionary was intentionally not invoked because acceptance must not permanently
+  mutate the user's dictionary. The existing Electron regression invokes the
+  suggestion and verifies `replaceMisspelling`; repeated automation could not keep
+  the native popup available long enough to click it again after inspection.
 
 ## Backend safety note
 
@@ -69,13 +91,17 @@ recorded here rather than hidden or followed by an unsafe rollback.
 - Changed-file Biome and `git diff --check` passed.
 - `pnpm build:desktop:dist` passed and produced the arm64 ZIP/package.
 - Simplify, comments, and review-readiness completed for `5ddb7f5`.
+- Session 6 added no product-code change or backend deployment. CDP verified the
+  authenticated packaged member menu/create flow, packaged-to-web reactive Trash and
+  Undo, matching rich-document structure and light/dark rendering, and the native
+  spelling/text-service menu. All session fixtures were removed or soft-trashed.
 - Repository-wide `pnpm check` remains blocked by the recorded mounted
   `brain/cloud/.hubble/**` formatting, `convex/tsconfig.json`, `skills-lock.json`, and
   storyboard CSS specificity diagnostics; no changed product file failed.
 
 ## Exact next step
 
-Sign into the freshly built packaged app with a profile that can open the member
-Workspace and a viewer-shared root. Repeat viewer menu inspection, Trash/restore with
-the signed-in web surface open, the representative rich document comparison, and the
-macOS spelling/text-services checks. Do not redeploy the backend.
+Make a viewer-shared root available to the currently signed-in packaged profile (or
+sign in with a profile that already has one), then inspect its packaged tree and row
+menus. Confirm it exposes no create, rename, move, Trash, Share, or local-availability
+actions and no inaccessible ancestors/siblings. Do not redeploy the backend.
