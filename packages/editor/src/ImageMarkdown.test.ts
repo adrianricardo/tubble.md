@@ -34,4 +34,47 @@ describe("image markdown conversion", () => {
 		const doc = markdownToTiptapDoc("before\n\n![]()\n\nafter");
 		expect(doc.content?.some((node) => node.type === "image")).toBe(false);
 	});
+
+	it.each([
+		{
+			name: "image before text",
+			markdown: "![diagram](example.png) trailing",
+			expected: [
+				{ type: "image", attrs: { src: "example.png", alt: "diagram" } },
+				{ type: "paragraph", content: [{ type: "text", text: "trailing" }] },
+			],
+		},
+		{
+			name: "text before image",
+			markdown: "leading ![diagram](example.png)",
+			expected: [
+				{ type: "paragraph", content: [{ type: "text", text: "leading" }] },
+				{ type: "image", attrs: { src: "example.png", alt: "diagram" } },
+			],
+		},
+		{
+			name: "text on both sides",
+			markdown: "before ![diagram](example.png) after",
+			expected: [
+				{ type: "paragraph", content: [{ type: "text", text: "before" }] },
+				{ type: "image", attrs: { src: "example.png", alt: "diagram" } },
+				{ type: "paragraph", content: [{ type: "text", text: "after" }] },
+			],
+		},
+		{
+			name: "multiple images",
+			markdown: "one ![first](one.png) middle ![second](two.png) three",
+			expected: [
+				{ type: "paragraph", content: [{ type: "text", text: "one" }] },
+				{ type: "image", attrs: { src: "one.png", alt: "first" } },
+				{ type: "paragraph", content: [{ type: "text", text: "middle" }] },
+				{ type: "image", attrs: { src: "two.png", alt: "second" } },
+				{ type: "paragraph", content: [{ type: "text", text: "three" }] },
+			],
+		},
+	])("keeps $name", ({ markdown, expected }) => {
+		const doc = markdownToTiptapDoc(markdown);
+		expect(doc.content).toMatchObject(expected);
+		expect(tiptapDocToMarkdown(doc)).toContain(".png)");
+	});
 });
