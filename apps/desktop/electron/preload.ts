@@ -132,6 +132,8 @@ const desktopApi = {
 		ipcRenderer.invoke("desktop:local-availability:stop", input),
 	reconnectLocalAvailability: (input) =>
 		ipcRenderer.invoke("desktop:local-availability:reconnect", input),
+	onLocalAvailabilityProgress: (callback) =>
+		subscribe("desktop:local-availability:progress", callback),
 	linkRepoFolder: (input) =>
 		ipcRenderer.invoke("desktop:repo-link:link", input),
 	resolveGitRepoRoot: (selectedDir) =>

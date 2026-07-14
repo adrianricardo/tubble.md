@@ -924,7 +924,6 @@ function CloudWorkspaceHome({
 			<Authenticated>
 				<div className="h-full overflow-y-auto">
 					<AuthenticatedCloudWorkspaceHome
-						onOpenSettings={onOpenSettings}
 						onOpenLiveDocument={onOpenLiveDocument}
 					/>
 				</div>
@@ -934,10 +933,8 @@ function CloudWorkspaceHome({
 }
 
 function AuthenticatedCloudWorkspaceHome({
-	onOpenSettings,
 	onOpenLiveDocument,
 }: {
-	onOpenSettings: () => void;
 	onOpenLiveDocument: (documentId: string) => void;
 }) {
 	const sharedWithMe = useQuery(api.documents.listSharedWithMe, {});
@@ -967,13 +964,6 @@ function AuthenticatedCloudWorkspaceHome({
 				setSidebarOpen(true);
 			}}
 			onOpenFolder={openDashboardFolder}
-			footer={
-				<div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
-					<Button variant="outline" size="sm" onClick={onOpenSettings}>
-						Local availability
-					</Button>
-				</div>
-			}
 		/>
 	);
 }

@@ -4,6 +4,82 @@ Build-state half of the roadmap. Track strategy/sequencing moved to the cloud br
 (`brain/cloud/synthesized/Track Strategy.md` when mounted) — split 2026-07-10 by the
 hubble-init apply run.
 
+## ➤ NEXT STEP (updated 2026-07-13, cross-device checkpoint prioritized)
+
+**Pause Phase 6 recovery implementation long enough to publish and exercise an
+installable development desktop build on a second Mac.** Adrian wants cross-device
+live evidence before choosing the next UX/UI improvements. Follow
+`specs/desktop-cloud-workspace/CROSS-DEVICE-DEV-RELEASE-PLAN.md`: make the existing
+`desktop-dev-latest` workflow dispatchable, push and build the exact `v1-release`
+candidate against dev Convex, verify the arm64/x64 artifacts and manifest, install on
+the second Mac, then run the focused cloud-editor + watched-filesystem + quit/offline
+matrix. Record the run and use its findings to choose between UX/UI follow-ups, Phase
+6 recovery completion, and production distribution.
+
+Known release starting point: local `v1-release` is clean at `94b63e6`, 27 commits
+ahead of `origin/v1-release`; the dev-release workflow exists locally but is not yet
+present on GitHub's default branch or remote `v1-release`; and
+`adrianricardo/hubble.md` has no `desktop-dev-latest` release. This is an unsigned dev
+checkpoint, not a production version/tag/notarization pass.
+
+**Session 9 preflight (2026-07-13):** fetched remotes confirm `94b63e6` is still an
+undiverged 27-commit fast-forward candidate, its ignored environment files are not in
+the candidate, and desktop/backend configuration agrees on the intended
+`strong-setter-709` dev deployment. `pnpm build:desktop` passes. Read-only GitHub checks
+confirm the workflow is still absent from default branch `main` and the dev release is
+still absent. Dev function metadata includes the import/relocation surface but cannot
+prove the deployed code matches the candidate, so checkpoint execution now waits for
+the plan-required operator confirmation to publish the workflow, push `v1-release`,
+deploy the dev backend, and dispatch/replace `desktop-dev-latest`.
+
+**Operator confirmation (2026-07-13):** Adrian authorized those four external
+mutations in the active Codex task. Resume the checkpoint at the dev deployment and
+GitHub publication steps; production release work and test-data removal remain out of
+scope.
+
+**Session 10 publication (2026-07-13):** the dev backend is deployed, `main` contains
+the dispatchable workflow, `origin/v1-release` is at the published candidate
+`d0a2cc1`, and
+[`desktop-dev-latest`](https://github.com/adrianricardo/hubble.md/releases/tag/desktop-dev-latest)
+contains exactly the arm64/x64 ZIPs plus manifest. The successful
+[Actions run](https://github.com/adrianricardo/hubble.md/actions/runs/29297362856)
+built both architectures; independent downloads matched manifest commit, sizes, and
+SHA-256 hashes. The first dispatch exposed and the candidate now fixes a redundant
+pnpm-version workflow input. A mistaken root-level Convex invocation temporarily
+removed indexes/component registration; the correct `packages/sync-backend` deploy
+restored every reported index and remounted ProseMirror before publication, and
+function metadata confirms the candidate import/relocation surface.
+
+**Next:** on the second Mac, record architecture/macOS, download its matching ZIP and
+verify it against the published manifest, install/approve the expected unsigned app,
+sign in to dev, and confirm the same known cloud document. Then run the two-device
+editor/filesystem/quit/offline matrix. This is now a physical-device gate; do not
+resume Phase 6 recovery or production distribution before recording its evidence.
+
+**Second-Mac onboarding findings (2026-07-13, acceptance still in progress):** the
+unsigned build's unexplained **Hubble Safe Storage** Keychain prompt led Adrian to
+choose Deny accidentally, so dev-install guidance needs pre-prompt context and a safe
+retry path. After sign-in, an unrequested **Bring “README.md” into Hubble** dialog
+appeared over Settings. Code inspection shows that a startup file argument or macOS
+`open-file` event can be queued while signed out and revealed only by the authenticated
+tree after login, severing the visible cause from the prompt; the event's exact source
+is not yet proven. Record this as both an onboarding UX problem and a packaged-launch
+correctness investigation. Do not treat the import as user intent without confirming
+its source path and trigger.
+
+**Next implementation step selected (2026-07-13): local-agent availability
+onboarding.** The clean install exposed a more fundamental gap: a user can see a
+populated cloud Space and an HTML Apps/skills promotion without learning that local
+agents still have no filesystem path. Implement
+`specs/local-agent-availability-onboarding/TECH.md` against the observable contract in
+its sibling `PRODUCT.md`. The primary journey must create an exact current-Space or
+shared-root standalone projection; it must not relabel the legacy all-accessible
+mirror. The secondary journey links one cloud folder into one Git repository. Both end
+with a verified path, agent handoff actions, and skills guidance only after local
+availability exists. Finish recording the physical cross-device matrix in parallel
+with planning/implementation evidence; its safety failures can still preempt this UX
+slice.
+
 **Local-agent availability Milestone 1 completed (2026-07-13):** projection scope
 and materialization behavior are frozen at code/test level. Sync, Convex subscriber,
 and desktop service now share explicit `all-accessible`, `workspace`, and `folder`
@@ -17,11 +93,81 @@ pinned `d0a2cc1` base restored dependencies from the local pnpm store; sync test
 51/51, Convex-client tests 1/1, desktop tests 156/156, changed-file Biome passes, and
 `pnpm build:desktop` passes.
 
-**Next local-agent availability step:** begin TECH Milestone 2 at the versioned
-`local-availability.json` registry and idempotent `repo-mounts.json` migration, then
-generalize `ProjectionManager`, overlap validation, lifecycle/status APIs, and typed
-IPC around the frozen `ProjectionScope`. Do not start renderer onboarding until that
-lifecycle contract is complete.
+**Local-agent availability Milestone 2 completed (2026-07-13):** direct local
+availability now persists in an atomically written, versioned
+`local-availability.json` registry. First read migrates every valid legacy
+`repo-mounts.json` entry once without rewriting the legacy file or reconnecting an
+engine. Projection lifecycle, status/events, operation routing, overlap validation,
+reconnect, relocation, and stop now use stable Workspace/folder scope keys. Workspace
+roots conflict with every root in the same Workspace, folder ancestry conflicts remain
+guarded, and all local-root checks canonicalize missing/symlinked paths before any
+setup mutation. Existing folder APIs are thin adapters over typed scope-based
+IPC/preload/renderer APIs; the legacy all-accessible mirror remains separate, is
+reported as incompatible, and must be stopped in Settings rather than being relabeled
+or migrated. Desktop tests pass 160/160, changed-file Biome and diff checks pass, and
+`pnpm build:desktop` passes after simplify/comments/review-readiness.
+
+**Local-agent availability Milestone 3 implementation completed; packaged acceptance
+pending (2026-07-13):** the selected member Workspace or shared-folder context now
+owns a discoverable standalone onboarding card and exact-scope state join. The native
+destination chooser proposes `~/Hubble/<context>`, returns a prospective path without
+creating it, and leaves guarded validation/mutation to the Milestone 2 lifecycle. The
+dialog names scope, role/capability, destination, and stop-local safety; real scoped
+Electron events announce verification/materialization progress; cancellation before
+creation is inert; and offline/error/review states offer accurate retry or Settings
+recovery. Connected completion exposes the exact path, reveal/copy, and agent
+instructions, while relaunch/token refresh reconnects all generalized records. The
+legacy broad mirror remains explicitly incompatible, dismissed guidance leaves a
+compact contextual entry, and the dashboard-only Settings discovery was removed.
+The existing Settings repo-link workflow remains unchanged for Milestone 4.
+
+Focused onboarding tests pass 4/4, sync tests pass 51/51, changed-file Biome and diff
+checks pass, and `pnpm build:desktop` passes after simplify/comments/review-readiness.
+The desktop suite passes 158 non-socket tests; its six CLI server tests cannot bind a
+Unix socket in the managed sandbox (`EPERM`). Repository-wide `pnpm check` still sees
+pre-existing formatting diagnostics in mounted `.hubble` metadata and unrelated
+files. The required real Electron workflow was attempted, but the sandbox denied
+process inspection and localhost binding, so no packaged/UI acceptance is claimed.
+
+**Local-agent availability Milestone 3 packaged acceptance completed
+(2026-07-14):** a clean isolated packaged profile reached populated dev data and
+completed the contextual `testspace2` member journey by keyboard. The chooser left its
+prospective path absent, live regions announced verification/materialization/
+completion, the connected path persisted across relaunch and a real CLI-backed auth
+token rotation, and an external Markdown marker reconciled into the cloud editor (then
+was removed again). Supplemental packaged lifecycle calls proved exact root/nested
+materialization for `Phase 3 Acceptance 2026-07-13`, including a temporary empty cloud
+folder, with one Workspace ID throughout the index; the editor-shared `smoke-folder`
+materialized as one exact subtree. Cancellation returned focus to the invoking action
+and changed neither disk nor registry, and overlapping roots were rejected before
+mutation.
+
+The first occupied-root attempt exposed a Milestone 3 safety defect: standalone setup
+accepted a foreign sentinel file and materialized around it. Direct availability
+preflight now permits only an empty destination or a matching version-2 Hubble index;
+foreign content and differently scoped indexes are rejected before setup writes. The
+desktop suite passes 166/166, changed-file Biome passes, `pnpm build:desktop` passes,
+and the rebuilt package preserved the fixed-case sentinel as the destination's only
+file while creating no registry record.
+
+The remaining matrix passed on 2026-07-14 with a temporary viewer-shared dev root.
+The contextual preview named the source Workspace, `viewer` role, read-only access,
+and exact destination. Offline setup persisted only the scoped recovery record and
+Hubble metadata, announced verification/materialization/error, and offered an
+accurate retry. Terminating at that state and relaunching online recovered without
+restarting onboarding: exactly one shared Markdown document materialized, the v2
+index named only that folder and Workspace, the file was mode `0444`, and an external
+append failed without changing its hash. CDP's packaged accessibility tree exposed
+the literal dialog, scope, role, path, progress, error, completion, and action labels.
+VoiceOver itself launched, but this host denied Apple-event reads of its last phrase,
+cursor, and caption window, so literal synthesized speech could not be captured; the
+AX/live-region evidence is the maximum this host permits.
+
+Both temporary cloud folders (`M3 Empty Acceptance 2026-07-13` and the viewer fixture),
+the isolated profile, and every registry-named acceptance root were removed after all
+projection processes stopped. Desktop tests pass 166/166 and `pnpm build:desktop`
+passes. **Next local-agent availability step:** begin TECH Milestone 4 in a fresh
+session; no Milestone 4 work was started during packaged acceptance.
 
 ## ➤ NEXT STEP (updated 2026-07-09, post-apply-run)
 
@@ -386,6 +532,63 @@ Backlog (non-blocking): serializer continuation-indent preservation
 (`packages/editor`, whitespace-only normalization from the split run); frontmatter
 call-site adoption (4 sites); Track D vision extraction (Adrian-gated); production
 deploy/QA gates still not run.
+
+Adrian's todos (added 2026-07-13, for Adrian to work in parallel with agent
+implementation — not yet started):
+
+1. Agent-led UX/UI audit: have an agent review the desktop app's current UX/UI
+   (unified cloud tree, onboarding flows, local-agent availability surfaces) and
+   surface findings/recommendations.
+2. Get Codex's opinion on upstream sync strategy: this repo was forked from an
+   original remote; ask Codex whether it's still possible to pull in the latest
+   changes from that original upstream, and whether continuing to track it is
+   reasonable long-term or whether it's better to formally break off and diverge
+   as an independent project.
+
+Todos to flesh out with an agent and plan before ready to implement (added
+2026-07-13, not yet planned):
+
+3. Simplify the local-agent-availability onboarding card into a single CTA.
+   Current state (screenshot, desktop sidebar "Use this content with local
+   agents" card): two competing top-level actions are shown side by side —
+   "Make available on this Mac" (primary button) and "Link to a code
+   repository" (secondary text link) — plus a "Dismiss" affordance, all in one
+   compact card. This reads as confusing/ambiguous about which path to take.
+   Direction: collapse to a single top-level CTA on the card; clicking it opens
+   a modal that presents the two real options (standalone local availability vs.
+   linking a code repository) as clearly labeled choices with plain-language
+   explainer text for each, so the tradeoff is legible before committing. Needs
+   a design pass (copy + modal layout) and a look at how this interacts with the
+   existing `specs/local-agent-availability-onboarding/` spec before scoping
+   implementation.
+
+4. Let the "Make available" destination dialog accept its default path directly.
+   Current state (screenshot, "Make 'magic-test' available" dialog): the
+   Destination field already shows a proposed default path
+   (`/Users/adriantavares/Hubble/magic-test`), but the primary "Make available"
+   button appears disabled/unconfirmed until the user clicks "Choose this or
+   another folder..." first. Adrian should be able to accept the shown default
+   and confirm immediately without being forced through the folder picker.
+   Direction: treat the prospective default path as already selected on dialog
+   open so "Make available" is actionable right away; "Choose this or another
+   folder..." remains available for overriding it. Needs a look at the
+   destination-chooser flow in
+   `specs/local-agent-availability-onboarding/` before scoping implementation.
+
+5. Investigate "Local files are not connected" state — likely a bug, not just
+   copy. Current state (screenshot, `testspace2` sidebar card): a local,
+   already-materialized folder (`/Users/adriantavares/testspace2`) shows "Local
+   files are not connected" with a "Retry connection" CTA. Adrian's flag: local
+   files on disk shouldn't conceptually depend on a "connection" at all — they
+   already exist on the Mac's filesystem. This suggests either (a) the label is
+   wrong and this is actually a projection-engine/watcher/sync-connection state
+   being mislabeled as a local-file-availability problem, or (b) there's a real
+   bug where local file access is being gated on something (e.g. cloud auth,
+   the sync engine) that it shouldn't need. Needs investigation into what
+   "not connected" actually means here (engine status vs. filesystem reality)
+   before deciding whether this is a copy fix, a status-model fix, or a real
+   correctness bug, per the projection/engine status work in
+   `specs/desktop-cloud-workspace/`.
 
 ## Where the build actually is (2026-07-09)
 

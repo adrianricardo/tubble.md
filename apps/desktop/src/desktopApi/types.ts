@@ -330,6 +330,11 @@ export type LocalAvailabilityReconnectInput = {
 	authToken: string;
 };
 
+export type LocalAvailabilityProgressEvent = {
+	scopeKey: string;
+	phase: "verifying" | "materializing";
+};
+
 export type SyncedFolderConnectInput = {
 	/** The user-chosen sync root (bounded watch root). */
 	syncRoot: string;
@@ -444,6 +449,7 @@ export type DesktopApi = {
 	createFolderPicker(options?: {
 		defaultPath?: string;
 		title?: string;
+		create?: boolean;
 	}): Promise<string | null>;
 	saveMarkdownFilePicker(options: {
 		defaultPath?: string;
@@ -532,6 +538,9 @@ export type DesktopApi = {
 	reconnectLocalAvailability(
 		input: LocalAvailabilityReconnectInput,
 	): Promise<LocalAvailabilityRecord[]>;
+	onLocalAvailabilityProgress(
+		callback: (event: LocalAvailabilityProgressEvent) => void,
+	): Unsubscribe;
 	/**
 	 * Link a cloud folder to a local git repo (RB3 / D11): materialize the
 	 * folder's subtree at the mount path, register a per-mount sync engine, append

@@ -75,6 +75,7 @@ import {
 import { ProjectionManager } from "./projectionManager";
 import {
 	assertCloudProjectionRootsDisjoint,
+	assertLocalProjectionDestinationAvailable,
 	assertLocalProjectionRootsDisjoint,
 	isFolderWithinProjection,
 	type ProjectionMount,
@@ -763,6 +764,49 @@ async function assertLocalAvailabilityAvailable(
 		caseInsensitive:
 			process.platform === "darwin" || process.platform === "win32",
 	});
+	// Only an empty root or the same indexed projection is safe before setup writes.
+	let rootEntries: string[] = [];
+	try {
+		rootEntries = await fs.readdir(candidate.localRoot);
+	} catch (error) {
+		if (
+			typeof error !== "object" ||
+			error === null ||
+			!("code" in error) ||
+			error.code !== "ENOENT"
+		) {
+			throw error;
+		}
+	}
+	const indexPath = path.join(
+		candidate.localRoot,
+		...SYNCED_FOLDER_INDEX_REL.split("/"),
+	);
+	const hasIndex = await pathExistsAsFile(indexPath);
+	let indexedMount = null;
+	if (hasIndex) {
+		try {
+			const parsed = JSON.parse(await fs.readFile(indexPath, "utf8")) as {
+				version?: unknown;
+				mount?: unknown;
+			};
+			if (parsed.version === 2 && typeof parsed.mount === "object") {
+				indexedMount = parsed.mount as
+					| { kind: "workspace-mirror" }
+					| { kind: "workspace"; workspaceId: string }
+					| { kind: "folder"; folderId: string };
+			}
+		} catch {
+			indexedMount = null;
+		}
+	}
+	assertLocalProjectionDestinationAvailable(
+		classifySyncedFolderRoot(
+			hasIndex ? [...rootEntries, SYNCED_FOLDER_INDEX_REL] : rootEntries,
+		).state,
+		indexedMount,
+		candidate.scope,
+	);
 	if (
 		existing.some(
 			(mount) => mount.scope.workspaceId === candidate.scope.workspaceId,
@@ -1287,14 +1331,23 @@ async function createLocalAvailability(
 
 	const localRoot = assertGrantedRoot(parsed.localRoot);
 	const backend = createConvexBackend(parsed.deploymentUrl, parsed.authToken);
+	const scopeKey = projectionScopeKey(parsed.scope);
+	sendToRenderer("desktop:local-availability:progress", {
+		scopeKey,
+		phase: "verifying",
+	});
 	await assertLocalAvailabilityAvailable(
 		{ scope: parsed.scope, localRoot },
 		backend,
 	);
+	sendToRenderer("desktop:local-availability:progress", {
+		scopeKey,
+		phase: "materializing",
+	});
 	await fs.mkdir(localRoot, { recursive: true });
 	const now = Date.now();
 	const record: StoredLocalAvailability = {
-		scopeKey: projectionScopeKey(parsed.scope),
+		scopeKey,
 		scope: parsed.scope,
 		displayName: parsed.displayName,
 		localRoot,
@@ -2447,7 +2500,9 @@ function registerIpc() {
 			});
 			if (result.canceled || !result.filePath) return null;
 			const folderPath = result.filePath;
-			await fs.mkdir(folderPath, { recursive: true });
+			if (options.create !== false) {
+				await fs.mkdir(folderPath, { recursive: true });
+			}
 			grantRoot(folderPath);
 			return folderPath;
 		},

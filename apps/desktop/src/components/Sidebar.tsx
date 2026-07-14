@@ -24,7 +24,7 @@ import { toast } from "sonner";
 import MingcuteCloudLine from "~icons/mingcute/cloud-line";
 import { desktopConvexUrl } from "../convex";
 import { desktopApi } from "../desktopApi";
-import type { RepoMount } from "../desktopApi/types";
+import type { LocalAvailabilityRecord } from "../desktopApi/types";
 import { revealFileLabel } from "../lib/revealFile";
 import {
 	createMarkdownFileInFolder,
@@ -44,6 +44,11 @@ import {
 	workspaceStore,
 } from "../store/state";
 import { CloudDocumentCreateButton } from "./CloudDocumentCreateButton";
+import { LocalAgentAvailabilityOnboarding } from "./LocalAgentAvailabilityOnboarding";
+import {
+	directScopeKey,
+	findDirectAvailability,
+} from "./localAgentAvailabilityModel";
 import { CloudContextSwitcher, useSelectedCloudContext } from "./SpaceSwitcher";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
@@ -224,6 +229,7 @@ function CloudSidebarSection({
 				<AuthenticatedCloudSidebar
 					activeDocumentId={activeLiveDocumentId ?? null}
 					onOpenDocument={onOpenLiveDocument}
+					onOpenSettings={onOpenSettings}
 				/>
 			</Authenticated>
 		</div>
@@ -233,33 +239,35 @@ function CloudSidebarSection({
 function AuthenticatedCloudSidebar({
 	activeDocumentId,
 	onOpenDocument,
+	onOpenSettings,
 }: {
 	activeDocumentId: string | null;
 	onOpenDocument?: (documentId: string) => void;
+	onOpenSettings?: () => void;
 }) {
 	const { spaces, sharedFolders, context } = useSelectedCloudContext();
 	const authToken = useAuthToken();
-	const [mounts, setMounts] = useState<RepoMount[]>([]);
-	const [stopTarget, setStopTarget] = useState<CloudFolderAvailability | null>(
+	const [availabilityRecords, setAvailabilityRecords] = useState<
+		LocalAvailabilityRecord[]
+	>([]);
+	const [stopTarget, setStopTarget] = useState<LocalAvailabilityRecord | null>(
 		null,
 	);
 	const [stopping, setStopping] = useState(false);
 	const reconnectedForToken = useRef<string | null>(null);
-	const refreshMounts = useCallback(() => {
-		void desktopApi.listRepoMounts().then(setMounts);
+	const refreshAvailability = useCallback(() => {
+		void desktopApi.listLocalAvailability().then(setAvailabilityRecords);
 	}, []);
 	useEffect(() => {
-		refreshMounts();
-		const unsubscribeLinked = desktopApi.onRepoLinkLinked(refreshMounts);
-		const unsubscribeSync = desktopApi.onSyncedFolderEvent(refreshMounts);
+		refreshAvailability();
+		const unsubscribeLinked = desktopApi.onRepoLinkLinked(refreshAvailability);
+		const unsubscribeSync = desktopApi.onSyncedFolderEvent(refreshAvailability);
 		return () => {
 			unsubscribeLinked();
 			unsubscribeSync();
 		};
-	}, [refreshMounts]);
+	}, [refreshAvailability]);
 	useEffect(() => {
-		// The cloud shell does not mount RepoLinkSection, so it must restore
-		// persisted engines itself after sign-in or token refresh.
 		if (
 			!authToken ||
 			!desktopConvexUrl ||
@@ -268,20 +276,29 @@ function AuthenticatedCloudSidebar({
 			return;
 		reconnectedForToken.current = authToken;
 		void desktopApi
-			.reconnectRepoMounts({ deploymentUrl: desktopConvexUrl, authToken })
-			.then(setMounts)
+			.reconnectLocalAvailability({
+				deploymentUrl: desktopConvexUrl,
+				authToken,
+			})
+			.then(setAvailabilityRecords)
 			.catch(() => {
 				reconnectedForToken.current = null;
 			});
 	}, [authToken]);
 	const localFolders = useMemo(
 		() =>
-			mounts.map((mount) => ({
-				folderId: mount.folderId,
-				localPath: mount.mountPath,
-				status: mount.status,
-			})),
-		[mounts],
+			availabilityRecords.flatMap((record) =>
+				record.scope.kind === "folder"
+					? [
+							{
+								folderId: record.scope.folderId,
+								localPath: record.localRoot,
+								status: record.state,
+							},
+						]
+					: [],
+			),
+		[availabilityRecords],
 	);
 	const selectedSharedFolder =
 		context?.kind === "shared-folder"
@@ -294,6 +311,17 @@ function AuthenticatedCloudSidebar({
 	const openDocument = (documentId: string) => {
 		if (onOpenDocument) onOpenDocument(documentId);
 		else toast("Document opening is unavailable in this window");
+	};
+	const recordForFolder = (folderId: string) =>
+		availabilityRecords.find(
+			(record) =>
+				record.scope.kind === "folder" && record.scope.folderId === folderId,
+		) ?? null;
+	const updateAvailability = (next: LocalAvailabilityRecord) => {
+		setAvailabilityRecords((current) => [
+			...current.filter((record) => record.scopeKey !== next.scopeKey),
+			next,
+		]);
 	};
 	const copyLocalPath = async (availability: CloudFolderAvailability) => {
 		try {
@@ -308,12 +336,17 @@ function AuthenticatedCloudSidebar({
 			toast.error("Sign in before relocating local availability");
 			return;
 		}
-		const mountPath = await desktopApi.createFolderPicker();
+		const record = recordForFolder(availability.folderId);
+		if (!record) return;
+		const mountPath = await desktopApi.createFolderPicker({
+			defaultPath: record.localRoot,
+			title: `Relocate “${record.displayName}”`,
+		});
 		if (!mountPath) return;
 		try {
-			const result = await desktopApi.relocateRepoMount({
-				folderId: availability.folderId,
-				mountPath,
+			const result = await desktopApi.relocateLocalAvailability({
+				scopeKey: record.scopeKey,
+				localRoot: mountPath,
 				deploymentUrl: desktopConvexUrl,
 				authToken,
 			});
@@ -323,21 +356,23 @@ function AuthenticatedCloudSidebar({
 				});
 				return;
 			}
-			refreshMounts();
+			updateAvailability(result.availability);
 			toast.success("Local availability relocated", {
-				description: result.mount.mountPath,
+				description: result.availability.localRoot,
 			});
 		} catch (error) {
-			refreshMounts();
+			refreshAvailability();
 			toast.error("Failed to relocate local availability", {
 				description: error instanceof Error ? error.message : String(error),
 			});
 		}
 	};
 	const requestStop = async (availability: CloudFolderAvailability) => {
+		const record = recordForFolder(availability.folderId);
+		if (!record) return;
 		try {
-			const cleanliness = await desktopApi.inspectRepoMount(
-				availability.folderId,
+			const cleanliness = await desktopApi.inspectLocalAvailability(
+				record.scopeKey,
 			);
 			if (cleanliness.state === "blocked") {
 				toast.error("Local availability can’t stop yet", {
@@ -345,7 +380,7 @@ function AuthenticatedCloudSidebar({
 				});
 				return;
 			}
-			setStopTarget(availability);
+			setStopTarget(record);
 		} catch (error) {
 			toast.error("Could not inspect local availability", {
 				description: error instanceof Error ? error.message : String(error),
@@ -360,8 +395,8 @@ function AuthenticatedCloudSidebar({
 		}
 		setStopping(true);
 		try {
-			const result = await desktopApi.stopRepoMount({
-				folderId: stopTarget.folderId,
+			const result = await desktopApi.stopLocalAvailability({
+				scopeKey: stopTarget.scopeKey,
 				keepFiles,
 				deploymentUrl: desktopConvexUrl,
 				authToken,
@@ -373,10 +408,12 @@ function AuthenticatedCloudSidebar({
 				return;
 			}
 			setStopTarget(null);
-			refreshMounts();
+			setAvailabilityRecords((current) =>
+				current.filter((record) => record.scopeKey !== stopTarget.scopeKey),
+			);
 			toast.success("Local availability stopped", {
 				description: keepFiles
-					? `The files at ${result.mountPath} are now a detached copy.`
+					? `The files at ${result.localRoot} are now a detached copy.`
 					: "The clean managed files were removed from this computer.",
 			});
 		} catch (error) {
@@ -393,6 +430,28 @@ function AuthenticatedCloudSidebar({
 			<p className="text-[11px] text-sidebar-foreground/70">Loading content…</p>
 		);
 	}
+	const selectedSpace =
+		context?.kind === "workspace"
+			? spaces.find((space) => space._id === context.workspaceId)
+			: undefined;
+	const directScope = context
+		? context.kind === "workspace"
+			? ({ kind: "workspace", workspaceId: context.workspaceId } as const)
+			: ({
+					kind: "folder",
+					workspaceId: context.workspaceId,
+					folderId: context.folderId,
+				} as const)
+		: null;
+	const matchingAvailability = directScope
+		? findDirectAvailability(availabilityRecords, directScope)
+		: null;
+	const legacyMirror =
+		availabilityRecords.find((record) => record.incompatible) ?? null;
+	const displayName = selectedSpace?.name ?? selectedSharedFolder?.name ?? "";
+	const readOnly =
+		selectedSharedFolder?.role === "viewer" ||
+		selectedSharedFolder?.role === "commenter";
 
 	return (
 		<div className="flex min-h-0 flex-col gap-1">
@@ -414,6 +473,24 @@ function AuthenticatedCloudSidebar({
 						<p className="m-0 truncate text-[10px] text-muted-foreground [padding-inline:0.5rem]">
 							{selectedSharedFolder.workspaceName} · {selectedSharedFolder.role}
 						</p>
+					) : null}
+					{directScope && displayName ? (
+						<LocalAgentAvailabilityOnboarding
+							key={directScopeKey(directScope)}
+							scope={directScope}
+							displayName={displayName}
+							contextDetail={
+								selectedSharedFolder
+									? `Shared from ${selectedSharedFolder.workspaceName} · ${selectedSharedFolder.role}`
+									: "Member Space"
+							}
+							capability={readOnly ? "read-only" : "read-write"}
+							availability={matchingAvailability}
+							legacyMirror={legacyMirror}
+							authToken={authToken}
+							onAvailabilityChanged={updateAvailability}
+							onOpenSettings={onOpenSettings ?? (() => undefined)}
+						/>
 					) : null}
 					<CloudContentTree
 						context={context}
@@ -445,7 +522,7 @@ function AuthenticatedCloudSidebar({
 			>
 				<div className="flex flex-col gap-3">
 					<p className="m-0 break-all rounded-sm bg-muted text-[11px] text-muted-foreground [padding-block:0.5rem] [padding-inline:0.625rem]">
-						{stopTarget?.localPath}
+						{stopTarget?.localRoot}
 					</p>
 					<p className="m-0 text-xs text-foreground">
 						Hubble verified that the managed files match the synchronized cloud

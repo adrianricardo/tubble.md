@@ -1,10 +1,39 @@
 import path from "node:path";
-import type { Folder, ProjectionScope } from "@hubble.md/sync";
+import type {
+	Folder,
+	ProjectionScope,
+	SyncedFolderMountIdentity,
+} from "@hubble.md/sync";
+import type { SyncedFolderRootInspectionState } from "./syncedFolderClassify";
 
 export type ProjectionMount = {
 	localRoot: string;
 	scope: Exclude<ProjectionScope, { kind: "all-accessible" }>;
 };
+
+export function assertLocalProjectionDestinationAvailable(
+	state: SyncedFolderRootInspectionState,
+	indexedMount: SyncedFolderMountIdentity | null,
+	candidateScope: ProjectionMount["scope"],
+): "new" | "reconnect" {
+	if (state === "empty") return "new";
+	if (state === "non-empty-foreign") {
+		throw new Error(
+			"This destination already contains files. Choose an empty folder so Hubble cannot overwrite unrelated content.",
+		);
+	}
+
+	const expectedMount: SyncedFolderMountIdentity =
+		candidateScope.kind === "workspace"
+			? { kind: "workspace", workspaceId: candidateScope.workspaceId }
+			: { kind: "folder", folderId: candidateScope.folderId };
+	if (JSON.stringify(indexedMount) !== JSON.stringify(expectedMount)) {
+		throw new Error(
+			"This destination belongs to a different Hubble projection. Reconnect its original cloud scope or choose another folder.",
+		);
+	}
+	return "reconnect";
+}
 
 type CanonicalizeOptions = {
 	realpath: (candidate: string) => Promise<string>;
