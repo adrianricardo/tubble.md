@@ -42,12 +42,19 @@ export const LinkExtension = Mark.create({
 			{
 				tag: "a[href]",
 				getAttrs: (element) => {
-					const href = (element as HTMLAnchorElement).getAttribute("href");
+					const anchor = element as HTMLAnchorElement;
+					const href = anchor.getAttribute("href");
+					const kind = anchor.getAttribute("data-link-kind");
+					const target = anchor.getAttribute("data-target");
+					const markdownStyle = anchor.getAttribute("data-markdown-style");
 					return {
 						href: href ?? "",
-						kind: "url",
-						target: null,
-						markdownStyle: null,
+						kind: kind === "wiki" ? "wiki" : "url",
+						target,
+						markdownStyle:
+							markdownStyle === "bare" || markdownStyle === "autolink"
+								? markdownStyle
+								: null,
 					};
 				},
 			},

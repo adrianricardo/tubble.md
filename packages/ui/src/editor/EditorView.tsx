@@ -3,6 +3,7 @@ import {
 	createHubbleEditorExtensions,
 	markdownToTiptapDoc,
 	parseMarkdownFrontMatter,
+	RichTextClipboardExtension,
 	tiptapDocToMarkdown,
 } from "@hubble.md/editor";
 import type { Content, Editor } from "@tiptap/core";
@@ -141,6 +142,7 @@ export function EditorView({
 	const editor = useEditor({
 		extensions: [
 			...createHubbleEditorExtensions({ codeBlock: HubbleCodeBlock }),
+			RichTextClipboardExtension,
 			SmartLinkExtension,
 			LinkClickExtension.configure({ onOpenExternalLink, onOpenWikiLink }),
 			LinkCreationGhostExtension,
