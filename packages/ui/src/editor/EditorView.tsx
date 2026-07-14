@@ -1,4 +1,5 @@
 import {
+	ContextMenuSpellcheckExtension,
 	combineMarkdownFrontMatter,
 	createHubbleEditorExtensions,
 	markdownToTiptapDoc,
@@ -143,6 +144,7 @@ export function EditorView({
 		extensions: [
 			...createHubbleEditorExtensions({ codeBlock: HubbleCodeBlock }),
 			RichTextClipboardExtension,
+			ContextMenuSpellcheckExtension,
 			SmartLinkExtension,
 			LinkClickExtension.configure({ onOpenExternalLink, onOpenWikiLink }),
 			LinkCreationGhostExtension,
