@@ -38,6 +38,36 @@ and deferred product candidates are recorded in
 `specs/upstream-selected-improvements/TECH.md`. No product code was ported, and the
 candidate queue remains intact until implementation is verified and landed.
 
+**Selected improvements Milestones 1 and 2 completed (implementation sessions 1–2,
+2026-07-14):** commits `6d95b76` through `845db06` land every selected correctness,
+native-text, persistence/sync, and editor-rhythm slice as coherent local commits with
+the required `Upstream-commit` trailers. The correctness boundary now covers UTF-8
+Electron saves and delayed watcher echoes, storage exceptions, complete adjacent-link
+identity, accumulated list changes, schema-valid mixed image/text projections, rich
+clipboard anchors, caret spellcheck/native text actions, retained failed asset
+transfers, retired save timers, and emphasis-boundary whitespace. A visual recovery
+pass also added the image node to the reusable projection schema after a real mixed
+image fixture exposed that missing backend contract.
+
+The shared editor now uses a `0.75em` block rhythm with larger heading separation,
+restored nested flow in quotes/lists/table cells, clearer h5/h6 hierarchy, muted
+markers, theme-safe quotes/rules/code, and preserved table, task, presence, and node
+view behavior. Common dark tokens moved from the desktop shell into the shared theme
+so the same stylesheet is valid on desktop and web. Detached, non-persistent visual
+fixtures passed at 560, 900, and 1440 pixels in light and dark on both surfaces; the
+test cloud document touched while discovering the schema gap was restored and
+verified before acceptance continued.
+
+The Milestone 1 package matrix passes editor 79/79, UI 20/20, cloud UI 5/5, sync
+53/53, and desktop 177/177. Web tests pass 4/4, changed-file Biome and diff checks
+pass, and `pnpm build:desktop` passes after Milestone 2. Repository-wide `pnpm check`
+still reports only pre-existing/mounted formatting diagnostics under
+`brain/cloud/.hubble/**`, `convex/tsconfig.json`, and `skills-lock.json`, plus existing
+storyboard CSS specificity warnings. **Next:** begin Milestone 3 in
+`specs/upstream-selected-improvements/TECH.md` with capability-aware current-context
+New folder controls and folder-row New document/New folder callbacks and tests; do not
+start the Milestone 4 general row menu until the create flow is verified.
+
 ## ➤ NEXT STEP (updated 2026-07-13, cross-device checkpoint prioritized)
 
 **Pause Phase 6 recovery implementation long enough to publish and exercise an
