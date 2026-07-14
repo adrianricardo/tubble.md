@@ -101,6 +101,7 @@ import {
 	shouldIgnoreForWatch,
 } from "./syncedFolderClassify";
 import { SyncedFolderService } from "./syncedFolderService";
+import { requireEncodedTextBytes } from "./textFileIpc";
 import { createAppTray } from "./tray";
 import {
 	loadZoomFactor,
@@ -2359,10 +2360,10 @@ function registerIpc() {
 
 	ipcMain.handle(
 		"desktop:write-file-text",
-		async (_event, { path: filePath, content }) => {
+		async (_event, { path: filePath, bytes }) => {
 			const resolved = assertGranted(filePath);
 			await fs.mkdir(path.dirname(resolved), { recursive: true });
-			await fs.writeFile(resolved, String(content));
+			await fs.writeFile(resolved, requireEncodedTextBytes(bytes));
 		},
 	);
 

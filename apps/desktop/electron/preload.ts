@@ -1,6 +1,7 @@
 import os from "node:os";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { DesktopApi } from "../src/desktopApi/types";
+import { encodeTextForIpc } from "./textFileIpc";
 
 function subscribe<T extends unknown[]>(
 	channel: string,
@@ -36,7 +37,10 @@ const desktopApi = {
 			webUtils.getPathForFile(file),
 		),
 	writeFileText: (path, content) =>
-		ipcRenderer.invoke("desktop:write-file-text", { path, content }),
+		ipcRenderer.invoke("desktop:write-file-text", {
+			path,
+			bytes: encodeTextForIpc(content),
+		}),
 	renameFile: (fromPath, toPath) =>
 		ipcRenderer.invoke("desktop:rename-file", { fromPath, toPath }),
 	pathExists: (path) => ipcRenderer.invoke("desktop:path-exists", { path }),
