@@ -23,6 +23,7 @@
 		}
 	},
 	"scripts": {
+		"upstream:audit": "pnpm -w upstream:audit",
 		"dev": "convex dev",
 		"test": "vitest run"
 	},

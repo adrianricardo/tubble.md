@@ -18,6 +18,7 @@
 		"node": "22.x"
 	},
 	"scripts": {
+		"upstream:audit": "pnpm -w upstream:audit",
 		"dev": "astro dev",
 		"build": "astro build",
 		"preview": "astro preview",

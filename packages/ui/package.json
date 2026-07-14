@@ -29,6 +29,7 @@
 		"dist"
 	],
 	"scripts": {
+		"upstream:audit": "pnpm -w upstream:audit",
 		"build": "vite build && tsc -p tsconfig.json --emitDeclarationOnly",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"dev": "vite build --watch",

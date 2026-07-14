@@ -12,6 +12,7 @@
 	"homepage": "https://hubble.md",
 	"bugs": "https://github.com/bholmesdev/hubble.md/issues",
 	"scripts": {
+		"upstream:audit": "node .agents/skills/upstream-intake/scripts/audit-upstream.mjs",
 		"check": "biome check .",
 		"check:fix": "biome check . --write",
 		"typecheck": "pnpm -r --if-present typecheck",

@@ -21,6 +21,7 @@
 		"dist"
 	],
 	"scripts": {
+		"upstream:audit": "pnpm -w upstream:audit",
 		"build": "tsc -p tsconfig.json",
 		"postbuild": "chmod +x dist/index.js",
 		"typecheck": "tsc -p tsconfig.json --noEmit",

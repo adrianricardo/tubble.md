@@ -4,6 +4,29 @@ Build-state half of the roadmap. Track strategy/sequencing moved to the cloud br
 (`brain/cloud/synthesized/Track Strategy.md` when mounted) — split 2026-07-10 by the
 hubble-init apply run.
 
+## Upstream intake process completed (2026-07-14)
+
+The fork now has a repo-owned selective upstream channel. Run `$upstream-intake` for
+the judgment workflow or `pnpm upstream:audit` for the deterministic audit. The skill
+supports default, review-only, and branch-only modes; all application happens on an
+isolated `codex/upstream-intake-YYYY-MM-DD` worktree branch, and default landing is a
+guarded fast-forward only when the captured target ref and clean original worktree are
+unchanged and verification passes. Wholesale upstream merge/rebase, unattended
+automation, pushes, PRs, deployments, and upstream mutation remain prohibited.
+
+State starts screened through upstream `72c9e808` with 13 retained behavior/product
+candidates and an append-only initial strategy record under `specs/upstream-intake/`.
+The no-fetch audit finds zero newly seen commits, 156/243 divergence, 36 overlapping
+paths, and 27 synthetic conflict events affecting 28 reported paths. Implementation
+fixtures pass 12/12, including clean/dirty trees, fetch isolation, missing/unreachable
+watermarks, real conflicts, paths with spaces, and isolated guarded fast-forward
+landing. Workspace forwarding makes the exact `pnpm upstream:audit` command available
+from every package directory. Required Markdown/JSON audits, changed-file Biome, diff
+checks, and `pnpm build:desktop` pass after simplify/comments/review-readiness. No real
+upstream intake, fetch, or candidate code port occurred. Invoke the skill manually for
+the next review; this internal process does not replace the current product next step
+below.
+
 ## ➤ NEXT STEP (updated 2026-07-13, cross-device checkpoint prioritized)
 
 **Pause Phase 6 recovery implementation long enough to publish and exercise an

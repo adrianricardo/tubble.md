@@ -15,6 +15,7 @@
 	"type": "module",
 	"main": "./out/main/main.js",
 	"scripts": {
+		"upstream:audit": "pnpm -w upstream:audit",
 		"dev": "node scripts/dev.mjs",
 		"dev:debug": "HUBBLE_DESKTOP_ENABLE_CDP=1 node scripts/dev.mjs",
 		"build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit && electron-vite build",
