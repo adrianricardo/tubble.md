@@ -51,7 +51,8 @@ const desktopApi = {
 	openFilePicker: (options) =>
 		ipcRenderer.invoke("desktop:open-file-picker", options),
 	openFolderPicker: () => ipcRenderer.invoke("desktop:open-folder-picker"),
-	createFolderPicker: () => ipcRenderer.invoke("desktop:create-folder-picker"),
+	createFolderPicker: (options) =>
+		ipcRenderer.invoke("desktop:create-folder-picker", options),
 	saveMarkdownFilePicker: (options) =>
 		ipcRenderer.invoke("desktop:save-markdown-file-picker", options),
 	watchPath: async (path, options, callback) => {
@@ -119,6 +120,18 @@ const desktopApi = {
 		ipcRenderer.invoke("desktop:live-sync:undo-trash", { operationId }),
 	dismissProjectionTrashUndo: (operationId) =>
 		ipcRenderer.invoke("desktop:live-sync:dismiss-trash-undo", { operationId }),
+	listLocalAvailability: () =>
+		ipcRenderer.invoke("desktop:local-availability:list"),
+	createLocalAvailability: (input) =>
+		ipcRenderer.invoke("desktop:local-availability:create", input),
+	inspectLocalAvailability: (scopeKey) =>
+		ipcRenderer.invoke("desktop:local-availability:inspect", scopeKey),
+	relocateLocalAvailability: (input) =>
+		ipcRenderer.invoke("desktop:local-availability:relocate", input),
+	stopLocalAvailability: (input) =>
+		ipcRenderer.invoke("desktop:local-availability:stop", input),
+	reconnectLocalAvailability: (input) =>
+		ipcRenderer.invoke("desktop:local-availability:reconnect", input),
 	linkRepoFolder: (input) =>
 		ipcRenderer.invoke("desktop:repo-link:link", input),
 	resolveGitRepoRoot: (selectedDir) =>

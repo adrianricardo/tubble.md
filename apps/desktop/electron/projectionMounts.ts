@@ -1,10 +1,9 @@
 import path from "node:path";
-import type { Folder } from "@hubble.md/sync";
+import type { Folder, ProjectionScope } from "@hubble.md/sync";
 
 export type ProjectionMount = {
 	localRoot: string;
-	workspaceId: string;
-	folderId: string;
+	scope: Exclude<ProjectionScope, { kind: "all-accessible" }>;
 };
 
 type CanonicalizeOptions = {
@@ -105,35 +104,49 @@ export function assertCloudProjectionRootsDisjoint(
 	existing: ProjectionMount[],
 	folders: Folder[],
 ): void {
+	const candidateWorkspaceId = candidate.scope.workspaceId;
 	const sameWorkspace = existing.filter(
-		(mount) => mount.workspaceId === candidate.workspaceId,
+		(mount) => mount.scope.workspaceId === candidateWorkspaceId,
 	);
 	if (sameWorkspace.length === 0) return;
+	if (
+		candidate.scope.kind === "workspace" ||
+		sameWorkspace.some((mount) => mount.scope.kind === "workspace")
+	) {
+		throw new Error(
+			"This cloud Space overlaps an existing projection on this computer. Stop or relocate the existing projection first.",
+		);
+	}
 
 	const parentById = new Map(
 		folders
-			.filter((folder) => folder.workspaceId === candidate.workspaceId)
+			.filter((folder) => folder.workspaceId === candidateWorkspaceId)
 			.map((folder) => [folder._id, folder.parentId]),
 	);
-	if (!parentById.has(candidate.folderId)) {
+	if (!parentById.has(candidate.scope.folderId)) {
 		throw new Error(
 			"Hubble could not verify the cloud folder hierarchy, so it left the existing projections unchanged.",
 		);
 	}
 
 	for (const mount of sameWorkspace) {
-		if (!parentById.has(mount.folderId)) {
+		if (mount.scope.kind !== "folder") continue;
+		if (!parentById.has(mount.scope.folderId)) {
 			throw new Error(
 				"Hubble could not verify the cloud folder hierarchy, so it left the existing projections unchanged.",
 			);
 		}
 		if (
 			isFolderWithinProjection(
-				candidate.folderId,
-				mount.folderId,
+				candidate.scope.folderId,
+				mount.scope.folderId,
 				parentById,
 			) ||
-			isFolderWithinProjection(mount.folderId, candidate.folderId, parentById)
+			isFolderWithinProjection(
+				mount.scope.folderId,
+				candidate.scope.folderId,
+				parentById,
+			)
 		) {
 			throw new Error(
 				"This cloud folder overlaps an existing projection on this computer. Choose a disjoint folder.",

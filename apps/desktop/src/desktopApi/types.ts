@@ -1,6 +1,7 @@
 import type {
 	LiveDocumentImportResult,
 	PendingProjectionOperation,
+	ProjectionScope,
 	ReconcileOutcome,
 } from "@hubble.md/sync";
 
@@ -256,6 +257,79 @@ export type RepoMountReconnectInput = {
 	authToken: string;
 };
 
+export type DirectProjectionScope = Exclude<
+	ProjectionScope,
+	{ kind: "all-accessible" }
+>;
+
+export type LocalAvailabilityRecord = {
+	scopeKey: string;
+	scope: ProjectionScope;
+	displayName: string;
+	localRoot: string;
+	association: "standalone" | "repo" | "legacy";
+	incompatible: boolean;
+	repoRoot: string | null;
+	repoName: string | null;
+	repoRemoteUrl: string | null;
+	gitExclusion:
+		| { status: "excluded"; pattern: string }
+		| { status: "manual"; pattern: string }
+		| { status: "not-applicable" };
+	state: LiveSyncStatusState | "disconnected";
+	lastSyncAt: number | null;
+	pendingOperationCount: number;
+	recoveryCount: number;
+	createdAt: number | null;
+	updatedAt: number | null;
+	lastConnectedAt: number | null;
+};
+
+type LocalAvailabilityCreateBase = {
+	displayName: string;
+	localRoot: string;
+	deploymentUrl: string;
+	authToken: string;
+};
+
+export type LocalAvailabilityCreateInput =
+	| (LocalAvailabilityCreateBase & {
+			scope: DirectProjectionScope;
+			association: "standalone";
+	  })
+	| (LocalAvailabilityCreateBase & {
+			scope: Extract<DirectProjectionScope, { kind: "folder" }>;
+			association: "repo";
+			repoRoot: string;
+	  });
+
+export type LocalAvailabilityRelocateInput = {
+	scopeKey: string;
+	localRoot: string;
+	deploymentUrl: string;
+	authToken: string;
+};
+
+export type LocalAvailabilityRelocateResult =
+	| { status: "relocated"; availability: LocalAvailabilityRecord }
+	| { status: "blocked"; cleanliness: BlockedRepoMountCleanliness };
+
+export type LocalAvailabilityStopInput = {
+	scopeKey: string;
+	keepFiles: boolean;
+	deploymentUrl: string;
+	authToken: string;
+};
+
+export type LocalAvailabilityStopResult =
+	| { status: "stopped"; localRoot: string; keptFiles: boolean }
+	| { status: "blocked"; cleanliness: BlockedRepoMountCleanliness };
+
+export type LocalAvailabilityReconnectInput = {
+	deploymentUrl: string;
+	authToken: string;
+};
+
 export type SyncedFolderConnectInput = {
 	/** The user-chosen sync root (bounded watch root). */
 	syncRoot: string;
@@ -295,7 +369,8 @@ export type CloudMarkdownImportResult = {
 
 /** Pushed to the renderer over `desktop:live-sync:event` as the mirror changes. */
 export type ProjectionRootScope = {
-	kind: "workspace-mirror" | "folder";
+	scopeKey: string;
+	kind: "all-accessible" | "workspace" | "folder";
 	workspaceId: string | null;
 	folderId: string | null;
 	localRoot: string | null;
@@ -366,7 +441,10 @@ export type DesktopApi = {
 	writeBinaryFile(path: string, bytes: number[]): Promise<void>;
 	openFilePicker(options: { defaultPath?: string }): Promise<string | null>;
 	openFolderPicker(): Promise<string | null>;
-	createFolderPicker(): Promise<string | null>;
+	createFolderPicker(options?: {
+		defaultPath?: string;
+		title?: string;
+	}): Promise<string | null>;
 	saveMarkdownFilePicker(options: {
 		defaultPath?: string;
 	}): Promise<string | null>;
@@ -440,6 +518,20 @@ export type DesktopApi = {
 	dismissProjectionTrashUndo(
 		operationId: string,
 	): Promise<{ status: "dismissed" }>;
+	listLocalAvailability(): Promise<LocalAvailabilityRecord[]>;
+	createLocalAvailability(
+		input: LocalAvailabilityCreateInput,
+	): Promise<LocalAvailabilityRecord>;
+	inspectLocalAvailability(scopeKey: string): Promise<RepoMountCleanliness>;
+	relocateLocalAvailability(
+		input: LocalAvailabilityRelocateInput,
+	): Promise<LocalAvailabilityRelocateResult>;
+	stopLocalAvailability(
+		input: LocalAvailabilityStopInput,
+	): Promise<LocalAvailabilityStopResult>;
+	reconnectLocalAvailability(
+		input: LocalAvailabilityReconnectInput,
+	): Promise<LocalAvailabilityRecord[]>;
 	/**
 	 * Link a cloud folder to a local git repo (RB3 / D11): materialize the
 	 * folder's subtree at the mount path, register a per-mount sync engine, append

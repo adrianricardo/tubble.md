@@ -26,8 +26,11 @@ afterEach(() => {
 function mount(overrides: Partial<ProjectionMount> = {}): ProjectionMount {
 	return {
 		localRoot: "/repos/a/brain",
-		workspaceId: "workspace-a",
-		folderId: "folder-a",
+		scope: {
+			kind: "folder",
+			workspaceId: "workspace-a",
+			folderId: "folder-a",
+		},
 		...overrides,
 	};
 }
@@ -112,17 +115,41 @@ describe("projection mount validation", () => {
 		).toThrow("overlaps an existing projection");
 		expect(() =>
 			assertCloudProjectionRootsDisjoint(
-				mount({ folderId: "folder-b" }),
-				[mount({ folderId: "folder-a" })],
+				mount({
+					scope: {
+						kind: "folder",
+						workspaceId: "workspace-a",
+						folderId: "folder-b",
+					},
+				}),
+				[mount()],
 				folders,
 			),
 		).toThrow("overlaps an existing projection");
 		expect(() =>
 			assertCloudProjectionRootsDisjoint(
-				mount({ folderId: "folder-c" }),
-				[mount({ folderId: "folder-a" })],
+				mount({
+					scope: {
+						kind: "folder",
+						workspaceId: "workspace-a",
+						folderId: "folder-c",
+					},
+				}),
+				[mount()],
 				folders,
 			),
 		).not.toThrow();
+	});
+
+	it("rejects Workspace roots against every root in that Workspace", () => {
+		const workspace = mount({
+			scope: { kind: "workspace", workspaceId: "workspace-a" },
+		});
+		expect(() =>
+			assertCloudProjectionRootsDisjoint(workspace, [mount()], []),
+		).toThrow("cloud Space overlaps");
+		expect(() =>
+			assertCloudProjectionRootsDisjoint(mount(), [workspace], []),
+		).toThrow("cloud Space overlaps");
 	});
 });

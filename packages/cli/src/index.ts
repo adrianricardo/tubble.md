@@ -256,7 +256,8 @@ type CliServerStatus = {
 	}>;
 	projections?: Array<{
 		scope: {
-			kind: "workspace-mirror" | "folder";
+			scopeKey: string;
+			kind: "all-accessible" | "workspace" | "folder";
 			workspaceId: string | null;
 			folderId: string | null;
 			localRoot: string | null;

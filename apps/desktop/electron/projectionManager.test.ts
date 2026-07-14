@@ -99,13 +99,17 @@ describe("ProjectionManager", () => {
 			wholeWorkspace: whole,
 			createMount: () => mount,
 		});
-		await manager.connectMount("folder-a", "workspace-a", {
-			...input,
-			syncRoot: "/repo/brain",
-		});
+		await manager.connectMount(
+			{ kind: "folder", folderId: "folder-a", workspaceId: "workspace-a" },
+			{
+				...input,
+				syncRoot: "/repo/brain",
+			},
+		);
 
 		expect(manager.listStatuses()).toHaveLength(2);
 		expect(manager.listStatuses()[1]?.scope).toEqual({
+			scopeKey: "folder:folder-a",
 			kind: "folder",
 			workspaceId: "workspace-a",
 			folderId: "folder-a",
@@ -133,13 +137,49 @@ describe("ProjectionManager", () => {
 			wholeWorkspace: whole,
 			createMount: () => mount,
 		});
-		await manager.connectMount("folder-a", "workspace-a", input);
+		await manager.connectMount(
+			{ kind: "workspace", workspaceId: "workspace-a" },
+			input,
+		);
 
-		await manager.refreshMount("folder-a");
+		await manager.refreshMount("workspace:workspace-a");
 		expect(mount.refresh).toHaveBeenCalledOnce();
 		expect(manager.findDocumentPath("document-1")).toBe(
 			"/repo/brain/document-1.md",
 		);
+		expect(manager.listStatuses()[1]?.scope).toMatchObject({
+			scopeKey: "workspace:workspace-a",
+			kind: "workspace",
+			workspaceId: "workspace-a",
+			folderId: null,
+		});
+	});
+
+	it("runs disjoint Workspace and folder scopes independently", async () => {
+		const workspace = engine();
+		const folder = engine();
+		const manager = new ProjectionManager({
+			wholeWorkspace: engine(),
+			createMount: (scope) => (scope.kind === "workspace" ? workspace : folder),
+		});
+		await manager.connectMount(
+			{ kind: "workspace", workspaceId: "workspace-a" },
+			{ ...input, syncRoot: "/roots/workspace-a" },
+		);
+		await manager.connectMount(
+			{ kind: "folder", workspaceId: "workspace-b", folderId: "folder-b" },
+			{ ...input, syncRoot: "/roots/folder-b" },
+		);
+
+		expect(manager.listStatuses().map(({ scope }) => scope.scopeKey)).toEqual([
+			"all-accessible",
+			"workspace:workspace-a",
+			"folder:folder-b",
+		]);
+		await manager.disconnectMount("workspace:workspace-a");
+		expect(manager.hasMount("workspace:workspace-a")).toBe(false);
+		expect(manager.hasMount("folder:folder-b")).toBe(true);
+		expect(folder.disconnect).not.toHaveBeenCalled();
 	});
 
 	it("routes operation actions to the engine that owns the operation", async () => {
@@ -149,7 +189,10 @@ describe("ProjectionManager", () => {
 			wholeWorkspace: whole,
 			createMount: () => mount,
 		});
-		await manager.connectMount("folder-a", "workspace-a", input);
+		await manager.connectMount(
+			{ kind: "folder", folderId: "folder-a", workspaceId: "workspace-a" },
+			input,
+		);
 
 		await manager.approvePendingMove("mount");
 		expect(mount.approvePendingMove).toHaveBeenCalledWith("mount");
@@ -167,9 +210,12 @@ describe("ProjectionManager", () => {
 		});
 
 		await expect(
-			manager.connectMount("folder-a", "workspace-a", input),
+			manager.connectMount(
+				{ kind: "folder", folderId: "folder-a", workspaceId: "workspace-a" },
+				input,
+			),
 		).rejects.toThrow("connect failed");
-		expect(manager.hasMount("folder-a")).toBe(false);
+		expect(manager.hasMount("folder:folder-a")).toBe(false);
 		expect(failed.disconnect).toHaveBeenCalledOnce();
 	});
 });

@@ -11,6 +11,7 @@ import {
 	contentHash,
 	type Folder,
 	importLiveDocuments,
+	projectionScopeKey,
 	type SyncBackend,
 } from "@hubble.md/sync";
 import { createNodeFileSystem } from "@hubble.md/sync/node";
@@ -39,6 +40,13 @@ import type {
 	DirectoryListing,
 	LiveSyncConnectInput,
 	LiveSyncReconcileInput,
+	LocalAvailabilityCreateInput,
+	LocalAvailabilityReconnectInput,
+	LocalAvailabilityRecord,
+	LocalAvailabilityRelocateInput,
+	LocalAvailabilityRelocateResult,
+	LocalAvailabilityStopInput,
+	LocalAvailabilityStopResult,
 	RepoLinkInput,
 	RepoLinkResult,
 	RepoMount,
@@ -60,6 +68,10 @@ import {
 } from "../src/lib/filePath";
 import { type CliServer, startCliServer } from "./cliServer";
 import { LiveSyncService } from "./liveSync";
+import {
+	LocalAvailabilityStore,
+	type StoredLocalAvailability,
+} from "./localAvailabilityStore";
 import { ProjectionManager } from "./projectionManager";
 import {
 	assertCloudProjectionRootsDisjoint,
@@ -285,7 +297,8 @@ const syncedFolder = new SyncedFolderService({
 		emitProjectionEvent({
 			...event,
 			scope: {
-				kind: "workspace-mirror",
+				scopeKey: "all-accessible",
+				kind: "all-accessible",
 				workspaceId: null,
 				folderId: null,
 				localRoot: syncedFolder.getStatus().syncRoot,
@@ -298,19 +311,24 @@ const syncedFolder = new SyncedFolderService({
 
 const projectionManager = new ProjectionManager({
 	wholeWorkspace: syncedFolder,
-	createMount: (folderId, workspaceId) =>
+	createMount: (projectionScope) =>
 		new SyncedFolderService({
-			scope: { kind: "folder", workspaceId, folderId },
+			scope: projectionScope,
 			emit: (event) => {
+				const scopeKey = projectionScopeKey(projectionScope);
 				const scope = projectionManager
 					.listStatuses()
-					.find((entry) => entry.scope.folderId === folderId)?.scope;
+					.find((entry) => entry.scope.scopeKey === scopeKey)?.scope;
 				emitProjectionEvent({
 					...event,
 					scope: scope ?? {
-						kind: "folder",
-						workspaceId: null,
-						folderId,
+						scopeKey,
+						kind: projectionScope.kind,
+						workspaceId: projectionScope.workspaceId,
+						folderId:
+							projectionScope.kind === "folder"
+								? projectionScope.folderId
+								: null,
 						localRoot: null,
 					},
 				});
@@ -413,6 +431,53 @@ const repoMountRelocateSchema = z.object({
 	deploymentUrl: convexDeploymentUrlSchema,
 	authToken: authTokenSchema,
 });
+const directProjectionScopeSchema = z.discriminatedUnion("kind", [
+	z.object({ kind: z.literal("workspace"), workspaceId: z.string().min(1) }),
+	z.object({
+		kind: z.literal("folder"),
+		workspaceId: z.string().min(1),
+		folderId: z.string().min(1),
+	}),
+]);
+const localAvailabilityCreateSchema = z.discriminatedUnion("association", [
+	z.object({
+		association: z.literal("standalone"),
+		scope: directProjectionScopeSchema,
+		displayName: z.string().min(1),
+		localRoot: z.string().min(1),
+		deploymentUrl: convexDeploymentUrlSchema,
+		authToken: authTokenSchema,
+	}),
+	z.object({
+		association: z.literal("repo"),
+		scope: z.object({
+			kind: z.literal("folder"),
+			workspaceId: z.string().min(1),
+			folderId: z.string().min(1),
+		}),
+		displayName: z.string().min(1),
+		localRoot: z.string().min(1),
+		repoRoot: z.string().min(1),
+		deploymentUrl: convexDeploymentUrlSchema,
+		authToken: authTokenSchema,
+	}),
+]);
+const localAvailabilityRelocateSchema = z.object({
+	scopeKey: z.string().min(1),
+	localRoot: z.string().min(1),
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+});
+const localAvailabilityStopSchema = z.object({
+	scopeKey: z.string().min(1),
+	keepFiles: z.boolean(),
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+});
+const localAvailabilityReconnectSchema = z.object({
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+});
 const defaultWindowState: WindowState = { width: 920, height: 720 };
 const windowStateSchema = z.object({
 	width: z.number().int().min(640).max(4096),
@@ -507,29 +572,6 @@ async function saveGrants() {
 	);
 }
 
-// ── Repo-link mount config (RB3 / D11): per-machine {folderId → localRoot} ──────
-type StoredRepoMount = {
-	folderId: string;
-	folderName: string;
-	workspaceId: string;
-	mountPath: string;
-	repoDir: string;
-	repoName: string | null;
-	repoRemoteUrl: string | null;
-};
-const storedRepoMountSchema = z.object({
-	folderId: z.string().min(1),
-	folderName: z.string(),
-	workspaceId: z.string().min(1),
-	mountPath: z.string().min(1),
-	repoDir: z.string().min(1),
-	repoName: z.string().nullable(),
-	repoRemoteUrl: z.string().nullable(),
-});
-const repoMountConfigSchema = z.object({
-	mounts: z.array(storedRepoMountSchema),
-});
-
 const cloudMarkdownImportSchema = z.object({
 	sourcePath: z.string().min(1),
 	deploymentUrl: z.string().min(1),
@@ -544,48 +586,19 @@ function repoMountsPath(): string {
 	return path.join(app.getPath("userData"), "repo-mounts.json");
 }
 
-async function loadRepoMountConfig(): Promise<StoredRepoMount[]> {
-	try {
-		const raw = await fs.readFile(repoMountsPath(), "utf8");
-		return repoMountConfigSchema.parse(JSON.parse(raw)).mounts.map((mount) => ({
-			...mount,
-			repoName: mount.repoName ?? null,
-			repoRemoteUrl: mount.repoRemoteUrl ?? null,
-		}));
-	} catch {
-		return [];
-	}
+function localAvailabilityPath(): string {
+	return path.join(app.getPath("userData"), "local-availability.json");
 }
 
-async function saveRepoMountConfig(mounts: StoredRepoMount[]): Promise<void> {
-	await fs.mkdir(path.dirname(repoMountsPath()), { recursive: true });
-	await fs.writeFile(repoMountsPath(), JSON.stringify({ mounts }, null, 2));
-}
+const localAvailabilityStore = new LocalAvailabilityStore({
+	filePath: localAvailabilityPath(),
+	legacyRepoMountsPath: repoMountsPath(),
+});
 
-async function upsertRepoMountConfig(mount: StoredRepoMount): Promise<void> {
-	const mounts = (await loadRepoMountConfig()).filter(
-		(entry) => entry.folderId !== mount.folderId,
-	);
-	mounts.push(mount);
-	await saveRepoMountConfig(mounts);
-}
-
-async function removeRepoMountConfig(folderId: string): Promise<void> {
-	const mounts = (await loadRepoMountConfig()).filter(
-		(entry) => entry.folderId !== folderId,
-	);
-	await saveRepoMountConfig(mounts);
-}
-
-function toProjectionMount(mount: {
-	folderId: string;
-	workspaceId: string;
-	mountPath: string;
-}): ProjectionMount {
+function toProjectionMount(mount: StoredLocalAvailability): ProjectionMount {
 	return {
-		folderId: mount.folderId,
-		workspaceId: mount.workspaceId,
-		localRoot: mount.mountPath,
+		scope: mount.scope,
+		localRoot: mount.localRoot,
 	};
 }
 
@@ -623,26 +636,41 @@ async function projectionForImport(
 	workspaceId: string,
 	folderId?: string,
 ): Promise<
-	{ kind: "workspace" } | { kind: "folder"; folderId: string } | null
+	| { kind: "all-accessible" }
+	| { kind: "workspace"; scopeKey: string }
+	| { kind: "folder"; folderId: string; scopeKey: string }
+	| null
 > {
-	if (projectionManager.wholeWorkspaceConnected) return { kind: "workspace" };
-	if (!folderId) return null;
-	const mounts = (await loadRepoMountConfig()).filter(
+	if (projectionManager.wholeWorkspaceConnected) {
+		return { kind: "all-accessible" };
+	}
+	const mounts = (await localAvailabilityStore.list()).filter(
 		(mount) =>
-			mount.workspaceId === workspaceId &&
-			projectionManager.getMountStatus(mount.folderId)?.connected,
+			mount.scope.workspaceId === workspaceId &&
+			projectionManager.getMountStatus(mount.scopeKey)?.connected,
 	);
 	if (mounts.length === 0) return null;
+	const workspace = mounts.find((mount) => mount.scope.kind === "workspace");
+	if (workspace) return { kind: "workspace", scopeKey: workspace.scopeKey };
+	if (!folderId) return null;
 	const parentById = new Map(
 		(await accessibleFolderTopology(backend, workspaceId)).map((folder) => [
 			folder._id,
 			folder.parentId,
 		]),
 	);
-	const mount = mounts.find((candidate) =>
-		isFolderWithinProjection(candidate.folderId, folderId, parentById),
+	const mount = mounts.find(
+		(candidate) =>
+			candidate.scope.kind === "folder" &&
+			isFolderWithinProjection(candidate.scope.folderId, folderId, parentById),
 	);
-	return mount ? { kind: "folder", folderId: mount.folderId } : null;
+	return mount?.scope.kind === "folder"
+		? {
+				kind: "folder",
+				folderId: mount.scope.folderId,
+				scopeKey: mount.scopeKey,
+			}
+		: null;
 }
 
 async function performCloudMarkdownImport(input: CloudMarkdownImportInput) {
@@ -674,10 +702,10 @@ async function performCloudMarkdownImport(input: CloudMarkdownImportInput) {
 		idempotencyKey: parsed.idempotencyKey,
 		actor: "desktop-import",
 	});
-	if (projection?.kind === "workspace") {
+	if (projection?.kind === "all-accessible") {
 		await projectionManager.refreshWholeWorkspace();
-	} else if (projection?.kind === "folder") {
-		await projectionManager.refreshMount(projection.folderId);
+	} else if (projection) {
+		await projectionManager.refreshMount(projection.scopeKey);
 	}
 	const connectedPath = projectionManager.findDocumentPath(imported.documentId);
 	if (connectedPath) {
@@ -707,61 +735,126 @@ async function performCloudMarkdownImport(input: CloudMarkdownImportInput) {
 	};
 }
 
-async function assertRepoMountAvailable(
+async function assertLocalAvailabilityAvailable(
 	candidate: ProjectionMount,
 	backend: SyncBackend,
+	ignoreScopeKey?: string,
 ): Promise<void> {
 	if (projectionManager.wholeWorkspaceConnected) {
 		throw new Error(
-			"Disconnect the whole-workspace projection before making a folder available. Hubble manages one local copy per document on this computer.",
+			"The legacy all-accessible mirror is incompatible with direct local availability. Stop it in Settings before making this Space or folder available.",
 		);
 	}
-	const configs = await loadRepoMountConfig();
-	const existing = configs
-		.filter((mount) => mount.folderId !== candidate.folderId)
+	const records = await localAvailabilityStore.list();
+	const candidateScopeKey = projectionScopeKey(candidate.scope);
+	if (
+		candidateScopeKey !== ignoreScopeKey &&
+		records.some((record) => record.scopeKey === candidateScopeKey)
+	) {
+		throw new Error(
+			"This cloud scope is already available on this computer. Reconnect or relocate the existing projection.",
+		);
+	}
+	const existing = records
+		.filter((record) => record.scopeKey !== ignoreScopeKey)
 		.map(toProjectionMount);
 	await assertLocalProjectionRootsDisjoint(candidate, existing, {
 		realpath: fs.realpath,
 		caseInsensitive:
 			process.platform === "darwin" || process.platform === "win32",
 	});
-	if (existing.some((mount) => mount.workspaceId === candidate.workspaceId)) {
+	if (
+		existing.some(
+			(mount) => mount.scope.workspaceId === candidate.scope.workspaceId,
+		)
+	) {
 		assertCloudProjectionRootsDisjoint(
 			candidate,
 			existing,
-			await accessibleFolderTopology(backend, candidate.workspaceId),
+			await accessibleFolderTopology(backend, candidate.scope.workspaceId),
 		);
 	}
 }
 
-function repoMountStatus(stored: StoredRepoMount): RepoMount {
-	const status = projectionManager.getMountStatus(stored.folderId);
+function localAvailabilityStatus(
+	stored: StoredLocalAvailability,
+	recoveryCount: number,
+): LocalAvailabilityRecord {
+	const status = projectionManager.getMountStatus(stored.scopeKey);
 	return {
-		folderId: stored.folderId,
-		folderName: stored.folderName,
-		workspaceId: stored.workspaceId,
-		mountPath: stored.mountPath,
-		repoDir: stored.repoDir,
+		...stored,
+		incompatible: false,
+		state: status?.state ?? "disconnected",
+		lastSyncAt: status?.lastReconcileAt ?? null,
+		pendingOperationCount: status?.pendingOperationCount ?? 0,
+		recoveryCount,
+	};
+}
+
+async function currentLocalAvailabilityStatus(
+	stored: StoredLocalAvailability,
+): Promise<LocalAvailabilityRecord> {
+	const agentStatus = (await projectionManager.getAgentStatus()).find(
+		(entry) => entry.scope.scopeKey === stored.scopeKey,
+	);
+	return localAvailabilityStatus(stored, agentStatus?.operations.recovery ?? 0);
+}
+
+async function listLocalAvailability(): Promise<LocalAvailabilityRecord[]> {
+	const agentStatuses = await projectionManager.getAgentStatus();
+	const records = (await localAvailabilityStore.list()).map((stored) =>
+		localAvailabilityStatus(
+			stored,
+			agentStatuses.find((entry) => entry.scope.scopeKey === stored.scopeKey)
+				?.operations.recovery ?? 0,
+		),
+	);
+	const legacyStatus = projectionManager.getWholeWorkspaceStatus();
+	if (legacyStatus.syncRoot || legacyStatus.state !== "idle") {
+		const agentStatus = agentStatuses.find(
+			(entry) => entry.scope.scopeKey === "all-accessible",
+		);
+		records.push({
+			scopeKey: "all-accessible",
+			scope: { kind: "all-accessible" },
+			displayName: "Legacy all-accessible mirror",
+			localRoot: legacyStatus.syncRoot ?? "",
+			association: "legacy",
+			incompatible: true,
+			repoRoot: null,
+			repoName: null,
+			repoRemoteUrl: null,
+			gitExclusion: { status: "not-applicable" },
+			state: legacyStatus.state,
+			lastSyncAt: legacyStatus.lastReconcileAt,
+			pendingOperationCount: legacyStatus.pendingOperationCount,
+			recoveryCount: agentStatus?.operations.recovery ?? 0,
+			createdAt: null,
+			updatedAt: null,
+			lastConnectedAt: null,
+		});
+	}
+	return records;
+}
+
+async function repoMountStatus(
+	stored: StoredLocalAvailability,
+): Promise<RepoMount> {
+	if (stored.scope.kind !== "folder" || stored.association !== "repo") {
+		throw new Error(`Repo mount not found: ${stored.scopeKey}`);
+	}
+	const status = projectionManager.getMountStatus(stored.scopeKey);
+	return {
+		folderId: stored.scope.folderId,
+		folderName: stored.displayName,
+		workspaceId: stored.scope.workspaceId,
+		mountPath: stored.localRoot,
+		repoDir: stored.repoRoot ?? "",
 		repoName: stored.repoName,
 		repoRemoteUrl: stored.repoRemoteUrl,
 		status: status ? status.state : "disconnected",
 		lastReconcileAt: status?.lastReconcileAt ?? null,
 	};
-}
-
-/** Connect a per-mount sync engine rooted at `mountPath` for `folderId`. */
-async function connectRepoMountEngine(
-	folderId: string,
-	workspaceId: string,
-	mountPath: string,
-	deploymentUrl: string,
-	authToken: string,
-): Promise<void> {
-	await projectionManager.connectMount(folderId, workspaceId, {
-		syncRoot: mountPath,
-		deploymentUrl,
-		authToken,
-	});
 }
 
 async function performRepoLink(input: unknown): Promise<RepoLinkResult> {
@@ -782,12 +875,13 @@ async function performRepoLink(input: unknown): Promise<RepoLinkResult> {
 		? resolvePath(parsed.mountPath)
 		: path.join(repoDir, sanitizeMountSegment(parsed.folderName));
 	const backend = createConvexBackend(parsed.deploymentUrl, parsed.authToken);
-	await assertRepoMountAvailable(
-		toProjectionMount({
-			folderId: parsed.folderId,
-			workspaceId: parsed.workspaceId,
-			mountPath,
-		}),
+	const scope = {
+		kind: "folder" as const,
+		folderId: parsed.folderId,
+		workspaceId: parsed.workspaceId,
+	};
+	await assertLocalAvailabilityAvailable(
+		{ scope, localRoot: mountPath },
 		backend,
 	);
 	grantRoot(repoDir);
@@ -832,32 +926,42 @@ async function performRepoLink(input: unknown): Promise<RepoLinkResult> {
 	}
 
 	// Materialize the subtree at the mount + start the per-mount engine.
-	await connectRepoMountEngine(
-		parsed.folderId,
-		parsed.workspaceId,
-		mountPath,
-		parsed.deploymentUrl,
-		parsed.authToken,
-	);
+	await projectionManager.connectMount(scope, {
+		syncRoot: mountPath,
+		deploymentUrl: parsed.deploymentUrl,
+		authToken: parsed.authToken,
+	});
 	setBackgroundActive(true);
 
 	// Keep the mount invisible to git (never edits tracked files).
 	let excluded = false;
 	let manualGitignoreLine: string | null = null;
+	let gitExclusion: StoredLocalAvailability["gitExclusion"] = {
+		status: "not-applicable",
+	};
 	if (repo) {
 		const result = await excludeMountFromGit(repo, mountPath);
 		excluded = result.ok;
 		manualGitignoreLine = result.ok ? null : result.pattern;
+		gitExclusion = result.ok
+			? { status: "excluded", pattern: result.pattern }
+			: { status: "manual", pattern: result.pattern };
 	}
 
-	await upsertRepoMountConfig({
-		folderId: parsed.folderId,
-		folderName: parsed.folderName,
-		workspaceId: parsed.workspaceId,
-		mountPath,
-		repoDir,
+	const now = Date.now();
+	await localAvailabilityStore.upsert({
+		scopeKey: projectionScopeKey(scope),
+		scope,
+		displayName: parsed.folderName,
+		localRoot: mountPath,
+		association: "repo",
+		repoRoot: repoDir,
 		repoName,
 		repoRemoteUrl,
+		gitExclusion,
+		createdAt: now,
+		updatedAt: now,
+		lastConnectedAt: now,
 	});
 
 	return {
@@ -871,13 +975,15 @@ async function performRepoLink(input: unknown): Promise<RepoLinkResult> {
 		repoRemoteUrl,
 		brainSeeded,
 		documentCount:
-			projectionManager.getMountStatus(parsed.folderId)?.documentCount ?? 0,
+			projectionManager.getMountStatus(projectionScopeKey(scope))
+				?.documentCount ?? 0,
 	};
 }
 
 async function unlinkRepoMount(folderId: string): Promise<void> {
-	await projectionManager.disconnectMount(folderId);
-	await removeRepoMountConfig(folderId);
+	const scopeKey = `folder:${folderId}`;
+	await projectionManager.disconnectMount(scopeKey);
+	await localAvailabilityStore.remove(scopeKey);
 	if (
 		projectionManager.mountCount === 0 &&
 		!projectionManager.wholeWorkspaceConnected
@@ -891,18 +997,20 @@ async function undoRepoMount(folderId: string): Promise<{
 	mountPath: string;
 	removedFiles: boolean;
 }> {
-	const mounts = await loadRepoMountConfig();
-	const mount = mounts.find((entry) => entry.folderId === folderId);
+	const scopeKey = `folder:${folderId}`;
+	const mount = (await localAvailabilityStore.list()).find(
+		(entry) => entry.scopeKey === scopeKey && entry.association === "repo",
+	);
 	if (!mount) throw new Error(`Repo mount not found: ${folderId}`);
 
 	await unlinkRepoMount(folderId);
-	const clean = await isMountClean(mount.mountPath);
+	const clean = await isMountClean(mount.localRoot);
 	if (clean) {
-		await fs.rm(mount.mountPath, { recursive: true, force: true });
+		await fs.rm(mount.localRoot, { recursive: true, force: true });
 	}
 	return {
 		folderId,
-		mountPath: mount.mountPath,
+		mountPath: mount.localRoot,
 		removedFiles: clean,
 	};
 }
@@ -910,51 +1018,90 @@ async function undoRepoMount(folderId: string): Promise<{
 async function inspectRepoMountCleanliness(
 	folderId: string,
 ): Promise<RepoMountCleanliness> {
-	const mount = (await loadRepoMountConfig()).find(
-		(entry) => entry.folderId === folderId,
+	return inspectLocalAvailabilityCleanliness(`folder:${folderId}`);
+}
+
+async function inspectLocalAvailabilityCleanliness(
+	scopeKey: string,
+): Promise<RepoMountCleanliness> {
+	const mount = (await localAvailabilityStore.list()).find(
+		(entry) => entry.scopeKey === scopeKey,
 	);
-	if (!mount) throw new Error(`Local availability not found: ${folderId}`);
-	const status = repoMountStatus(mount).status;
+	if (!mount) throw new Error(`Local availability not found: ${scopeKey}`);
+	const status =
+		projectionManager.getMountStatus(scopeKey)?.state ?? "disconnected";
 	const filesClean =
-		status === "connected" && (await isMountClean(mount.mountPath));
+		status === "connected" && (await isMountClean(mount.localRoot));
 	return mountCleanliness(status, filesClean);
 }
 
 async function stopRepoMount(input: unknown): Promise<RepoMountStopResult> {
 	const parsed = repoMountStopSchema.parse(input);
-	const mounts = await loadRepoMountConfig();
-	const mount = mounts.find((entry) => entry.folderId === parsed.folderId);
+	const result = await stopLocalAvailability({
+		scopeKey: `folder:${parsed.folderId}`,
+		keepFiles: parsed.keepFiles,
+		deploymentUrl: parsed.deploymentUrl,
+		authToken: parsed.authToken,
+	});
+	return result.status === "stopped"
+		? {
+				status: "stopped",
+				mountPath: result.localRoot,
+				keptFiles: result.keptFiles,
+			}
+		: result;
+}
+
+async function connectLocalAvailabilityEngine(
+	record: StoredLocalAvailability,
+	deploymentUrl: string,
+	authToken: string,
+): Promise<void> {
+	await projectionManager.connectMount(record.scope, {
+		syncRoot: record.localRoot,
+		deploymentUrl,
+		authToken,
+	});
+}
+
+async function stopLocalAvailability(
+	input: LocalAvailabilityStopInput,
+): Promise<LocalAvailabilityStopResult> {
+	const parsed = localAvailabilityStopSchema.parse(input);
+	const mount = (await localAvailabilityStore.list()).find(
+		(entry) => entry.scopeKey === parsed.scopeKey,
+	);
 	if (!mount)
-		throw new Error(`Local availability not found: ${parsed.folderId}`);
-	const cleanliness = await inspectRepoMountCleanliness(parsed.folderId);
+		throw new Error(`Local availability not found: ${parsed.scopeKey}`);
+	const cleanliness = await inspectLocalAvailabilityCleanliness(
+		parsed.scopeKey,
+	);
 	if (cleanliness.state === "blocked") {
 		return { status: "blocked", cleanliness };
 	}
 	// The dialog inspection is advisory. Stop the watcher and verify the bytes
 	// once more so an intervening edit is preserved instead of detached/removed.
-	await projectionManager.disconnectMount(parsed.folderId);
+	await projectionManager.disconnectMount(parsed.scopeKey);
 	const stoppedCleanliness = mountCleanliness(
 		"connected",
-		await isMountClean(mount.mountPath),
+		await isMountClean(mount.localRoot),
 	);
 	if (stoppedCleanliness.state === "blocked") {
-		await connectRepoMountEngine(
-			parsed.folderId,
-			mount.workspaceId,
-			mount.mountPath,
+		await connectLocalAvailabilityEngine(
+			mount,
 			parsed.deploymentUrl,
 			parsed.authToken,
 		);
 		return { status: "blocked", cleanliness: stoppedCleanliness };
 	}
-	await removeRepoMountConfig(parsed.folderId);
+	await localAvailabilityStore.remove(parsed.scopeKey);
 	if (parsed.keepFiles) {
-		await fs.rm(path.join(mount.mountPath, ".hubble"), {
+		await fs.rm(path.join(mount.localRoot, ".hubble"), {
 			recursive: true,
 			force: true,
 		});
 	} else {
-		await fs.rm(mount.mountPath, { recursive: true, force: true });
+		await fs.rm(mount.localRoot, { recursive: true, force: true });
 	}
 	if (
 		projectionManager.mountCount === 0 &&
@@ -964,7 +1111,7 @@ async function stopRepoMount(input: unknown): Promise<RepoMountStopResult> {
 	}
 	return {
 		status: "stopped",
-		mountPath: mount.mountPath,
+		localRoot: mount.localRoot,
 		keptFiles: parsed.keepFiles,
 	};
 }
@@ -1004,45 +1151,57 @@ async function relocateRepoMount(
 	input: RepoMountRelocateInput,
 ): Promise<RepoMountRelocateResult> {
 	const parsed = repoMountRelocateSchema.parse(input);
-	const mounts = await loadRepoMountConfig();
-	const mount = mounts.find((entry) => entry.folderId === parsed.folderId);
+	const result = await relocateLocalAvailability({
+		scopeKey: `folder:${parsed.folderId}`,
+		localRoot: parsed.mountPath,
+		deploymentUrl: parsed.deploymentUrl,
+		authToken: parsed.authToken,
+	});
+	if (result.status === "blocked") return result;
+	const record = (await localAvailabilityStore.list()).find(
+		(entry) => entry.scopeKey === `folder:${parsed.folderId}`,
+	);
+	if (!record) throw new Error(`Repo mount not found: ${parsed.folderId}`);
+	return { status: "relocated", mount: await repoMountStatus(record) };
+}
+
+async function relocateLocalAvailability(
+	input: LocalAvailabilityRelocateInput,
+): Promise<LocalAvailabilityRelocateResult> {
+	const parsed = localAvailabilityRelocateSchema.parse(input);
+	const mounts = await localAvailabilityStore.list();
+	const mount = mounts.find((entry) => entry.scopeKey === parsed.scopeKey);
 	if (!mount)
-		throw new Error(`Local availability not found: ${parsed.folderId}`);
-	const cleanliness = await inspectRepoMountCleanliness(parsed.folderId);
+		throw new Error(`Local availability not found: ${parsed.scopeKey}`);
+	const cleanliness = await inspectLocalAvailabilityCleanliness(
+		parsed.scopeKey,
+	);
 	if (cleanliness.state === "blocked") {
 		return { status: "blocked", cleanliness };
 	}
-	const nextPath = assertGrantedRoot(parsed.mountPath);
-	if (resolvePath(mount.mountPath) === resolvePath(nextPath)) {
+	const nextPath = assertGrantedRoot(parsed.localRoot);
+	if (resolvePath(mount.localRoot) === resolvePath(nextPath)) {
 		throw new Error("Choose a different folder for local availability.");
 	}
 	const entries = await fs.readdir(nextPath);
 	if (entries.length > 0) {
 		throw new Error("Choose a new empty folder for local availability.");
 	}
-	await assertLocalProjectionRootsDisjoint(
-		toProjectionMount({ ...mount, mountPath: nextPath }),
-		mounts
-			.filter((entry) => entry.folderId !== parsed.folderId)
-			.map(toProjectionMount),
-		{
-			realpath: fs.realpath,
-			caseInsensitive:
-				process.platform === "darwin" || process.platform === "win32",
-		},
+	await assertLocalAvailabilityAvailable(
+		{ scope: mount.scope, localRoot: nextPath },
+		createConvexBackend(parsed.deploymentUrl, parsed.authToken),
+		parsed.scopeKey,
 	);
-	await projectionManager.disconnectMount(parsed.folderId);
+	await projectionManager.disconnectMount(parsed.scopeKey);
 	// Close the watcher, then compare indexed bytes again before changing either
 	// path. This catches edits made after the renderer's initial inspection.
 	const stoppedCleanliness = mountCleanliness(
 		"connected",
-		await isMountClean(mount.mountPath),
+		await isMountClean(mount.localRoot),
 	);
 	if (stoppedCleanliness.state === "blocked") {
-		await connectRepoMountEngine(
-			parsed.folderId,
-			mount.workspaceId,
-			mount.mountPath,
+		await connectLocalAvailabilityEngine(
+			mount,
 			parsed.deploymentUrl,
 			parsed.authToken,
 		);
@@ -1050,48 +1209,153 @@ async function relocateRepoMount(
 	}
 	try {
 		await rewriteProjectionIndexRoot(
-			mount.mountPath,
-			mount.mountPath,
+			mount.localRoot,
+			mount.localRoot,
 			nextPath,
 		);
 	} catch (error) {
-		await connectRepoMountEngine(
-			parsed.folderId,
-			mount.workspaceId,
-			mount.mountPath,
+		await connectLocalAvailabilityEngine(
+			mount,
 			parsed.deploymentUrl,
 			parsed.authToken,
 		);
 		throw error;
 	}
 	try {
-		await moveProjectionRoot(mount.mountPath, nextPath);
+		await moveProjectionRoot(mount.localRoot, nextPath);
 	} catch (error) {
 		await rewriteProjectionIndexRoot(
-			mount.mountPath,
+			mount.localRoot,
 			nextPath,
-			mount.mountPath,
+			mount.localRoot,
 		);
-		await connectRepoMountEngine(
-			parsed.folderId,
-			mount.workspaceId,
-			mount.mountPath,
+		await connectLocalAvailabilityEngine(
+			mount,
 			parsed.deploymentUrl,
 			parsed.authToken,
 		);
 		throw error;
 	}
-	const relocated = { ...mount, mountPath: nextPath };
-	await upsertRepoMountConfig(relocated);
+	const relocated = {
+		...mount,
+		localRoot: nextPath,
+		updatedAt: Date.now(),
+		lastConnectedAt: Date.now(),
+	};
+	await localAvailabilityStore.upsert(relocated);
 	grantRoot(nextPath);
-	await connectRepoMountEngine(
-		parsed.folderId,
-		mount.workspaceId,
-		nextPath,
+	await connectLocalAvailabilityEngine(
+		relocated,
 		parsed.deploymentUrl,
 		parsed.authToken,
 	);
-	return { status: "relocated", mount: repoMountStatus(relocated) };
+	return {
+		status: "relocated",
+		availability: await currentLocalAvailabilityStatus(relocated),
+	};
+}
+
+async function createLocalAvailability(
+	input: LocalAvailabilityCreateInput,
+): Promise<LocalAvailabilityRecord> {
+	const parsed = localAvailabilityCreateSchema.parse(input);
+	if (
+		cachedAuthState &&
+		cachedAuthState.deploymentUrl !== parsed.deploymentUrl
+	) {
+		throw new Error(
+			`Desktop app is signed in to ${cachedAuthState.deploymentUrl}; refusing local availability for ${parsed.deploymentUrl}.`,
+		);
+	}
+	if (parsed.association === "repo") {
+		await performRepoLink({
+			folderId: parsed.scope.folderId,
+			folderName: parsed.displayName,
+			workspaceId: parsed.scope.workspaceId,
+			repoDir: parsed.repoRoot,
+			mountPath: parsed.localRoot,
+			deploymentUrl: parsed.deploymentUrl,
+			authToken: parsed.authToken,
+		});
+		const record = (await localAvailabilityStore.list()).find(
+			(entry) => entry.scopeKey === projectionScopeKey(parsed.scope),
+		);
+		if (!record)
+			throw new Error("Hubble could not persist local availability.");
+		return currentLocalAvailabilityStatus(record);
+	}
+
+	const localRoot = assertGrantedRoot(parsed.localRoot);
+	const backend = createConvexBackend(parsed.deploymentUrl, parsed.authToken);
+	await assertLocalAvailabilityAvailable(
+		{ scope: parsed.scope, localRoot },
+		backend,
+	);
+	await fs.mkdir(localRoot, { recursive: true });
+	const now = Date.now();
+	const record: StoredLocalAvailability = {
+		scopeKey: projectionScopeKey(parsed.scope),
+		scope: parsed.scope,
+		displayName: parsed.displayName,
+		localRoot,
+		association: "standalone",
+		repoRoot: null,
+		repoName: null,
+		repoRemoteUrl: null,
+		gitExclusion: { status: "not-applicable" },
+		createdAt: now,
+		updatedAt: now,
+		lastConnectedAt: now,
+	};
+	await connectLocalAvailabilityEngine(
+		record,
+		parsed.deploymentUrl,
+		parsed.authToken,
+	);
+	try {
+		await localAvailabilityStore.upsert(record);
+	} catch (error) {
+		await projectionManager.disconnectMount(record.scopeKey);
+		throw error;
+	}
+	setBackgroundActive(true);
+	return currentLocalAvailabilityStatus(record);
+}
+
+async function reconnectLocalAvailability(
+	input: LocalAvailabilityReconnectInput,
+): Promise<LocalAvailabilityRecord[]> {
+	const parsed = localAvailabilityReconnectSchema.parse(input);
+	const records = await localAvailabilityStore.list();
+	const backend = createConvexBackend(parsed.deploymentUrl, parsed.authToken);
+	for (const record of records) {
+		if (projectionManager.hasMount(record.scopeKey)) continue;
+		try {
+			grantRoot(record.localRoot);
+			await assertLocalAvailabilityAvailable(
+				toProjectionMount(record),
+				backend,
+				record.scopeKey,
+			);
+			await connectLocalAvailabilityEngine(
+				record,
+				parsed.deploymentUrl,
+				parsed.authToken,
+			);
+			await localAvailabilityStore.upsert({
+				...record,
+				updatedAt: Date.now(),
+				lastConnectedAt: Date.now(),
+			});
+		} catch (error) {
+			console.error(
+				`Failed to reconnect local availability ${record.scopeKey}:`,
+				error,
+			);
+		}
+	}
+	if (projectionManager.mountCount > 0) setBackgroundActive(true);
+	return listLocalAvailability();
 }
 
 async function startCliCommandServer(): Promise<void> {
@@ -1099,11 +1363,13 @@ async function startCliCommandServer(): Promise<void> {
 		socketPath: path.join(app.getPath("userData"), "cli.sock"),
 		handlers: {
 			async status() {
-				const mounts = await loadRepoMountConfig();
+				const mounts = (await localAvailabilityStore.list()).filter(
+					(record) => record.association === "repo",
+				);
 				return {
 					appVersion: app.getVersion(),
 					auth: cachedAuthState,
-					mounts: mounts.map(repoMountStatus),
+					mounts: await Promise.all(mounts.map(repoMountStatus)),
 					projections: await projectionManager.getAgentStatus(),
 				};
 			},
@@ -2166,19 +2432,26 @@ function registerIpc() {
 		return selected;
 	});
 
-	ipcMain.handle("desktop:create-folder-picker", async () => {
-		const result = await dialog.showSaveDialog(mainWindow ?? undefined, {
-			title: "New Folder",
-			nameFieldLabel: "Folder name:",
-			buttonLabel: "Create",
-			properties: ["createDirectory"],
-		});
-		if (result.canceled || !result.filePath) return null;
-		const folderPath = result.filePath;
-		await fs.mkdir(folderPath, { recursive: true });
-		grantRoot(folderPath);
-		return folderPath;
-	});
+	ipcMain.handle(
+		"desktop:create-folder-picker",
+		async (_event, options = {}) => {
+			const result = await dialog.showSaveDialog(mainWindow ?? undefined, {
+				title: typeof options.title === "string" ? options.title : "New Folder",
+				defaultPath:
+					typeof options.defaultPath === "string"
+						? options.defaultPath
+						: undefined,
+				nameFieldLabel: "Folder name:",
+				buttonLabel: "Create",
+				properties: ["createDirectory"],
+			});
+			if (result.canceled || !result.filePath) return null;
+			const folderPath = result.filePath;
+			await fs.mkdir(folderPath, { recursive: true });
+			grantRoot(folderPath);
+			return folderPath;
+		},
+	);
 
 	ipcMain.handle(
 		"desktop:save-markdown-file-picker",
@@ -2357,7 +2630,7 @@ function registerIpc() {
 		async (_event, input: SyncedFolderConnectInput) => {
 			const parsed = syncedFolderConnectSchema.parse(input);
 			const syncRoot = assertGrantedRoot(parsed.syncRoot);
-			const configuredMounts = await loadRepoMountConfig();
+			const configuredMounts = await localAvailabilityStore.list();
 			if (configuredMounts.length > 0) {
 				throw new Error(
 					"Disconnect folder projections before connecting the whole-workspace projection. Hubble manages one local copy per document on this computer.",
@@ -2512,40 +2785,50 @@ function registerIpc() {
 	});
 
 	ipcMain.handle("desktop:repo-link:list", async (): Promise<RepoMount[]> => {
-		const mounts = await loadRepoMountConfig();
-		return mounts.map(repoMountStatus);
+		const mounts = (await localAvailabilityStore.list()).filter(
+			(record) => record.association === "repo",
+		);
+		return Promise.all(mounts.map(repoMountStatus));
 	});
 
 	ipcMain.handle(
 		"desktop:repo-link:reconnect",
 		async (_event, input: RepoMountReconnectInput): Promise<RepoMount[]> => {
 			const parsed = repoMountReconnectSchema.parse(input);
-			const mounts = await loadRepoMountConfig();
-			for (const mount of mounts) {
-				if (projectionManager.hasMount(mount.folderId)) continue;
-				try {
-					grantRoot(mount.mountPath);
-					await assertRepoMountAvailable(
-						toProjectionMount(mount),
-						createConvexBackend(parsed.deploymentUrl, parsed.authToken),
-					);
-					await connectRepoMountEngine(
-						mount.folderId,
-						mount.workspaceId,
-						mount.mountPath,
-						parsed.deploymentUrl,
-						parsed.authToken,
-					);
-				} catch (error) {
-					console.error(
-						`Failed to reconnect repo mount ${mount.folderId}:`,
-						error,
-					);
-				}
-			}
-			if (projectionManager.mountCount > 0) setBackgroundActive(true);
-			return mounts.map(repoMountStatus);
+			await reconnectLocalAvailability(parsed);
+			const mounts = (await localAvailabilityStore.list()).filter(
+				(record) => record.association === "repo",
+			);
+			return Promise.all(mounts.map(repoMountStatus));
 		},
+	);
+
+	ipcMain.handle("desktop:local-availability:list", () =>
+		listLocalAvailability(),
+	);
+	ipcMain.handle(
+		"desktop:local-availability:create",
+		(_event, input: LocalAvailabilityCreateInput) =>
+			createLocalAvailability(input),
+	);
+	ipcMain.handle(
+		"desktop:local-availability:inspect",
+		(_event, scopeKey: string) =>
+			inspectLocalAvailabilityCleanliness(z.string().min(1).parse(scopeKey)),
+	);
+	ipcMain.handle(
+		"desktop:local-availability:relocate",
+		(_event, input: LocalAvailabilityRelocateInput) =>
+			relocateLocalAvailability(input),
+	);
+	ipcMain.handle(
+		"desktop:local-availability:stop",
+		(_event, input: LocalAvailabilityStopInput) => stopLocalAvailability(input),
+	);
+	ipcMain.handle(
+		"desktop:local-availability:reconnect",
+		(_event, input: LocalAvailabilityReconnectInput) =>
+			reconnectLocalAvailability(input),
 	);
 
 	ipcMain.handle(

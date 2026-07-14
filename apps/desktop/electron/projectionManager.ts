@@ -1,4 +1,8 @@
-import type { PendingProjectionOperation } from "@hubble.md/sync";
+import {
+	type PendingProjectionOperation,
+	type ProjectionScope,
+	projectionScopeKey,
+} from "@hubble.md/sync";
 import type {
 	ProjectionRootScope,
 	SyncedFolderStatus,
@@ -50,15 +54,22 @@ const recoveryOperationKinds = new Set<PendingProjectionOperation["kind"]>([
 
 export class ProjectionManager {
 	#wholeWorkspace: ProjectionEngine;
-	#createMount: (folderId: string, workspaceId: string) => ProjectionEngine;
+	#createMount: (
+		scope: Exclude<ProjectionScope, { kind: "all-accessible" }>,
+	) => ProjectionEngine;
 	#mounts = new Map<
 		string,
-		{ workspaceId: string; engine: ProjectionEngine }
+		{
+			scope: Exclude<ProjectionScope, { kind: "all-accessible" }>;
+			engine: ProjectionEngine;
+		}
 	>();
 
 	constructor(options: {
 		wholeWorkspace: ProjectionEngine;
-		createMount: (folderId: string, workspaceId: string) => ProjectionEngine;
+		createMount: (
+			scope: Exclude<ProjectionScope, { kind: "all-accessible" }>,
+		) => ProjectionEngine;
 	}) {
 		this.#wholeWorkspace = options.wholeWorkspace;
 		this.#createMount = options.createMount;
@@ -72,12 +83,12 @@ export class ProjectionManager {
 		return this.#mounts.size;
 	}
 
-	hasMount(folderId: string): boolean {
-		return this.#mounts.has(folderId);
+	hasMount(scopeKey: string): boolean {
+		return this.#mounts.has(scopeKey);
 	}
 
-	getMountStatus(folderId: string): SyncedFolderStatus | null {
-		return this.#mounts.get(folderId)?.engine.getStatus() ?? null;
+	getMountStatus(scopeKey: string): SyncedFolderStatus | null {
+		return this.#mounts.get(scopeKey)?.engine.getStatus() ?? null;
 	}
 
 	connectWholeWorkspace(input: ConnectFolderInput) {
@@ -97,32 +108,32 @@ export class ProjectionManager {
 	}
 
 	async connectMount(
-		folderId: string,
-		workspaceId: string,
+		scope: Exclude<ProjectionScope, { kind: "all-accessible" }>,
 		input: ConnectFolderInput,
 	): Promise<SyncedFolderStatus> {
-		await this.disconnectMount(folderId);
-		const engine = this.#createMount(folderId, workspaceId);
-		this.#mounts.set(folderId, { workspaceId, engine });
+		const scopeKey = projectionScopeKey(scope);
+		await this.disconnectMount(scopeKey);
+		const engine = this.#createMount(scope);
+		this.#mounts.set(scopeKey, { scope, engine });
 		try {
 			return await engine.connect(input);
 		} catch (error) {
-			this.#mounts.delete(folderId);
+			this.#mounts.delete(scopeKey);
 			await engine.disconnect().catch(() => undefined);
 			throw error;
 		}
 	}
 
-	async disconnectMount(folderId: string): Promise<void> {
-		const mount = this.#mounts.get(folderId);
+	async disconnectMount(scopeKey: string): Promise<void> {
+		const mount = this.#mounts.get(scopeKey);
 		if (!mount) return;
-		this.#mounts.delete(folderId);
+		this.#mounts.delete(scopeKey);
 		await mount.engine.disconnect();
 	}
 
-	refreshMount(folderId: string) {
-		const mount = this.#mounts.get(folderId);
-		if (!mount) throw new Error(`Local availability not found: ${folderId}`);
+	refreshMount(scopeKey: string) {
+		const mount = this.#mounts.get(scopeKey);
+		if (!mount) throw new Error(`Local availability not found: ${scopeKey}`);
 		return mount.engine.refresh();
 	}
 
@@ -140,8 +151,8 @@ export class ProjectionManager {
 				scope: this.#wholeWorkspaceScope(),
 				status: this.#wholeWorkspace.getStatus(),
 			},
-			...[...this.#mounts].map(([folderId, mount]) => ({
-				scope: this.#mountScope(folderId, mount),
+			...[...this.#mounts].map(([scopeKey, mount]) => ({
+				scope: this.#mountScope(scopeKey, mount),
 				status: mount.engine.getStatus(),
 			})),
 		];
@@ -245,8 +256,8 @@ export class ProjectionManager {
 				scope: this.#wholeWorkspaceScope(),
 				engine: this.#wholeWorkspace,
 			},
-			...[...this.#mounts].map(([folderId, mount]) => ({
-				scope: this.#mountScope(folderId, mount),
+			...[...this.#mounts].map(([scopeKey, mount]) => ({
+				scope: this.#mountScope(scopeKey, mount),
 				engine: mount.engine,
 			})),
 		];
@@ -254,7 +265,8 @@ export class ProjectionManager {
 
 	#wholeWorkspaceScope(): ProjectionRootScope {
 		return {
-			kind: "workspace-mirror",
+			scopeKey: projectionScopeKey({ kind: "all-accessible" }),
+			kind: "all-accessible",
 			workspaceId: null,
 			folderId: null,
 			localRoot: this.#wholeWorkspace.getStatus().syncRoot,
@@ -262,13 +274,17 @@ export class ProjectionManager {
 	}
 
 	#mountScope(
-		folderId: string,
-		mount: { workspaceId: string; engine: ProjectionEngine },
+		scopeKey: string,
+		mount: {
+			scope: Exclude<ProjectionScope, { kind: "all-accessible" }>;
+			engine: ProjectionEngine;
+		},
 	): ProjectionRootScope {
 		return {
-			kind: "folder",
-			workspaceId: mount.workspaceId,
-			folderId,
+			scopeKey,
+			kind: mount.scope.kind,
+			workspaceId: mount.scope.workspaceId,
+			folderId: mount.scope.kind === "folder" ? mount.scope.folderId : null,
 			localRoot: mount.engine.getStatus().syncRoot,
 		};
 	}
