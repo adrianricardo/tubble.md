@@ -101,6 +101,7 @@ import {
 	shouldIgnoreForWatch,
 } from "./syncedFolderClassify";
 import { SyncedFolderService } from "./syncedFolderService";
+import { buildTextContextMenuTemplate } from "./textContextMenu";
 import { requireEncodedTextBytes } from "./textFileIpc";
 import { createAppTray } from "./tray";
 import {
@@ -2232,6 +2233,7 @@ async function createWindow() {
 		},
 	});
 	mainWindow = window;
+	registerTextContextMenu(window);
 	window.webContents.on("did-start-loading", () => {
 		authHandoffRendererReady = false;
 	});
@@ -2279,6 +2281,22 @@ async function createWindow() {
 	} else {
 		await window.loadFile(path.join(__dirname, "../renderer/index.html"));
 	}
+}
+
+function registerTextContextMenu(window: BrowserWindow) {
+	window.webContents.on("context-menu", (_event, params) => {
+		if (!params.isEditable) return;
+		const menu = Menu.buildFromTemplate(
+			buildTextContextMenuTemplate(window.webContents, params),
+		);
+		menu.popup({
+			window,
+			// The originating frame lets macOS attach Writing Tools and text services.
+			...(process.platform === "darwin"
+				? { frame: params.frame ?? undefined }
+				: {}),
+		});
+	});
 }
 
 function registerIpc() {
