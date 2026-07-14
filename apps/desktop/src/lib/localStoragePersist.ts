@@ -14,7 +14,12 @@ export function localStoragePersist<T extends StateObject | StatePrimitive>(
 				const nextState =
 					typeof setter === "function" ? setter(current) : setter;
 				const toStore = serialize ? serialize(nextState) : nextState;
-				localStorage.setItem(key, JSON.stringify(toStore));
+				try {
+					localStorage.setItem(key, JSON.stringify(toStore));
+				} catch {
+					// Browser storage is best-effort; quota and security failures must
+					// not prevent the live store from accepting an otherwise valid update.
+				}
 				return nextState;
 			});
 		},

@@ -40,4 +40,34 @@ describe("desktop cloud context persistence", () => {
 		expect(persisted.cloud).toEqual({ context });
 		expect(persisted.cloud).not.toHaveProperty("selectedSpaceId");
 	});
+
+	it("hydrates defaults when browser storage access throws", async () => {
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn(() => {
+				throw new DOMException("blocked", "SecurityError");
+			}),
+			setItem: vi.fn(),
+		});
+
+		const { appStore } = await import("./state");
+
+		expect(appStore.get().cloud.context).toBeNull();
+	});
+
+	it("keeps in-memory updates when browser storage writes throw", async () => {
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn(() => null),
+			setItem: vi.fn(() => {
+				throw new DOMException("full", "QuotaExceededError");
+			}),
+		});
+		const { cloudContextStore } = await import("./state");
+		const context = {
+			kind: "workspace",
+			workspaceId: "workspace-1",
+		} as const;
+
+		expect(() => cloudContextStore.set(context)).not.toThrow();
+		expect(cloudContextStore.get()).toEqual(context);
+	});
 });

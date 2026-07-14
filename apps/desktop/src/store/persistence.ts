@@ -71,10 +71,10 @@ function hydrateCloudContext(cloud: Persisted["cloud"]): CloudContext | null {
 
 function readStorage<T>(key: string): T | null {
 	if (typeof localStorage === "undefined") return null;
-	const raw = localStorage.getItem(key);
-	if (!raw) return null;
 
 	try {
+		const raw = localStorage.getItem(key);
+		if (!raw) return null;
 		return JSON.parse(raw) as T;
 	} catch {
 		return null;
