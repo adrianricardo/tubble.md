@@ -27,6 +27,17 @@ upstream intake, fetch, or candidate code port occurred. Invoke the skill manual
 the next review; this internal process does not replace the current product next step
 below.
 
+**First real intake planning pass (2026-07-14):** a fetched audit found upstream still
+at the existing `72c9e808` watermark. Adrian approved later reimplementation of the
+retained correctness/native-editor candidates and selected the upstream editor's
+roomier block spacing plus its compact sidebar create controls and row-menu interaction.
+The sidebar behavior must be rebuilt on Hubble's cloud-ID current-context tree; the
+upstream filesystem authority, path identity, and direct-delete assumptions remain
+rejected. The commit-pinned implementation sequence, test matrix, safety boundaries,
+and deferred product candidates are recorded in
+`specs/upstream-selected-improvements/TECH.md`. No product code was ported, and the
+candidate queue remains intact until implementation is verified and landed.
+
 ## ➤ NEXT STEP (updated 2026-07-13, cross-device checkpoint prioritized)
 
 **Pause Phase 6 recovery implementation long enough to publish and exercise an
