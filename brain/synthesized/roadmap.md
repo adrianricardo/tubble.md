@@ -38,8 +38,8 @@ and deferred product candidates are recorded in
 `specs/upstream-selected-improvements/TECH.md`. No product code was ported, and the
 candidate queue remains intact until implementation is verified and landed.
 
-**Selected improvements Milestones 1–4 completed (implementation sessions 1–4,
-2026-07-14):** commits `6d95b76` through `2bb2e5d` land every selected correctness,
+**Selected improvements Milestones 1–4 completed; Milestone 5 acceptance in progress
+(implementation sessions 1–5, 2026-07-14):** commits `6d95b76` through `2bb2e5d` land every selected correctness,
 native-text, persistence/sync, editor-rhythm, and cloud-context creation slice as
 coherent local commits with the required `Upstream-commit` trailers. The correctness
 boundary now covers UTF-8
@@ -82,18 +82,27 @@ select/focus the invoked row, Shift+F10 and the Context Menu key reuse the same 
 model, menu dismissal restores the origin, and stable cloud IDs preserve or recover
 roving focus across reactive rename, move, Trash, and restore.
 
+Milestone 5's populated member, editor-shared-root, and direct-availability run passed
+create/rename/safe move/Trash/Undo, subtree isolation, every menu invocation path, and
+real external Markdown reconciliation. The run found that row-created documents
+opened but did not receive tree focus; `5ddb7f5` now hands their stable cloud ID back
+to the existing focus/ancestor-expansion path, and repeated member/editor flows passed.
+Full evidence and the backend safety incident are recorded in
+`specs/upstream-selected-improvements/runs/2026-07-14-milestone-5-acceptance.md`.
+
 The current package matrix passes editor 79/79, UI 20/20, cloud UI 10/10, sync 53/53,
 sync-backend 75/75, and desktop 177/177. Web tests pass 4/4 from the prior editor-rhythm milestone;
 changed-file Biome and diff checks pass, and `pnpm build:desktop` passes after
 simplify/comments/review-readiness. Repository-wide `pnpm check`
 still reports only pre-existing/mounted formatting diagnostics under
 `brain/cloud/.hubble/**`, `convex/tsconfig.json`, and `skills-lock.json`, plus existing
-storyboard CSS specificity warnings. **Next:** complete Milestone 5 in
-`specs/upstream-selected-improvements/TECH.md`: run the role/context and directly
-available-folder integration matrix, exercise pointer and keyboard menus plus
-rename/move/Trash/Undo against a backend containing `2bb2e5d`, confirm projection sync
-stays quiet, and finish packaged desktop acceptance. Do not deploy merely to satisfy
-this check; use an already-authorized/local backend or record the external gate.
+storyboard CSS specificity warnings. A fresh arm64 package also builds and opens, but
+authenticated packaged acceptance is externally gated: the packaged file origin does
+not inherit the signed-in development profile, and this account currently exposes no
+viewer-shared root. **Next:** interactively sign into the fresh package with access to
+a viewer-shared root, then finish viewer menu inspection, signed-in desktop/web
+Trash/restore, representative rich-document comparison, and macOS spelling/text
+services. Do not redeploy the backend.
 
 ## ➤ NEXT STEP (updated 2026-07-13, cross-device checkpoint prioritized)
 
