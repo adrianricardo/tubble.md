@@ -82,6 +82,15 @@ export type LinkAttrs = {
 	markdownStyle?: LinkMarkdownStyle | null;
 };
 
+function sameLinkAttrs(left: LinkAttrs, right: LinkAttrs): boolean {
+	return (
+		left.href === right.href &&
+		left.kind === right.kind &&
+		left.target === right.target &&
+		(left.markdownStyle ?? null) === (right.markdownStyle ?? null)
+	);
+}
+
 export function createLinkMark(
 	href = "",
 	attrs?: Partial<Pick<LinkAttrs, "kind" | "target">>,
@@ -118,9 +127,10 @@ export function getLinkHrefFromAttrs(attrs: unknown): string | null {
 export function getActiveLinkRange(state: EditorState): {
 	from: number;
 	to: number;
-	href: string;
-	kind: LinkKind;
-	target: string | null;
+	href: LinkAttrs["href"];
+	kind: LinkAttrs["kind"];
+	target: LinkAttrs["target"];
+	markdownStyle?: LinkAttrs["markdownStyle"];
 } | null {
 	const { selection } = state;
 	if (!selection.empty) return null;
@@ -146,6 +156,10 @@ export function getActiveLinkRange(state: EditorState): {
 		return { from: selection.from, to: selection.from, ...attrs };
 	}
 
+	const mark = markType.isInSet(parent.child(index).marks);
+	const attrs = mark ? getLinkAttrs(mark.attrs) : null;
+	if (attrs === null) return null;
+
 	let startIndex = index;
 	let endIndex = index;
 
@@ -155,26 +169,23 @@ export function getActiveLinkRange(state: EditorState): {
 	}
 	let to = from + parent.child(index).nodeSize;
 
-	while (
-		startIndex > 0 &&
-		!!markType.isInSet(parent.child(startIndex - 1).marks)
-	) {
+	while (startIndex > 0) {
+		const previousMark = markType.isInSet(parent.child(startIndex - 1).marks);
+		const previousAttrs = previousMark
+			? getLinkAttrs(previousMark.attrs)
+			: null;
+		if (!previousAttrs || !sameLinkAttrs(previousAttrs, attrs)) break;
 		startIndex -= 1;
 		from -= parent.child(startIndex).nodeSize;
 	}
 
-	while (
-		endIndex + 1 < parent.childCount &&
-		!!markType.isInSet(parent.child(endIndex + 1).marks)
-	) {
+	while (endIndex + 1 < parent.childCount) {
+		const nextMark = markType.isInSet(parent.child(endIndex + 1).marks);
+		const nextAttrs = nextMark ? getLinkAttrs(nextMark.attrs) : null;
+		if (!nextAttrs || !sameLinkAttrs(nextAttrs, attrs)) break;
 		endIndex += 1;
 		to += parent.child(endIndex).nodeSize;
 	}
 
-	const mark =
-		markType.isInSet(parent.child(index).marks) ??
-		markType.create({ href: "" });
-	const attrs = getLinkAttrs(mark.attrs);
-	if (attrs === null) return null;
 	return { from, to, ...attrs };
 }
