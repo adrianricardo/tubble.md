@@ -821,7 +821,9 @@ acceptance roots. Desktop tests pass 166/166 and `pnpm build:desktop` passes. Mi
   instead of authority-moving controls; and non-draft moves/exports expose offline-safe
   relaunch recovery, including an export interrupted after atomic placement. The UI
   now distinguishes active cloud copies from recoverable archives and adds literal
-  progress/completion announcements plus reduced-motion transitions. Sync-backend
+  progress/completion announcements plus reduced-motion transitions. The obsolete
+  automatic single-file cloud-import prompt/IPC is removed; external Markdown entry
+  points now select Git and open directly without an upload assumption. Sync-backend
   tests pass 86/86, sync 58/58, Convex-client 3/3, cloud UI 10/10, desktop 215/215,
   changed-file Biome/diff checks pass, and `pnpm build:desktop` passes after
   simplify/comments/review-readiness. Repository-wide `pnpm check` remains blocked

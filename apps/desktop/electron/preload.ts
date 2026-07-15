@@ -122,8 +122,6 @@ const desktopApi = {
 		ipcRenderer.invoke("desktop:live-sync:inspect-root", { syncRoot }),
 	importSyncedFolderMarkdown: (input) =>
 		ipcRenderer.invoke("desktop:live-sync:import-folder-markdown", input),
-	importMarkdownFile: (input) =>
-		ipcRenderer.invoke("desktop:cloud:import-markdown", input),
 	connectSyncedFolder: (input) =>
 		ipcRenderer.invoke("desktop:live-sync:connect-folder", input),
 	disconnectSyncedFolder: () =>

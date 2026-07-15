@@ -7,7 +7,6 @@ import { createConvexBackend } from "@hubble.md/convex-client";
 import hubbleRuntime from "@hubble.md/runtime/global.js?raw";
 import htmlAppTheme from "@hubble.md/runtime/html-app-theme.css?raw";
 import {
-	assertLiveDocumentMarkdownWithinCap,
 	contentHash,
 	type Folder,
 	importLiveDocuments,
@@ -91,7 +90,6 @@ import {
 	assertCloudProjectionRootsDisjoint,
 	assertLocalProjectionDestinationAvailable,
 	assertLocalProjectionRootsDisjoint,
-	isFolderWithinProjection,
 	type ProjectionMount,
 } from "./projectionMounts";
 import {
@@ -589,7 +587,6 @@ async function saveGrants() {
 	);
 }
 
-
 const gitToCloudAuthorityMoveSchema = z.object({
 	operationId: z.string().min(1),
 	folderPath: z.string().min(1),
@@ -688,48 +685,6 @@ async function accessibleFolderTopology(
 				})),
 			]);
 	}
-}
-
-async function projectionForImport(
-	backend: SyncBackend,
-	workspaceId: string,
-	folderId?: string,
-): Promise<
-	| { kind: "all-accessible" }
-	| { kind: "workspace"; scopeKey: string }
-	| { kind: "folder"; folderId: string; scopeKey: string }
-	| null
-> {
-	if (projectionManager.wholeWorkspaceConnected) {
-		return { kind: "all-accessible" };
-	}
-	const mounts = (await localAvailabilityStore.list()).filter(
-		(mount) =>
-			mount.scope.workspaceId === workspaceId &&
-			projectionManager.getMountStatus(mount.scopeKey)?.connected,
-	);
-	if (mounts.length === 0) return null;
-	const workspace = mounts.find((mount) => mount.scope.kind === "workspace");
-	if (workspace) return { kind: "workspace", scopeKey: workspace.scopeKey };
-	if (!folderId) return null;
-	const parentById = new Map(
-		(await accessibleFolderTopology(backend, workspaceId)).map((folder) => [
-			folder._id,
-			folder.parentId,
-		]),
-	);
-	const mount = mounts.find(
-		(candidate) =>
-			candidate.scope.kind === "folder" &&
-			isFolderWithinProjection(candidate.scope.folderId, folderId, parentById),
-	);
-	return mount?.scope.kind === "folder"
-		? {
-				kind: "folder",
-				folderId: mount.scope.folderId,
-				scopeKey: mount.scopeKey,
-			}
-		: null;
 }
 
 async function assertLocalAvailabilityAvailable(

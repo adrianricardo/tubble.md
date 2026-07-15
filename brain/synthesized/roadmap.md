@@ -18,7 +18,9 @@ The code/test milestone now names and excludes nested opposite-authority roots,
 fingerprints and atomically applies carried Share recipients, separates manage-only
 authority moves from reader-safe detached Git exports, resumes non-draft interrupted
 moves/exports after relaunch, disables retry offline, distinguishes retained archives
-from still-active cloud copies, and hardens literal announcements/focus/reduced motion.
+from still-active cloud copies, hardens literal announcements/focus/reduced motion,
+and removes the obsolete automatic single-file cloud-import prompt so every external
+Markdown entry point opens directly in the Git context.
 Automated validation passes sync-backend 86/86, sync 58/58, Convex-client 3/3, cloud
 UI 10/10, desktop 215/215, changed-file Biome, diff checks, and
 `pnpm build:desktop`. Repository-wide `pnpm check` continues to report only unrelated

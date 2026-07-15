@@ -16,6 +16,7 @@ import {
 } from "./documents";
 import { collectFolderSubtree, folderRelativePath } from "./folders";
 import {
+	applyFolderShareRole,
 	findUserIdByEmail,
 	normalizeEmail,
 	upsertFolderInvite,
@@ -717,27 +718,11 @@ async function applyRequestedFolderShares(
 			});
 			continue;
 		}
-		const existing = await ctx.db
-			.query("folderShares")
-			.withIndex("by_folder_user", (query) =>
-				query.eq("folderId", folderId).eq("userId", userId),
-			)
-			.unique();
-		if (existing) {
-			await ctx.db.patch(existing._id, {
-				role: share.role,
-				updatedAt: Date.now(),
-			});
-		} else {
-			const now = Date.now();
-			await ctx.db.insert("folderShares", {
-				folderId,
-				userId,
-				role: share.role,
-				createdAt: now,
-				updatedAt: now,
-			});
-		}
+		await applyFolderShareRole(ctx, {
+			folderId,
+			userId,
+			role: share.role,
+		});
 	}
 }
 

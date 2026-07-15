@@ -466,9 +466,11 @@ warnings in the historical storyboard. The direct Electron wrapper still exits b
 exposing CDP on this host, and the installed in-app browser helper is rejected by
 macOS code-signature validation. Therefore packaged keyboard/VoiceOver/cross-surface
 acceptance and real cutovers remain an explicit gate. The task prohibits expendable
-cloud fixture mutation, so no live move/share/export was attempted. Legacy
-universal-cloud compatibility remains in place until that packaged parity gate passes,
-as required by step 4; it is not silently removed on automated evidence alone.
+cloud fixture mutation, so no live move/share/export was attempted. The obsolete
+automatic single-file cloud-import prompt and its compatibility IPC are removed now
+that every external Markdown entry point selects the Git context and opens directly.
+Broader universal-cloud compatibility remains in place until the packaged parity gate
+passes; it is not silently removed on automated evidence alone.
 
 ## PRODUCT invariant mapping
 

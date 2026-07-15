@@ -40,7 +40,6 @@ import {
 import { toast } from "sonner";
 import MingcuteFileNewLine from "~icons/mingcute/file-new-line";
 import { CloudDocumentCreateButton } from "./components/CloudDocumentCreateButton";
-import { CloudMarkdownImportDialog } from "./components/CloudMarkdownImportDialog";
 import {
 	CloudSyncSection,
 	CloudSyncUnavailableSection,
@@ -103,7 +102,6 @@ import {
 import {
 	contentContextStore,
 	emptyDoc,
-	isInWorkspace,
 	sidebarOpenStore,
 	uiStore,
 	viewerStore,
@@ -208,7 +206,6 @@ function AppContent() {
 	const [activeLiveDocumentId, setActiveLiveDocumentId] = useState<
 		string | null
 	>(null);
-	const [importSourcePath, setImportSourcePath] = useState<string | null>(null);
 	const [pendingOperations, setPendingOperations] = useState<
 		PendingProjectionOperation[]
 	>([]);
@@ -296,26 +293,12 @@ function AppContent() {
 		await loadPath(path);
 	}, []);
 
-	const openOrImportPath = useCallback(
+	const openExternalPath = useCallback(
 		async (path: string) => {
-			if (isInWorkspace(path, workspaceStore.get().workspacePath)) {
-				activateGitContent();
-				await openLocalPath(path);
-				return;
-			}
-			const cloudContentActive =
-				cloudEnabled && contentContextStore.get().kind === "cloud";
-			if (
-				cloudContentActive &&
-				hasMarkdownExtension(path) &&
-				!(await desktopApi.isSyncedFolderDocument(path))
-			) {
-				setImportSourcePath(path);
-				return;
-			}
+			activateGitContent();
 			await openLocalPath(path);
 		},
-		[cloudEnabled, openLocalPath],
+		[openLocalPath],
 	);
 
 	const openLiveDocument = useCallback((documentId: string) => {
@@ -390,9 +373,9 @@ function AppContent() {
 			undefined;
 		const selected = await desktopApi.openFilePicker({ defaultPath });
 		if (typeof selected === "string") {
-			await openOrImportPath(selected);
+			await openExternalPath(selected);
 		}
-	}, [openOrImportPath]);
+	}, [openExternalPath]);
 
 	useEffect(() => {
 		void desktopApi.setMenuState({
@@ -477,15 +460,14 @@ function AppContent() {
 
 	useEffect(() => {
 		const unlisten = desktopApi.onOpenFile((path) => {
-			void openOrImportPath(path);
+			void openExternalPath(path);
 		});
 		return () => {
 			unlisten();
 		};
-	}, [openOrImportPath]);
+	}, [openExternalPath]);
 
 	useEffect(() => {
-		if (!cloudActive) return;
 		const onDragOver = (event: DragEvent) => {
 			if (
 				![...(event.dataTransfer?.files ?? [])].some((file) =>
@@ -503,7 +485,7 @@ function AppContent() {
 			event.preventDefault();
 			event.stopPropagation();
 			const path = await desktopApi.pathForDroppedFile(file);
-			await openOrImportPath(path);
+			await openExternalPath(path);
 		};
 		const onDropEvent = (event: DragEvent) => void onDrop(event);
 		window.addEventListener("dragover", onDragOver);
@@ -512,7 +494,7 @@ function AppContent() {
 			window.removeEventListener("dragover", onDragOver);
 			window.removeEventListener("drop", onDropEvent, true);
 		};
-	}, [cloudActive, openOrImportPath]);
+	}, [openExternalPath]);
 
 	useEffect(() => {
 		const disposers = [
@@ -589,7 +571,7 @@ function AppContent() {
 			if (!active) return;
 
 			if (typeof launchPath === "string" && launchPath.length > 0) {
-				await openOrImportPath(launchPath);
+				await openExternalPath(launchPath);
 				return;
 			}
 			const launchWorkspacePath = await desktopApi.getLaunchWorkspacePath();
@@ -611,14 +593,14 @@ function AppContent() {
 					? workspace.lastOpenedPaths[workspace.workspacePath]
 					: undefined);
 			if (lastPath) {
-				await openOrImportPath(lastPath);
+				await openExternalPath(lastPath);
 			}
 		};
 		void init();
 		return () => {
 			active = false;
 		};
-	}, [openOrImportPath]);
+	}, [openExternalPath]);
 
 	return (
 		<main className="flex h-dvh flex-col bg-background text-foreground">
@@ -749,16 +731,6 @@ function AppContent() {
 				trashUndo={pendingMove || pendingDeletion ? null : trashUndo}
 				onResolved={() => void refreshPendingOperations()}
 			/>
-			<Authenticated>
-				{importSourcePath ? (
-					<CloudMarkdownImportDialog
-						key={importSourcePath}
-						sourcePath={importSourcePath}
-						onClose={() => setImportSourcePath(null)}
-						onOpenDocument={openLiveDocument}
-					/>
-				) : null}
-			</Authenticated>
 		</main>
 	);
 }
