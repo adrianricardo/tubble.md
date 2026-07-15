@@ -832,3 +832,18 @@ acceptance roots. Desktop tests pass 166/166 and `pnpm build:desktop` passes. Mi
   the in-app browser helper are unavailable on this host and the task explicitly
   prohibited cloud fixture mutation. No deployment, push, PR, or cloud fixture was
   changed.
+- 2026-07-15 — Completed the local non-mutating Milestone 5 renderer and final
+  recovery-discoverability pass. Real Electron/CDP against the generated scratch
+  playground showed the Git root marker, exact `Move to Hubble Cloud…` and `Share…`
+  actions, mandatory content/audience/recovery disclosures, literal live-region text,
+  disabled confirmation for a contentless/excluded source, cancel, and focus return
+  to the invoking folder action. Completed moves now remain discoverable after
+  relaunch with explicit retained-recovery policy and unchanged-only restore, while
+  interrupted work takes priority. Desktop tests pass 216/216 and
+  `pnpm build:desktop` passes after simplify/comments/review-readiness. The prescribed
+  `pnpm dev:desktop` command also launched the workspace `convex dev` child and
+  synchronized functions to the configured development deployment before all child
+  processes were terminated. That deployment exceeded the task's explicit no-deploy
+  constraint; no cloud fixture data or live authority transfer was mutated. Production
+  package, VoiceOver/reduced-motion observation, and expendable-fixture cutovers remain
+  separately gated. No push or PR occurred.

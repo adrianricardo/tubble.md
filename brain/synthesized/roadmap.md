@@ -3,16 +3,17 @@
 Build state and current next step. Track strategy lives in
 `brain/synthesized/track-strategy.md`.
 
-## ➔ CURRENT NEXT STEP (updated 2026-07-15, authority code milestones complete)
+## ➔ CURRENT NEXT STEP (updated 2026-07-15, authority local acceptance complete)
 
-Run the selective folder-authority packaged acceptance gate from
-`specs/folder-authority-mobility/TECH.md` Milestone 5 before removing legacy
-universal-cloud compatibility. Use a production-configured packaged desktop profile
-and scratch Git repositories for the non-mutating navigation, disclosure, relaunch,
-keyboard, VoiceOver, and reduced-motion matrix. Real move/share/export cutovers require
-fresh authorization for explicitly expendable non-production cloud fixtures; the
-completed implementation task prohibited cloud fixture mutation, so that evidence is
-not claimed.
+Run the remaining production-packaged and real-cutover portions of the selective
+folder-authority acceptance gate only with fresh authorization. The local Electron
+renderer now passes the non-mutating Git-boundary/menu, Move/Share preview,
+live-region, unsafe-confirmation, cancel, and focus-return checks against the generated
+scratch playground. A production-configured packaged profile, literal VoiceOver
+speech, reduced-motion observation, and real move/share/export cutovers still require
+separate acceptance. Real cutovers require explicitly expendable non-production cloud
+fixtures; this task prohibited cloud fixture mutation, so that evidence is not
+claimed.
 
 The code/test milestone now names and excludes nested opposite-authority roots,
 fingerprints and atomically applies carried Share recipients, separates manage-only
@@ -22,13 +23,16 @@ from still-active cloud copies, hardens literal announcements/focus/reduced moti
 and removes the obsolete automatic single-file cloud-import prompt so every external
 Markdown entry point opens directly in the Git context.
 Automated validation passes sync-backend 86/86, sync 58/58, Convex-client 3/3, cloud
-UI 10/10, desktop 215/215, changed-file Biome, diff checks, and
+UI 10/10, desktop 216/216, changed-file Biome, diff checks, and
 `pnpm build:desktop`. Repository-wide `pnpm check` continues to report only unrelated
-pre-existing formatting diagnostics and storyboard warnings. The direct Electron
-wrapper exits before CDP is available on this host, while the in-app browser helper is
-blocked by macOS code-signature validation, so packaged interaction evidence remains
-the honest next gate. Do not deploy, push, open a PR, or mutate cloud fixtures without
-new scope.
+pre-existing formatting diagnostics and storyboard warnings. The final recovery pass
+keeps completed archive/recovery status visible after relaunch and prioritizes any
+interrupted operation over that history. The prescribed `pnpm dev:desktop` acceptance
+command also started the workspace `convex dev` child and synchronized functions to
+the configured development deployment before it was stopped. That deployment was
+outside the task's no-deploy constraint; no fixture data was mutated by the acceptance
+steps. Do not deploy again, push, open a PR, or mutate cloud fixtures without new
+scope.
 
 Milestone 4 adds authoritative cloud Markdown/asset manifests, inherited access and
 public-link consequences, Hubble revision counts, archive fingerprints, active-only

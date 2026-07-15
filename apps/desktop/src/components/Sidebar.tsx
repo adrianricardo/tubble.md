@@ -69,7 +69,10 @@ import {
 	AuthorityMovePreviewDialog,
 	type AuthorityPreviewTarget,
 } from "./AuthorityMovePreviewDialog";
-import { displayFolderName } from "./authorityMovePreviewModel";
+import {
+	displayFolderName,
+	selectAuthorityRecoveryOperation,
+} from "./authorityMovePreviewModel";
 import { CloudDocumentCreateButton } from "./CloudDocumentCreateButton";
 import { LocalAgentAvailabilityOnboarding } from "./LocalAgentAvailabilityOnboarding";
 import {
@@ -163,12 +166,7 @@ function AuthorityTransferRecoveryNotice() {
 			window.removeEventListener("offline", update);
 		};
 	}, []);
-	const operation = operations.find(
-		(candidate) =>
-			candidate.phase !== "draft" &&
-			candidate.phase !== "completed" &&
-			candidate.phase !== "cancelled",
-	);
+	const operation = selectAuthorityRecoveryOperation(operations);
 	if (!operation) return null;
 	const resume = async () => {
 		if (!authToken || !desktopConvexUrl || busyId) return;
@@ -249,38 +247,135 @@ function AuthorityTransferRecoveryNotice() {
 			setBusyId(null);
 		}
 	};
+	const undoCompletedMove = async () => {
+		if (
+			operation.direction !== "cloud-to-git" ||
+			operation.phase !== "completed" ||
+			!authToken ||
+			!desktopConvexUrl ||
+			busyId
+		) {
+			return;
+		}
+		setBusyId(operation.id);
+		setError(null);
+		try {
+			const eligible = await desktopApi.getCloudToGitUndoEligibility(
+				operation.id,
+			);
+			if (!eligible) {
+				setError(
+					"Git bytes changed. Use Move to Hubble Cloud from the Git folder menu to review the reverse move.",
+				);
+				return;
+			}
+			const result = await desktopApi.undoCloudToGitAuthorityMove({
+				operationId: operation.id,
+				deploymentUrl: desktopConvexUrl,
+				authToken,
+			});
+			if (result.status !== "restored") {
+				throw new Error(
+					result.status === "changed"
+						? "Git bytes changed. Start the reverse move from the folder menu."
+						: result.message,
+				);
+			}
+			toast.success("Cloud folder restored");
+			refresh();
+		} catch (cause) {
+			setError(cause instanceof Error ? cause.message : String(cause));
+		} finally {
+			setBusyId(null);
+		}
+	};
+	const completed = operation.phase === "completed";
+	const recoveryPath =
+		completed && operation.direction === "git-to-cloud"
+			? operation.recoveryPath
+			: null;
+	const operationPath =
+		operation.source.kind === "git"
+			? joinAuthorityPath(
+					operation.source.repoRoot,
+					operation.source.relativePath,
+				)
+			: operation.destination?.kind === "git"
+				? joinAuthorityPath(
+						operation.destination.repoRoot,
+						operation.destination.relativePath,
+					)
+				: operation.source.folderId;
 	return (
 		<output
 			aria-live="polite"
 			className="flex flex-col gap-1.5 border-b border-sidebar-border bg-sidebar-accent/35 text-[11px] [padding-block:0.5rem] [padding-inline:0.625rem]"
 		>
 			<span className="font-medium text-sidebar-foreground">
-				{operation.intent === "export-copy" ? "Git export" : "Folder move"}:{" "}
-				{operation.phase.replace("-", " ")}
+				{completed
+					? operation.direction === "git-to-cloud"
+						? "Hubble Cloud home · Git recovery retained"
+						: "Git home · cloud recovery retained"
+					: `${operation.intent === "export-copy" ? "Git export" : "Folder move"}: ${operation.phase.replace("-", " ")}`}
 			</span>
 			<span className="break-all text-sidebar-foreground/70">
-				{operation.source.kind === "git"
-					? joinAuthorityPath(
-							operation.source.repoRoot,
-							operation.source.relativePath,
-						)
-					: operation.source.folderId}
+				{operationPath}
 			</span>
 			{error ? <span role="alert">{error}</span> : null}
-			{!online ? <span>Reconnect to resume this cloud operation.</span> : null}
-			<Button
-				type="button"
-				size="sm"
-				variant="outline"
-				disabled={!online || !authToken || !desktopConvexUrl || busyId !== null}
-				onClick={() => void resume()}
-			>
-				{busyId
-					? "Resuming…"
-					: operation.intent === "export-copy"
-						? "Resume export"
-						: "Resume move"}
-			</Button>
+			{completed ? (
+				<>
+					<span>
+						No automatic recovery expiry is scheduled; permanent retention is
+						not promised.
+					</span>
+					<div className="flex flex-wrap gap-1.5">
+						{recoveryPath ? (
+							<Button
+								type="button"
+								size="sm"
+								variant="outline"
+								onClick={() => void navigator.clipboard.writeText(recoveryPath)}
+							>
+								Copy recovery path
+							</Button>
+						) : null}
+						{operation.direction === "cloud-to-git" ? (
+							<Button
+								type="button"
+								size="sm"
+								variant="outline"
+								disabled={
+									!online || !authToken || !desktopConvexUrl || busyId !== null
+								}
+								onClick={() => void undoCompletedMove()}
+							>
+								{busyId ? "Restoring…" : "Undo unchanged move"}
+							</Button>
+						) : null}
+					</div>
+				</>
+			) : (
+				<>
+					{!online ? (
+						<span>Reconnect to resume this cloud operation.</span>
+					) : null}
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						disabled={
+							!online || !authToken || !desktopConvexUrl || busyId !== null
+						}
+						onClick={() => void resume()}
+					>
+						{busyId
+							? "Resuming…"
+							: operation.intent === "export-copy"
+								? "Resume export"
+								: "Resume move"}
+					</Button>
+				</>
+			)}
 		</output>
 	);
 }

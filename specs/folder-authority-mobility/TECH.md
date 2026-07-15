@@ -459,14 +459,19 @@ copy, live regions, explicit text consequences, focus return, and reduced-motion
 transitions are hardened.
 
 Automated validation passes sync-backend 86/86, sync 58/58, Convex-client 3/3,
-cloud UI 10/10, desktop 215/215, changed-file Biome, `git diff --check`, and
+cloud UI 10/10, desktop 216/216, changed-file Biome, `git diff --check`, and
 `pnpm build:desktop`. Repository-wide `pnpm check` still fails only on unrelated
 pre-existing formatting diagnostics in editor/sync/backend test/config/lock files and
-warnings in the historical storyboard. The direct Electron wrapper still exits before
-exposing CDP on this host, and the installed in-app browser helper is rejected by
-macOS code-signature validation. Therefore packaged keyboard/VoiceOver/cross-surface
-acceptance and real cutovers remain an explicit gate. The task prohibits expendable
-cloud fixture mutation, so no live move/share/export was attempted. The obsolete
+warnings in the historical storyboard. A local Electron/CDP pass against the generated
+scratch playground verified the Git boundary marker, exact Move/Share menu language,
+audience/content/recovery disclosures, literal preview live region, disabled unsafe
+confirmation, cancel, and focus return. Production-packaged keyboard/VoiceOver/
+reduced-motion acceptance and real cutovers remain an explicit gate. The task
+prohibits expendable cloud fixture mutation, so no live move/share/export was
+attempted. The prescribed dev command started `convex dev` and synchronized functions
+to the configured development deployment before shutdown; this was outside the
+task's no-deploy constraint, although the acceptance actions did not mutate fixture
+data. The obsolete
 automatic single-file cloud-import prompt and its compatibility IPC are removed now
 that every external Markdown entry point selects the Git context and opens directly.
 Broader universal-cloud compatibility remains in place until the packaged parity gate

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { AuthorityTransferOperation } from "../desktopApi/types";
 import {
 	canConfirmCloudToGit,
 	canConfirmGitToCloud,
@@ -6,6 +7,7 @@ import {
 	parseShareRecipients,
 	previewChanged,
 	safeGitFolderName,
+	selectAuthorityRecoveryOperation,
 } from "./authorityMovePreviewModel";
 
 describe("authority move preview helpers", () => {
@@ -71,6 +73,36 @@ describe("authority move preview helpers", () => {
 			],
 			invalid: ["invalid"],
 		});
+	});
+
+	it("prioritizes interrupted operations and retains completed move recovery", () => {
+		const operation = (
+			id: string,
+			phase: AuthorityTransferOperation["phase"],
+			intent: AuthorityTransferOperation["intent"],
+			updatedAt: number,
+		) =>
+			({
+				id,
+				phase,
+				intent,
+				updatedAt,
+			}) as AuthorityTransferOperation;
+		const completed = operation("completed", "completed", "move", 30);
+		const interrupted = operation("interrupted", "needs-attention", "move", 20);
+		expect(
+			selectAuthorityRecoveryOperation([
+				completed,
+				interrupted,
+				operation("draft", "draft", "move", 40),
+			]),
+		).toBe(interrupted);
+		expect(
+			selectAuthorityRecoveryOperation([
+				operation("copy", "completed", "export-copy", 40),
+				completed,
+			]),
+		).toBe(completed);
 	});
 
 	it("requires current cloud and Git previews before moving to Git", () => {

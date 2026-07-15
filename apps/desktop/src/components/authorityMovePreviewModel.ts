@@ -1,3 +1,5 @@
+import type { AuthorityTransferOperation } from "../desktopApi/types";
+
 export function safeGitFolderName(name: string): string {
 	const normalized = name
 		.normalize("NFKD")
@@ -89,5 +91,26 @@ export function canConfirmCloudToGit(input: {
 		input.authReady &&
 		!input.stale &&
 		!input.busy
+	);
+}
+
+export function selectAuthorityRecoveryOperation(
+	operations: AuthorityTransferOperation[],
+) {
+	const recent = [...operations].sort(
+		(left, right) => right.updatedAt - left.updatedAt,
+	);
+	return (
+		recent.find(
+			(operation) =>
+				operation.phase !== "draft" &&
+				operation.phase !== "completed" &&
+				operation.phase !== "cancelled",
+		) ??
+		recent.find(
+			(operation) =>
+				operation.phase === "completed" && operation.intent !== "export-copy",
+		) ??
+		null
 	);
 }
