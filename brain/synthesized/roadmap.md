@@ -3,15 +3,30 @@
 Build state and current next step. Track strategy lives in
 `brain/synthesized/track-strategy.md`.
 
-## ➔ CURRENT NEXT STEP (updated 2026-07-15, authority Milestone 4 complete)
+## ➔ CURRENT NEXT STEP (updated 2026-07-15, authority Milestone 5 paused in progress)
 
-Implement `specs/folder-authority-mobility/TECH.md` Milestone 5: nested authority
-boundaries, Share-recipient intent, interruption/offline/relaunch and recovery-policy
-hardening, reduced-motion/screen-reader behavior, and packaged cross-surface
-acceptance. Start by making opposite-authority descendants explicit exclusions that
-can only move through their own journey; then carry requested Share recipients through
-the authoritative audience review without conflating move permission with export-copy
-permission. Do not deploy or use cloud fixtures without fresh authorization.
+Resume the uncommitted Milestone 5 worktree and finish
+`specs/folder-authority-mobility/TECH.md` Milestone 5. The current draft names and
+excludes nested opposite-authority roots, carries normalized Share recipients through
+the reviewed audience fingerprint and atomic activation, adds a reader-authorized
+detached Git export distinct from manage-authorized authority moves, adds durable
+relaunch/offline resume UI, and adds reduced-motion/live-region hardening. Focused
+checks passed before the stopping request: sync-backend 86/86, Convex-client 3/3,
+cloud UI 10/10, and desktop 214/214. The frozen workspace install was restored after
+the root dependency links disappeared. Later recovery edits have not yet received the
+full milestone gate, so none of this draft is committed or claimed complete.
+
+Start by reviewing the full dirty diff and running changed-file Biome plus the focused
+authority suites again. Then finish/test interrupted detached-export resume and the
+global recovery notice; complete the move/share/export completion actions (including
+reverse guidance and cloud Share management); verify recovery/archive-copy language,
+screen-reader announcements, keyboard focus, and reduced motion; remove remaining
+legacy universal-cloud prompts/import assumptions only after parity; run `pnpm check`
+and `pnpm build:desktop`; perform all non-mutating packaged acceptance available on
+this host; update this roadmap and the activity log; then commit Milestone 5 as one
+coherent verified commit. Expendable-cloud cutover acceptance remains blocked by the
+explicit no-cloud-fixture-mutation constraint and must not be attempted without fresh
+authorization. Do not deploy, push, or open a PR.
 
 Milestone 4 adds authoritative cloud Markdown/asset manifests, inherited access and
 public-link consequences, Hubble revision counts, archive fingerprints, active-only

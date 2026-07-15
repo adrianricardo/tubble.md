@@ -802,3 +802,15 @@ acceptance roots. Desktop tests pass 166/166 and `pnpm build:desktop` passes. Mi
   became available, and no expendable cloud fixture was authorized, so real-renderer
   cutover acceptance moves to Milestone 5. No cloud fixtures, deployment, push, or PR
   were changed.
+- 2026-07-15 — Paused selective folder authority TECH Milestone 5 at Adrian's
+  requested stopping point. The uncommitted draft covers named nested-authority
+  exclusions, carried Share recipients with fingerprinted atomic activation,
+  manage-only moves versus reader-safe detached Git export copies, restart-visible
+  offline/resume state, explicit retained-recovery language, live announcements, and
+  reduced-motion transitions. Focused suites passed before the final recovery edits:
+  sync-backend 86/86, Convex-client 3/3, cloud UI 10/10, and desktop 214/214. The
+  frozen-lockfile install restored missing root dependency links, but the final
+  changed-file checks, full `pnpm check`, `pnpm build:desktop`, packaged acceptance,
+  simplify/comments/review-readiness, legacy cleanup, and milestone commit remain.
+  The roadmap now names the exact restart sequence. No cloud fixture, deployment,
+  push, or PR was changed.
