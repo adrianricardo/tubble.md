@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted as the target architecture on 2026-07-11. Implementation is phased behind
-the safety gates in `specs/desktop-cloud-workspace/TECH.md`.
+Superseded by ADR-0011 on 2026-07-15. The projection-safety requirements remain valid
+for cloud-authoritative folders; universal cloud authority does not.
 
 ## Context
 

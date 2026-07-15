@@ -14,7 +14,8 @@ This folder holds the **engineering specs** for the realtime-collab → repo-bra
 - `REPO-BRAIN-VISION.md` / `REPO-BRAIN-RATIONALE.md` — the 2026-07-03 pivot: locked
   model (Workspace ⊃ Folders ⊃ cloud Docs), Decided #1–15, strategy and bets.
   **Note:** Decided #13 (manual-only seeding) is superseded by the agent-init entry —
-  see `/brain/cloud/synthesized/Current Vision.md` when the cloud brain is mounted.
+  see `/brain/synthesized/current-vision.md`. The 2026-07-15 Git-default correction
+  also supersedes this area's all-cloud storage scope.
 - `repo-brain-storyboard.html` — v1.1 visual walkthrough (agent-init scenes 1–3).
 - `TEST-RUNBOOK.md` — QA runbook for the repo-first launch gates.
 - `OPERATIONS.md` — support/telemetry runbook.

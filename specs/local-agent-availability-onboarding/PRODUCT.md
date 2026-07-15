@@ -1,5 +1,11 @@
 # Local agent availability onboarding
 
+> **Direction update (2026-07-15):** This journey remains relevant for a folder that
+> is already in Hubble Cloud, but cloud availability is no longer a prerequisite for
+> repository content or local agents. Git folders use their existing paths. New
+> authority and movement behavior lives in
+> `../folder-authority-mobility/PRODUCT.md`.
+
 ## Summary
 
 Hubble Desktop guides a signed-in user from cloud-only content to a local Markdown

@@ -14,14 +14,13 @@ Convex agent skills for common tasks can be installed by running
 
 ## Orientation — product brain
 
-For any product/vision/planning work, **read `brain/README.md` first**. The brain is
-**split** (2026-07-10): build state + engineering decisions stay in git under `brain/`;
-strategy/vision lives in the Hubble cloud folder mounted at `brain/cloud/` (absent
-without the desktop repo-link mount). Governance: `brain/BRAINKEEPER.md` (single doc,
-governs both halves). Note the **PENDING EXTRACTION** status before making
-vision-level assumptions. Engineering specs:
-`specs/realtime-collab/` (current) and `specs/hubble-init/` (agent-init front door);
-executed/superseded plans are in `specs/realtime-collab/archive/`.
+For any product/vision/planning work, **read `brain/README.md` first**. The full brain
+is Git-authoritative under `brain/` again as of 2026-07-15; the former
+`brain/cloud/` split is retired. Governance: `brain/BRAINKEEPER.md`. Note the
+**PENDING EXTRACTION** status before making vision-level assumptions. Current product
+authority behavior is in `specs/folder-authority-mobility/PRODUCT.md`; existing
+cloud/projection implementation specs remain under `specs/desktop-cloud-workspace/`
+and `specs/realtime-collab/`.
 
 ## Progress contract
 

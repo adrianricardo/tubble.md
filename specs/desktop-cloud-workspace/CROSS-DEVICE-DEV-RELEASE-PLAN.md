@@ -166,7 +166,7 @@ overwrite existing bytes.
 - [ ] Classify findings into release blockers, UX/UI follow-ups, and later hardening.
 - [ ] Update `brain/synthesized/roadmap.md` with the outcome and the newly justified
       next step.
-- [ ] Log the completed pass in `brain/cloud/admin/activity-log.md`.
+- [ ] Log the completed pass in `brain/admin/activity-log.md`.
 - [ ] Decide whether to prioritize the UX/UI findings, finish Phase 6 recovery safety,
       or prepare production distribution. Do not decide that ordering in advance of
       the evidence.

@@ -1,8 +1,22 @@
 # Roadmap / Current State
 
-Build-state half of the roadmap. Track strategy/sequencing moved to the cloud brain
-(`brain/cloud/synthesized/Track Strategy.md` when mounted) — split 2026-07-10 by the
-hubble-init apply run.
+Build state and current next step. Track strategy lives in
+`brain/synthesized/track-strategy.md`.
+
+## ➔ CURRENT NEXT STEP (updated 2026-07-15, authority correction)
+
+Hand `specs/folder-authority-mobility/PRODUCT.md` to the separate implementation model.
+That model should write the companion technical plan and reconcile it against the
+current universal-cloud implementation before changing product code or continuing the
+remaining local-agent-availability Milestone 4 packaged acceptance. The
+already-implemented projection safety work remains useful for cloud-authoritative
+folders, but onboarding that assumes every folder must become cloud-authoritative is
+no longer the product direction.
+
+The Hubble product brain is Git-authoritative again. All 13 active cloud documents were
+restored byte-for-byte under tracked `brain/` paths; the former `brain/cloud/` mount is
+retired locally with a rollback copy retained outside the repo. Source:
+`brain/sources/2026-07-15-git-default-folder-authority.md`.
 
 ## Desktop share-role selector stacking fixed (2026-07-14)
 
@@ -671,7 +685,7 @@ commit-pinned `specs/desktop-cloud-workspace/TECH.md`. A future implementing age
 run TECH's revalidation gate and update its module map against HEAD before editing code.
 The first safety gate is startup drift: no cloud materialization may overwrite edits
 made while Hubble was quit. Source:
-`brain/cloud/sources/2026-07-11 Desktop Navigation IA.md`. Keep this behind the
+`brain/sources/2026-07-11-desktop-navigation-ia.md`. Keep this behind the
 projection correctness guards above unless explicitly reprioritized.
 
 Documentation gate for this feature: preserve PRODUCT.md as the product-intent source

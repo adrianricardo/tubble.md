@@ -1,5 +1,11 @@
 # Desktop cloud workspace
 
+> **Direction update (2026-07-15):**
+> `../folder-authority-mobility/PRODUCT.md` supersedes this spec's universal-cloud
+> premise and its rejection of Git-authoritative folders. The projection safety,
+> recovery, sharing, and local-availability behaviors here still govern a folder while
+> it is in Hubble Cloud. A companion technical reconciliation is pending.
+
 ## Summary
 
 Hubble Desktop presents one cloud context and one folder/document tree. A folder may

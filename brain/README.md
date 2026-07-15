@@ -1,39 +1,51 @@
 # Hubble Product Brain
 
-**Read this first in any fresh session doing product/vision/planning work on hubble.md.**
-The brain was **split 2026-07-10** by the hubble-init apply run (Track C dogfood):
-mechanics/build docs stay here in git; strategy/vision lives in the Hubble cloud folder
-"Hubble Brain" (workspace "Hubble Product Brain", dev deployment), which mounts into
-this repo at `brain/cloud/` via the desktop app's repo-link.
+**Read this first in any fresh session doing product, vision, or planning work on
+hubble.md.** The full brain is Git-authoritative again as of 2026-07-15.
 
-## Git half (this directory)
+The brain was split on 2026-07-10 as a Hubble dogfood run: build material stayed in
+Git while strategy and vision moved to a cloud folder mounted at `brain/cloud/`. That
+split proved the cloud workflow, but it was unnecessary for this corpus because it
+does not currently need realtime collaboration or separation from repository access.
+The active cloud documents were restored byte-for-byte to tracked paths on 2026-07-15.
 
-- `synthesized/decision-log.md` — engineering/build decisions (product decisions moved
-  to cloud `synthesized/Product Decision Log.md`)
-- `synthesized/roadmap.md` — **where the build is + what's next** (the progress
-  contract's single source; track strategy moved to cloud `synthesized/Track Strategy.md`)
-- `BRAINKEEPER.md` — the one governance doc: filing rules (resolver), maintenance
-  non-negotiables, session wrap-up. Governs both halves.
-- `cloud/` — the mounted cloud half (git-excluded; absent until the desktop repo-link
-  mount is set up on this machine).
+## Documents
 
-## Cloud half (`brain/cloud/` when mounted)
+- `BRAIN.md` — agent-facing index and vision-extraction status.
+- `synthesized/current-vision.md` — the current product vision.
+- `synthesized/product-decisions.md` — product and strategy decisions.
+- `synthesized/decision-log.md` — engineering and build decisions.
+- `synthesized/track-strategy.md` — parallel tracks and sequencing.
+- `synthesized/roadmap.md` — **where the build is + what's next**; the progress
+  contract's single source.
+- `synthesized/open-questions.md` — unresolved product questions.
+- `admin/activity-log.md` — brain bookkeeping log.
+- `admin/pending-extraction.md` — vision still known to be missing.
+- `sources/` — append-only source captures.
+- `BRAINKEEPER.md` — filing rules, maintenance non-negotiables, and session wrap-up.
 
-`BRAIN.md` (index + **PENDING EXTRACTION** status), `synthesized/Current Vision.md`,
-`synthesized/Product Decision Log.md`, `synthesized/Track Strategy.md`,
-`synthesized/Open Questions.md`, `admin/Brain Activity Log.md`, `admin/Pending Extraction.md`,
-`sources/` (append-only session captures).
+## Authority rule
 
-**No mount on this machine?** The pre-split state of every moved doc is reachable in
-git history (pre-move commit noted in the move commit message), and the cloud is
-canonical going forward. The **PENDING EXTRACTION** caveat still applies: Adrian has
-more vision in his head than is written; don't treat gaps as decisions.
+Git is the default home for repository context. A folder should move to Hubble Cloud
+only when it needs realtime collaboration or access/privacy boundaries that should not
+follow the repository. Each folder has one authority at a time; moving it changes that
+authority rather than creating two canonical copies. Product behavior is specified in
+`/specs/folder-authority-mobility/PRODUCT.md`.
 
-## Relationship to /specs
+The former `brain/cloud/` mount and its local reconnect record are retired. The cloud
+copy may remain temporarily as a recovery backstop, but it is no longer canonical and
+must not be used as the current brain.
 
-- `/specs/desktop-cloud-workspace/` — normative desktop IA/projection behavior
-  (`PRODUCT.md`) plus a commit-pinned, revalidation-required implementation plan
-  (`TECH.md`).
-- `/specs/realtime-collab/` — engineering specs for the realtime-collab/repo-brain build (TECH, SYNCED-FOLDER, runbooks) + `archive/` of executed/superseded plans.
-- `/specs/hubble-init/` — design for the agent-run init/extraction skill (the new front door); run records in `runs/`.
-- Vision lives in the **cloud half**, not in specs. Specs describe how; the brain describes what and why.
+## Relationship to `/specs`
+
+- `/specs/folder-authority-mobility/PRODUCT.md` — current UX contract for Git-default,
+  selectively cloud-authoritative folders.
+- `/specs/desktop-cloud-workspace/` — implemented cloud tree and projection behavior;
+  its universal cloud-authority premise is superseded by the folder-authority spec.
+- `/specs/realtime-collab/` — engineering specs for the realtime collaboration and
+  projection system, plus an archive of executed/superseded plans.
+- `/specs/hubble-init/` — the prior agent-init/cloud-triage front door and run records;
+  its mandatory move-to-cloud premise is superseded.
+
+Vision remains **PENDING EXTRACTION**: Adrian has more product direction in his head
+than is written. Do not turn gaps into inferred decisions.

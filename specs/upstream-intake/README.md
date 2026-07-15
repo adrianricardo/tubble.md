@@ -43,9 +43,10 @@ assumptions, or upstream sync authority. Report major navigation, new product su
 auth/permissions changes, Convex migrations, new distribution platforms, broad toolchain
 migrations, and weaker projection/offline/revocation safeguards as `defer-product`.
 
-The governing product boundary is one cloud authority with writable watched projections.
-Read `brain/cloud/synthesized/current-vision.md`,
-`brain/cloud/synthesized/product-decisions.md`, and
+The governing product boundary is Git by default with explicit folder moves to or
+from Hubble Cloud; writable watched projections remain the cloud-folder interface.
+Read `brain/synthesized/current-vision.md`,
+`brain/synthesized/product-decisions.md`, and
 `specs/desktop-cloud-workspace/PRODUCT.md` before resolving semantic risk. Read
 `convex/_generated/ai/guidelines.md` before considering Convex changes.
 
