@@ -26,7 +26,7 @@ These results still need to be included in the exact revision deployed and relea
 
 | Area | Required evidence | Status / dependency |
 | --- | --- | --- |
-| Public destination | Set the operated HTTPS trial URL in `config/brand.json`, README, and package homepages; verify control. | **Needs Adrian's URL and hosting control.** |
+| Public destination | Configure DNS/TLS/hosting for the selected temporary URL `https://tubble.adriantavares.com`, deploy Tubble there, verify control, then set it in `config/brand.json`, README, and package homepages. A dedicated custom domain comes later. | **URL selected; infrastructure and verification pending.** |
 | Fresh-browser links | Open every README, download, security, and www public destination in a clean browser. | **Pending.** HTTP fallback passes; the in-app browser cannot currently start because its native module has an invalid local signature. |
 | Independent deployment | A second operator follows `DEPLOY.md` from a clean clone, records corrections, and proves web create/edit/reload plus macOS sign-in/local-agent edit on their deployment. | **Needs a second operator, Convex account, host, and Mac.** |
 | Production trial | Create a production Convex project separate from development, configure auth/secrets, deploy the backend, host `apps/www` against it, and record backend/frontend revisions. | **Not started; needs production accounts and destination.** |

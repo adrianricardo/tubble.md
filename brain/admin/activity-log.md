@@ -954,3 +954,9 @@ acceptance roots. Desktop tests pass 166/166 and `pnpm build:desktop` passes. Mi
   `pnpm check:brand` reports 0 divergent values plus the known unresolved URL, and
   `pnpm build:desktop` passes. No deployment, release, push, or production fixture
   mutation occurred.
+- 2026-07-16 — Recorded Adrian's public destination decision:
+  `https://tubble.adriantavares.com` is the temporary staging and hosted-trial front
+  door; a dedicated custom domain comes later. Updated the product decision log,
+  roadmap, and launch-readiness matrix while leaving `config/brand.json` unresolved
+  until DNS, TLS, hosting, and application control are actually verified. No DNS,
+  hosting, deployment, public link, push, or release changed.

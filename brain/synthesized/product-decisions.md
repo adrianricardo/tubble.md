@@ -50,6 +50,24 @@ launch. Tubble.md is fixed by the follow-up decision above.
 **Source:** Follow-up to `../sources/2026-07-15-public-launch-milestone.md`; contract
 and plan: `/specs/public-try-it-today-launch/{PRODUCT,PLAN}.md`.
 
+## 2026-07-16 — Temporary public staging URL
+
+**Decision:** Use `https://tubble.adriantavares.com` as the temporary public staging
+URL for Tubble.md. It may become the hosted-trial front door while the launch path is
+tested. Replace it with a dedicated custom domain later.
+
+**Rationale:** A subdomain Adrian controls unblocks deployment and end-to-end launch
+testing without prematurely choosing or purchasing the permanent product domain. The
+brand manifest keeps a future URL change bounded.
+
+**Consequences:** Keep `config/brand.json` unresolved until the subdomain's DNS, TLS,
+hosting, and Tubble deployment are reachable and control is verified. Once verified,
+set the manifest URL and update its checked public surfaces. A later custom-domain
+move follows the same manifest-driven rename path and should preserve or redirect the
+staging address if it has already been published.
+
+**Source:** `../sources/2026-07-16-public-staging-url.md`.
+
 ## 2026-07-15 — A public “try it today” launch is the next milestone
 
 **Decision:** Reprioritize the immediate milestone around a truthful public launch of

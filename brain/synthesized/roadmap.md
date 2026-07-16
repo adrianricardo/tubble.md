@@ -41,9 +41,11 @@ as one verified commit. No push, deployment, or release has occurred.
   `specs/public-try-it-today-launch/READINESS.md`.
 
 **Immediate open items (pick any; none block the others except where noted):**
-1. **Resolve hosted web URL** (Phase 1 step 7): set `config/brand.json` → `web.url`,
-   update README hosted-trial link + `homepage` fields, verify control. Clears the last
-   `check:brand` flag.
+1. **Stand up and verify the selected staging URL** (Phase 1 step 7): Adrian selected
+   `https://tubble.adriantavares.com` as the temporary hosted-trial front door, with a
+   custom domain later. Configure DNS/TLS/hosting and the Tubble deployment first;
+   then set `config/brand.json` → `web.url`, update README hosted-trial link +
+   `homepage` fields, and verify control. Clears the last `check:brand` flag.
 2. **Clean-browser public-link audit** (Phase 1 step 6); HTTP fallback is complete.
 3. **Phase 2 DEPLOY-5**: a second operator follows `DEPLOY.md` from a clean clone and
    fills its verification record (needs a real Convex account + web host).
@@ -91,8 +93,9 @@ to backlog unless the failure risks data loss or exposure.
 **Implementation is now underway** — see the **⟳ RESUME HERE** block at the top of this
 file for the current pickup point. Phase 1 planning items (brand manifest, compatibility
 map, rename inventory) are built and the in-repo rename is applied in the working tree.
-The GitHub rename is authorized and authentication is healthy; the hosted web URL
-remains unresolved.
+The GitHub rename is authorized and authentication is healthy. Adrian selected
+`https://tubble.adriantavares.com` as the temporary staging URL, but the manifest
+remains unresolved until DNS, TLS, hosting, and application control are verified.
 
 Source: `brain/sources/2026-07-15-public-launch-milestone.md`. Observable contract:
 `/specs/public-try-it-today-launch/PRODUCT.md`.
@@ -117,8 +120,10 @@ box). Compatibility map corrected: `productName`/`appName`/userData follow the r
 
 **Remaining (Phase 1 steps 6–7):**
 
-- Resolve the hosted web URL and set `config/brand.json` → `web.url` (+ update README
-  hosted-trial link and root/package `homepage`), verifying control before publishing.
+- Stand up and verify `https://tubble.adriantavares.com`, the selected temporary
+  staging URL, then set `config/brand.json` → `web.url` (+ update README hosted-trial
+  link and root/package `homepage`). A dedicated custom domain is deferred until after
+  staging acceptance.
 - Complete the literal clean-browser audit of every public link (README, download,
   security, www copy). The signed-out HTTP audit passes, but browser automation is
   locally blocked by an invalid native-module signature.
