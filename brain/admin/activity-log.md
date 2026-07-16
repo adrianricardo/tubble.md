@@ -988,3 +988,18 @@ acceptance roots. Desktop tests pass 166/166 and `pnpm build:desktop` passes. Mi
   `pnpm build:desktop` pass. The next gate is the first-account persistence smoke,
   awaiting Adrian's action-time approval/test identity; no account, push, release,
   announcement, or unrelated DNS change occurred.
+- 2026-07-16 — With Adrian's action-time approval, created the first hosted-trial
+  account `tubble-smoke-20260716182713@example.com`. Its private starter Space appeared
+  with no teams/shares, and `Hosted Trial Persistence 2026-07-16` retained the exact
+  timestamped marker across a cache-bypassing reload. An automation double-click made
+  one extra Untitled document; it was soft-deleted, leaving one active smoke document.
+  The signed-in page exposed stale `HUBBLE` branding, so commit `fce0a1e` changes the
+  dashboard and deployment-error copy to Tubble and adds strict brand coverage.
+  Cloudflare Worker version `7e6d5f82-a52a-4909-9dbf-28306a33094a` now serves that
+  commit; six consecutive bare-root checks returned the new asset, and the preserved
+  account rendered `TUBBLE`. Strict brand passes 0/0, Cloud UI tests 10/10, web tests
+  7/7, www typecheck and `pnpm build:desktop` pass. Sign-out/sign-in recovery is still
+  pending: the generated first-account password was volatile by design and disappeared
+  when the headless renderer had to restart. A replacement disposable account—and the
+  opportunity to prove account-A isolation—requires renewed action-time approval. No
+  push, release, announcement, or unrelated external mutation occurred.

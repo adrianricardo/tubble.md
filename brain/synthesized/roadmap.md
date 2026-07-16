@@ -49,22 +49,34 @@ account, or announcement has occurred.
   one-custom-domain configuration is committed in `apps/www/wrangler.jsonc`.
 - Cloudflare hosting is live at `https://tubble.nopalstudio.com`: DNS A/AAAA, valid
   wildcard TLS, root + SPA 200 responses, production-backend targeting, and signed-out
-  trial-boundary rendering are verified. Frontend commit `181935a` is Worker version
-  `566d2f8b-a60c-4240-958c-3718900a7bfb` at 100%.
+  trial-boundary rendering are verified. Frontend commit `fce0a1e` is Worker version
+  `7e6d5f82-a52a-4909-9dbf-28306a33094a` at 100%; the bare root converged on its new
+  asset in six consecutive checks.
+- Adrian approved and the first production account was created as
+  `tubble-smoke-20260716182713@example.com`. Its private starter Space appeared with
+  no teams/shares, and `Hosted Trial Persistence 2026-07-16` retained an exact marker
+  across reload. The accidental extra Untitled document is soft-deleted, leaving one
+  active smoke document.
+- The smoke found a stale signed-in `HUBBLE` label. Commit `fce0a1e` fixes dashboard +
+  deployment-error copy, extends strict brand coverage, and is live/verified as
+  `TUBBLE`. Cloud UI tests pass 10/10, web tests 7/7, www typecheck and
+  `pnpm build:desktop` pass.
 
 **Immediate open items (pick any; none block the others except where noted):**
-1. **Run the first-account persistence smoke with Adrian's action-time approval**
-   (Phase 3): create the first production account from signed out at
-   `https://tubble.nopalstudio.com`, verify its private starter Workspace/document,
-   reload, sign out/in, and recover the same content. Do not invent or create a test
-   identity without approval.
+1. **With renewed action-time approval, create one replacement disposable account to
+   finish sign-out/sign-in recovery and private-Workspace isolation** (Phase 3). The
+   first account passed signup/private Space/create/edit/reload, but its volatile
+   generated password was discarded during a required browser restart. Keep the
+   replacement password in one uninterrupted process, recover its document after
+   sign-out/sign-in, and prove it cannot discover/read account A's private document.
 2. **Clean-browser public-link audit** (Phase 1 step 6); HTTP fallback is complete.
 3. **Phase 2 DEPLOY-5**: a second operator follows `DEPLOY.md` from a clean clone and
    fills its verification record (needs a real Convex account + web host).
 4. **Internal CLEANUP** (non-launch-blocking): agent docs / `CLAUDE.md` / `docs/agents/*`
    / `.agents/skills/*` still reference `bholmesdev/hubble.md` issue tracker.
-5. **Phase 3**: production Convex/Auth/hosting and signed-out boundary are verified;
-   finish first-use, isolation, sharing, failure-state, and operational gates.
+5. **Phase 3**: production Convex/Auth/hosting, signed-out boundary, first signup, and
+   reload persistence are verified; finish sign-in recovery, isolation, sharing,
+   failure-state, and operational gates.
 
 Other previously-pending work (selective-authority acceptance, Phase 6 recovery,
 cross-device matrix, Adrian's todos 1–5) remains tracked in its own sections below and

@@ -39,10 +39,11 @@ These results still need to be included in the exact revision deployed and relea
 - The production web artifact built successfully against
   `https://rugged-mastiff-510.convex.cloud`; an artifact scan found the production
   URL and no development deployment, test-variable, or private-key markers.
-- Frontend revision `181935a2a44ab8439838b3a4d9ced5133360d1f0` is active as
-  Cloudflare Worker version `566d2f8b-a60c-4240-958c-3718900a7bfb` at
+- Frontend revision `fce0a1eb1250892d5512d5dee24d03a58542dcf6` is active as
+  Cloudflare Worker version `7e6d5f82-a52a-4909-9dbf-28306a33094a` at
   `https://tubble.nopalstudio.com`. Wrangler reports that version at 100% with one
-  custom-domain route.
+  custom-domain route. Six consecutive bare-root checks returned the new asset after
+  the edge cache converged.
 - Public DNS returns Cloudflare A/AAAA addresses. HTTPS returns HTTP/2 200 through
   Cloudflare with a valid `*.nopalstudio.com` certificate; an unknown path also returns
   the SPA document with 200. The page title is `tubble.md`.
@@ -53,6 +54,20 @@ These results still need to be included in the exact revision deployed and relea
   The in-app browser plugin remains locally unavailable because its bundled native
   module has an invalid signature; this acceptance used Chrome DevTools from a new
   profile with no saved cookies or local app configuration.
+- First-account smoke identity `tubble-smoke-20260716182713@example.com` was created
+  after Adrian's action-time approval. Its private starter Space appeared with no
+  teams or shares. `Hosted Trial Persistence 2026-07-16` retained the exact marker
+  `Hosted trial persistence smoke marker 2026-07-16T18:29:19.146Z` across a
+  cache-bypassing reload. One accidental extra Untitled document was soft-deleted;
+  production has one active smoke document for this account.
+- That signed-in run exposed a stale `HUBBLE` dashboard label. Commit `fce0a1e` fixes
+  the dashboard and deployment-error copy, extends strict brand coverage, and is
+  deployed/verified as `TUBBLE`. Cloud UI tests pass 10/10, web tests 7/7, www
+  typecheck and `pnpm build:desktop` pass.
+- Sign-out/sign-in recovery remains unproven for the first identity because its
+  generated password was intentionally kept only in volatile browser memory and was
+  discarded when the headless renderer had to restart. Creating a replacement
+  identity requires renewed action-time approval.
 
 ## Pending before launch
 
@@ -61,12 +76,12 @@ These results still need to be included in the exact revision deployed and relea
 | Public destination | Configure DNS/TLS/hosting for the selected temporary URL, deploy Tubble there, verify control, then set it in `config/brand.json`, README, and package homepages. A dedicated custom domain comes later. | **Complete at `https://tubble.nopalstudio.com`; DNS, TLS, SPA hosting, app control, and brand boundary verified.** |
 | Fresh-browser links | Open every README, download, security, and www public destination in a clean browser. | **Pending.** HTTP fallback passes; the in-app browser cannot currently start because its native module has an invalid local signature. |
 | Independent deployment | A second operator follows `DEPLOY.md` from a clean clone, records corrections, and proves web create/edit/reload plus macOS sign-in/local-agent edit on their deployment. | **Needs a second operator, Convex account, host, and Mac.** |
-| Production trial | Create a production Convex project separate from development, configure auth/secrets, deploy the backend, host `apps/www` against it, and record backend/frontend revisions. | **Infrastructure complete: backend `c40f963`, frontend `181935a`, production empty, auth and real URL verified.** |
-| Trial first use | From signed out on the real URL: see the trial boundary and availability, create an account/private Workspace/document, reload, sign out/in, and recover the same content. | **Signed-out boundary passes. First external account + persistence smoke is prepared and awaits Adrian's action-time approval/test identity.** |
+| Production trial | Create a production Convex project separate from development, configure auth/secrets, deploy the backend, host `apps/www` against it, and record backend/frontend revisions. | **Infrastructure complete: backend `c40f963`, frontend `fce0a1e`, auth and real URL verified; one approved smoke account now exists.** |
+| Trial first use | From signed out on the real URL: see the trial boundary and availability, create an account/private Workspace/document, reload, sign out/in, and recover the same content. | **Signup, private starter Space, create/edit, and reload persistence pass. Sign-out/sign-in recovery needs a replacement disposable identity because the first volatile password was discarded; renewed approval required.** |
 | Trial failure states | Verify reached-cap, operator-pause, outage, deployment mismatch, and unavailable-account copy on the production configuration. | **Implementation exists for cap/pause; production evidence pending.** |
 | Operational floor | Name deployment ownership; prove secret rotation/revocation, error visibility, pause/reopen signups, backup/export, and a service/retirement notice path. | **Partially documented; operator choices and production drills pending.** |
 | Production configuration | Audit production environment, build output, repository history, and release assets for leaked secrets or unintended development/test targets and fixtures. | **Backend/frontend environment and web artifact pass: production endpoint present; no dev deployment, test-variable, or private-key markers; production users empty. Desktop release assets remain a later gate.** |
-| Private Workspace isolation | With two production accounts, prove account B cannot discover or read account A's private Workspace/document. | **Pending production deployment and two accounts.** |
+| Private Workspace isolation | With two production accounts, prove account B cannot discover or read account A's private Workspace/document. | **Account A and its private document exist. A second approved disposable account can finish this gate while completing sign-out/sign-in recovery.** |
 | Realtime sharing | With two production accounts, prove share, simultaneous edit, revoke, and post-revocation denial. | **Pending production deployment and two accounts.** |
 | Public macOS release | Build the exact tested revision, sign and notarize it under the fork identity, publish it to a fork-owned release, publish integrity information, and verify download/install/update destinations. | **Pending signing credentials, release revision/tag, and publication.** |
 | macOS first run | From a clean profile, verify pre-prompt Safe Storage context, expected Tubble identity, sign-in handoff, and no unexplained startup-file prompt. | **Pending signed production build and clean profile.** |
