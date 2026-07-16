@@ -9,7 +9,7 @@
 		"url": "git+https://github.com/adrianricardo/tubble.md.git",
 		"directory": "packages/mcp-server"
 	},
-	"homepage": "https://github.com/adrianricardo/tubble.md",
+	"homepage": "https://tubble.nopalstudio.com",
 	"bugs": {
 		"url": "https://github.com/adrianricardo/tubble.md/issues"
 	},

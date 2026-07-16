@@ -9,7 +9,7 @@
 		"url": "git+https://github.com/adrianricardo/tubble.md.git",
 		"directory": "packages/runtime"
 	},
-	"homepage": "https://github.com/adrianricardo/tubble.md",
+	"homepage": "https://tubble.nopalstudio.com",
 	"bugs": "https://github.com/adrianricardo/tubble.md/issues",
 	"type": "module",
 	"exports": {

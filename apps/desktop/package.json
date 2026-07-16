@@ -10,7 +10,7 @@
 		"url": "git+https://github.com/adrianricardo/tubble.md.git",
 		"directory": "apps/desktop"
 	},
-	"homepage": "https://github.com/adrianricardo/tubble.md",
+	"homepage": "https://tubble.nopalstudio.com",
 	"bugs": "https://github.com/adrianricardo/tubble.md/issues",
 	"type": "module",
 	"main": "./out/main/main.js",

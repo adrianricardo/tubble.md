@@ -12,9 +12,7 @@
 		"url": "https://github.com/adrianricardo/tubble.md"
 	},
 	"web": {
-		"_status": "UNRESOLVED",
-		"_todo": "Phase 1 step 7: set the operated hosted-trial front-door URL and verify control before publishing. Until then this stays UNRESOLVED and `pnpm check:brand` flags it.",
-		"url": "https://TODO.tubble.md"
+		"url": "https://tubble.nopalstudio.com"
 	},
 	"links": {
 		"download": "https://github.com/adrianricardo/tubble.md/releases/latest",

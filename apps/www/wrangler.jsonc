@@ -7,7 +7,7 @@
 	},
 	"routes": [
 		{
-			"pattern": "tubble.adriantavares.com",
+			"pattern": "tubble.nopalstudio.com",
 			"custom_domain": true
 		}
 	]

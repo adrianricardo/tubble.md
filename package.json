@@ -9,7 +9,7 @@
 		"type": "git",
 		"url": "git+https://github.com/adrianricardo/tubble.md.git"
 	},
-	"homepage": "https://github.com/adrianricardo/tubble.md",
+	"homepage": "https://tubble.nopalstudio.com",
 	"bugs": "https://github.com/adrianricardo/tubble.md/issues",
 	"scripts": {
 		"upstream:audit": "node .agents/skills/upstream-intake/scripts/audit-upstream.mjs",

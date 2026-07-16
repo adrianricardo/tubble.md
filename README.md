@@ -40,9 +40,8 @@ There are two ways to use Tubble:
 
 ### 1. Hosted trial
 
-<!-- TODO(Phase 3): replace with the operated hosted-trial URL once resolved and control is verified (config/brand.json → web.url). -->
-A best-effort hosted service where you can create an account and start writing
-immediately — **link coming at launch.**
+[Try the hosted trial](https://tubble.nopalstudio.com) to create an account and start
+writing immediately.
 
 > ⚠️ **The hosted trial is best effort.** It is a public trial with **no uptime, backup,
 > support, security-review, or maintenance guarantee**, and is **not intended for

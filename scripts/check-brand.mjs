@@ -38,6 +38,16 @@ const publicSurfaces = [
 		divergent: (t) => t.includes(upstreamRepoSlug),
 	},
 	{
+		label: "Root package homepage",
+		file: "package.json",
+		divergent: (t) => JSON.parse(t).homepage !== brand.web.url,
+	},
+	{
+		label: "README hosted-trial URL",
+		file: "README.md",
+		divergent: (t) => !t.includes(`](${brand.web.url})`),
+	},
+	{
 		label: "README front-door links",
 		file: "README.md",
 		divergent: (t) => t.includes(`${upstreamRepoSlug}/releases`),
@@ -130,6 +140,11 @@ for (const pkg of [
 		label: `${pkg} package repository/bugs URLs`,
 		file: `${pkg}/package.json`,
 		divergent: (t) => t.includes(upstreamRepoSlug),
+	});
+	publicSurfaces.push({
+		label: `${pkg} package homepage`,
+		file: `${pkg}/package.json`,
+		divergent: (t) => JSON.parse(t).homepage !== brand.web.url,
 	});
 }
 
