@@ -85,7 +85,7 @@ export function DashboardScreen({
 			<header className="flex flex-wrap items-start justify-between gap-4">
 				<div className="flex flex-col gap-1">
 					<p className="[margin:0] text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-						Hubble
+						Tubble
 					</p>
 					<h1 className="[margin:0] text-2xl font-semibold tracking-normal md:text-3xl">
 						Live Documents

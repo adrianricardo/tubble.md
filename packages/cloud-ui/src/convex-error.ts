@@ -65,7 +65,7 @@ export function describeError(err: ConvexErrorKind): string {
 		case "auth-session":
 			return "Your session no longer has access. Sign out, sign back in, and try again.";
 		case "missing-function":
-			return `This deployment doesn't expose ${err.functionName}. It may not be running the hubble.md backend.`;
+			return `This deployment doesn't expose ${err.functionName}. It may not be running the Tubble backend.`;
 		case "validator":
 			return `${err.functionName} rejected the call. The backend's function signature may differ from what this app expects.`;
 		case "unknown":

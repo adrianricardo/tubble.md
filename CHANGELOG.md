@@ -8,6 +8,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 ## [Unreleased]
 
 ### Fixed
+- Signed-in dashboard and deployment errors now use the Tubble name
 - Local availability setup rejects occupied folders before writing Hubble files
 - Documents created from a folder row now receive keyboard focus in the cloud tree
 - Share-dialog role and link-access menus now open above the dialog

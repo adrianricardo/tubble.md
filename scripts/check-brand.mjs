@@ -113,6 +113,21 @@ const publicSurfaces = [
 		divergent: (t) => /Sign in to Hubble/.test(t),
 	},
 	{
+		label: "Authenticated dashboard identity",
+		file: "packages/cloud-ui/src/DashboardScreen.tsx",
+		divergent: (t) => />\s*Hubble\s*</.test(t),
+	},
+	{
+		label: "Cloud UI deployment error identity",
+		file: "packages/cloud-ui/src/convex-error.ts",
+		divergent: (t) => /running the hubble\.md backend/i.test(t),
+	},
+	{
+		label: "Hosted web deployment error identity",
+		file: "apps/www/src/connection/convex-error.ts",
+		divergent: (t) => /running the hubble\.md backend/i.test(t),
+	},
+	{
 		label: "Guest screen desktop copy + download",
 		file: "apps/www/src/screens/GuestFolderScreen.tsx",
 		divergent: (t) =>
