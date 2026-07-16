@@ -1,16 +1,16 @@
 {
 	"name": "@hubble.md/convex-client",
 	"version": "0.0.1",
-	"description": "Convex client for the Hubble.md sync engine",
+	"description": "Convex client for the Tubble.md sync engine",
 	"license": "MIT",
 	"author": "Ben Holmes <hey@bholmes.dev>",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/bholmesdev/hubble.md.git",
+		"url": "git+https://github.com/adrianricardo/tubble.md.git",
 		"directory": "packages/convex-client"
 	},
-	"homepage": "https://hubble.md",
-	"bugs": "https://github.com/bholmesdev/hubble.md/issues",
+	"homepage": "https://github.com/adrianricardo/tubble.md",
+	"bugs": "https://github.com/adrianricardo/tubble.md/issues",
 	"type": "module",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",

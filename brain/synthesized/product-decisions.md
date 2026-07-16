@@ -3,6 +3,77 @@
 Newest first. Product and strategy decisions live here; engineering and build
 decisions live in `decision-log.md`.
 
+## 2026-07-15 — Tubble.md is the launch name, not a permanent identity constraint
+
+**Decision:** Launch the fork as **Tubble.md**, a playful reference to Hubble.md. Treat
+the name as replaceable: all mutable public brand values must originate from one
+repo-owned definition or be generated/validated against it, while
+compatibility-sensitive identifiers remain separately explicit.
+
+**Rationale:** Tubble.md makes the fork relationship memorable now without forcing a
+premature permanent-brand exercise. Designing the rename boundary before applying the
+name makes a later change bounded and prevents another uncontrolled repository-wide
+replacement.
+
+**Consequences:** The naming interview is complete. The first authorized implementation
+slice starts with the brand manifest, compatibility map, and rename inventory, then
+applies Tubble.md to public surfaces. Domain/repository control still requires an
+operator check before publication but is not an open product-name decision.
+
+**Source:** Name-selection follow-up in
+`../sources/2026-07-15-public-launch-milestone.md`.
+
+## 2026-07-15 — Launch uses managed Convex, hosted web, and macOS agent access
+
+**Decision:** The launch-supported independent deployment uses the operator's own
+managed Convex production project and web host; fully self-managed infrastructure is
+backlog. The public launch includes hosted web for immediate use and macOS desktop for
+the exact local Markdown path agents need. Rename public-facing surfaces now, retain
+compatibility-sensitive internal identifiers only when intentional, and centralize
+mutable public brand values behind one source plus generation or validation so later
+renames are bounded.
+
+**Rationale:** Web alone satisfies instant evaluation but cannot give a local agent a
+filesystem path. macOS is therefore part of the core launch journey rather than an
+optional distribution extra. Managed Convex makes independent operation credible
+without absorbing the substantially larger burden of supporting the open-source
+backend in production. Centralized brand data keeps this rename from becoming another
+future repository-wide hunt.
+
+**Consequences:** Signing/notarization, fork-owned releases, clean-profile Safe
+Storage and startup-file behavior, deployment-correct sign-in, independent desktop
+build instructions, and a two-device web → desktop → local-agent → web → relaunch
+smoke are launch-critical. The initial announcement omits Git/cloud authority moves
+and broader offline/recovery claims, so their unfinished acceptance does not block
+launch. Tubble.md is fixed by the follow-up decision above.
+
+**Source:** Follow-up to `../sources/2026-07-15-public-launch-milestone.md`; contract
+and plan: `/specs/public-try-it-today-launch/{PRODUCT,PLAN}.md`.
+
+## 2026-07-15 — A public “try it today” launch is the next milestone
+
+**Decision:** Reprioritize the immediate milestone around a truthful public launch of
+the fork: adopt a distinct name, explain its Hubble lineage and meaningful additions,
+offer an explicitly best-effort hosted cloud trial with immediate account creation,
+and provide a verified independent-deployment guide for people who need more control.
+Existing work that does not make a launch claim true moves to backlog or becomes a
+claim-conditional gate.
+
+**Rationale:** The desired near-term outcome is no longer another internally complete
+feature phase. It is the ability to publish a concrete invitation—what was forked,
+what changed, and how to try it today—without implying that the public hosted service
+is appropriate for critical work or guaranteed to be maintained indefinitely.
+
+**Consequences:** Production web deployment, honest trial copy, distinct public
+identity, fork attribution, clean-clone deployment documentation, and claim-shaped
+acceptance are critical. The follow-up decision above makes macOS distribution and
+the focused cross-device agent-access path critical while leaving selective-authority
+cutovers and broader recovery claim-conditional. The follow-up decisions above resolve
+the deployment, surface, rename-depth, and naming gates.
+
+**Source:** `../sources/2026-07-15-public-launch-milestone.md`; contract and plan:
+`/specs/public-try-it-today-launch/{PRODUCT,PLAN}.md`.
+
 ## 2026-07-15 — Git is the default; cloud authority is selected per folder
 
 **Decision:** Repository content remains Git-authoritative by default. A user moves a

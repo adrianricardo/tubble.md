@@ -12,7 +12,7 @@ export function SignInScreen({
 	// Shown above the form. Used by the invite-link join route (RB2/RB6) so a
 	// signed-out visitor understands why they landed here before signing in/up.
 	banner?: string;
-	// Overrides the default "Sign in to Hubble" / "Create your account" heading —
+	// Overrides the default "Sign in to Tubble" / "Create your account" heading —
 	// the invite-link join route (RB6) uses this to sell the destination
 	// ("Open your shared folder"), not the product.
 	heading?: string;
@@ -51,7 +51,7 @@ export function SignInScreen({
 				)}
 				<h1 className="text-base font-semibold text-foreground">
 					{heading ??
-						(mode === "signIn" ? "Sign in to Hubble" : "Create your account")}
+						(mode === "signIn" ? "Sign in to Tubble" : "Create your account")}
 				</h1>
 				<label
 					htmlFor="auth-email"

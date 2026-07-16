@@ -1,0 +1,36 @@
+{
+	"_comment": "Compatibility-sensitive identifiers intentionally retained across the Tubble.md rename. These are NOT public brand copy: changing any of them would strand an existing desktop install, on-disk files, deep links, or an account/deployment binding. Each stays until a dedicated, separately-reviewed migration exists. `pnpm check:brand` reports these as intentional so they are never mistaken for stale branding.",
+	"retained": [
+		{
+			"id": "desktop.appId",
+			"value": "com.benholmes.hubblemd.desktop",
+			"where": "apps/desktop/package.json build.appId",
+			"reason": "macOS treats a changed appId as a different application: breaks auto-update continuity and orphans userData/Keychain for any installed build. Migrate only with an explicit installed-base migration plan."
+		},
+		{
+			"id": "desktop.protocolScheme",
+			"value": "hubble",
+			"where": "apps/desktop/package.json protocols.schemes + electron/main.ts setAsDefaultProtocolClient(\"hubble\") + hubble:// route parsing",
+			"reason": "Deep links use hubble://. Changing the scheme breaks every issued or bookmarked link. The protocol DISPLAY label (protocols.name) is brand-managed as 'Tubble URL'; the scheme string stays."
+		},
+		{
+			"id": "packages.npmNamespace",
+			"value": "@hubble.md/*",
+			"where": "packages/*/package.json name, apps/desktop/package.json name",
+			"reason": "Internal, unpublished monorepo package namespace. Renaming churns every import for zero public benefit. Post-launch CLEANUP at most."
+		},
+		{
+			"id": "cli.binaryName",
+			"value": "hubble",
+			"where": "packages/cli/package.json bin, `pnpm hubble` script, `hubble login`/`mount`/`status` commands",
+			"reason": "Command name users type and that appears across docs/muscle memory. Not a launch-announcement surface (launch claims are web + macOS desktop). Renaming churns every CLI doc for no public-launch benefit; keep `hubble` and document. Post-launch CLEANUP at most."
+		},
+		{
+			"id": "skills.upstreamSource",
+			"value": "bholmesdev/hubble-skills",
+			"where": "apps/desktop/src/lib/hubbleSkills.ts, apps/desktop/src/components/HtmlAppsCallout.tsx, README skills link",
+			"reason": "Functional dependency on the upstream skills repo AND valid upstream attribution. Retain until/unless a fork-owned skills repo is stood up."
+		}
+	],
+	"note_on_productName": "apps/desktop build.productName ('Hubble' -> 'Tubble') and electron/main.ts appName ARE brand-managed (public rename), now applied. The macOS 'Safe Storage' Keychain label and the Electron userData directory follow the app name, so they move Hubble -> Tubble with this rename. This is intentionally NOT a retained-compatibility identifier: there are no public installs to migrate, so the first public packaged release is simply born as 'Tubble'. The appId (com.benholmes.hubblemd.desktop) stays retained so code-signing identity and macOS app identity remain stable across the rename. Existing DEV installs (desktop-dev-latest) are expendable and not a migration constraint."
+}

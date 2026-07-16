@@ -2,16 +2,16 @@
 	"name": "@hubble.md/desktop",
 	"private": true,
 	"version": "0.1.13",
-	"description": "Desktop app for Hubble.md",
+	"description": "Desktop app for Tubble.md",
 	"license": "MIT",
 	"author": "Ben Holmes <hey@bholmes.dev>",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/bholmesdev/hubble.md.git",
+		"url": "git+https://github.com/adrianricardo/tubble.md.git",
 		"directory": "apps/desktop"
 	},
-	"homepage": "https://hubble.md",
-	"bugs": "https://github.com/bholmesdev/hubble.md/issues",
+	"homepage": "https://github.com/adrianricardo/tubble.md",
+	"bugs": "https://github.com/adrianricardo/tubble.md/issues",
 	"type": "module",
 	"main": "./out/main/main.js",
 	"scripts": {
@@ -82,7 +82,7 @@
 	},
 	"build": {
 		"appId": "com.benholmes.hubblemd.desktop",
-		"productName": "Hubble",
+		"productName": "Tubble",
 		"directories": {
 			"output": "release"
 		},
@@ -94,8 +94,8 @@
 		"publish": [
 			{
 				"provider": "github",
-				"owner": "bholmesdev",
-				"repo": "hubble.md",
+				"owner": "adrianricardo",
+				"repo": "tubble.md",
 				"tagNamePrefix": "desktop-v",
 				"releaseType": "release"
 			}
@@ -109,7 +109,7 @@
 		},
 		"protocols": [
 			{
-				"name": "Hubble URL",
+				"name": "Tubble URL",
 				"schemes": [
 					"hubble"
 				]

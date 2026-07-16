@@ -475,7 +475,7 @@ class GuestFolderErrorBoundary extends Component<
 // dismissal per folder (not global) since a guest may have several shares.
 const AGENT_BANNER_DISMISSED_PREFIX = "hubble:agent-banner-dismissed:";
 const DESKTOP_DOWNLOAD_URL =
-	"https://github.com/bholmesdev/hubble.md/releases/latest";
+	"https://github.com/adrianricardo/tubble.md/releases/latest";
 
 function BringYourAgentBanner({ folderId }: { folderId: string }) {
 	const storageKey = `${AGENT_BANNER_DISMISSED_PREFIX}${folderId}`;
@@ -488,7 +488,7 @@ function BringYourAgentBanner({ folderId }: { folderId: string }) {
 		<div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/40 [padding-block:0.5rem] [padding-inline:0.75rem]">
 			<p className="m-0 min-w-0 flex-1 text-xs text-foreground">
 				<span className="font-medium">Want your agent working here too?</span>{" "}
-				Install the Hubble desktop app and sign in with this same account — your
+				Install the Tubble desktop app and sign in with this same account — your
 				shared folders show up as real files, ready to point Cowork or Claude
 				Code at.
 			</p>

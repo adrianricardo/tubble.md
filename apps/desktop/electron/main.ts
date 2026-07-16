@@ -171,7 +171,7 @@ type DesktopAuthState = {
 const isDev = !app.isPackaged || process.env.HUBBLE_DESKTOP_FORCE_DEV === "1";
 const { autoUpdater } = electronUpdater;
 const devAppName = isDev ? process.env.HUBBLE_DESKTOP_DEV_APP_NAME : undefined;
-const appName = devAppName ?? "Hubble";
+const appName = devAppName ?? "Tubble";
 const debugPort = process.env.HUBBLE_DESKTOP_DEBUG_PORT ?? "9222";
 const updateFeedUrl = process.env.HUBBLE_DESKTOP_UPDATE_URL;
 const supportsAutoUpdates = !isDev && process.platform === "darwin";

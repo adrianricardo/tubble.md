@@ -1,5 +1,6 @@
 # Open Questions
 
+
 - **Folder-authority UX validation.** Test whether “Stored in Git” versus “Stored in
 Hubble Cloud” is legible at folder boundaries; whether users correctly predict the
 collaboration, web-visibility, access, and Git working-tree consequences of each move;
@@ -28,9 +29,6 @@ sync dashboard pre-emptively.
 - **Init-skill triage logic quality gate.** What does "we feel good about the logic"
 mean concretely before dogfooding? Proposed: a dry-run mode (propose-only, no writes)
 that we run on this repo's `brain/` and iterate on — see `/specs/hubble-init/DESIGN.md`.
-- **Eventual product name.** Resolved that "huddle" was a typo and hubble stands *for
-now* — but Adrian intends to rename eventually (2026-07-09). What's the name, and
-when? Avoid baking "hubble" into expensive-to-change surfaces meanwhile.
 - **~~Version-history trust (gates the split dogfood).~~** **Resolved 2026-07-09: yes,
 safe to move data** for agent/file paths — verified live (snapshot-before-every-patch,
 restore, soft-delete trash, no pruning). Remaining caveats tracked in

@@ -3,6 +3,25 @@
 Strategy and sequencing for the Git-authoritative product brain. Build state and the
 NEXT STEP block live in `roadmap.md`.
 
+## Public-launch focus (2026-07-15)
+
+The next milestone is now a public “try it today” launch, not completion of every
+open product or acceptance thread. The launch must use a distinct name, explain the
+fork and its additions, provide an explicitly best-effort hosted account path, and
+prove an independent-deployment guide from a clean clone.
+
+Sequence work by public promise: freeze the name, launch surfaces, trial boundary,
+and supported deployment topology; establish identity/story; prove independent
+deployment; prepare the hosted trial; then run only the acceptance gates required by
+retained public claims. Adrian fixed the topology as operator-owned managed Convex and
+the surfaces as hosted web plus macOS. Because macOS provides local agent access, its
+distribution, first-run trust, independent-deployment targeting, and focused
+cross-device round trip are universal launch gates. Selective-authority cutovers and
+deep recovery are outside the initial announcement and do not block it. The launch
+name is Tubble.md, intentionally replaceable; mutable public brand values must be
+centralized. The full scope filter and backlog are in
+`/specs/public-try-it-today-launch/PLAN.md`.
+
 ## Direction correction (2026-07-15)
 
 The split dogfood is complete and reversed for this corpus. It proved cloud import,

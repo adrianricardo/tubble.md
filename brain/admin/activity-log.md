@@ -847,3 +847,81 @@ acceptance roots. Desktop tests pass 166/166 and `pnpm build:desktop` passes. Mi
   constraint; no cloud fixture data or live authority transfer was mutated. Production
   package, VoiceOver/reduced-motion observation, and expendable-fixture cutovers remain
   separately gated. No push or PR occurred.
+- 2026-07-15 — Reprioritized the repository around a public “try it today” launch.
+  Captured Adrian's source direction, added the public-launch observable contract and
+  claim-shaped execution plan, recorded the strategy decision, promoted the launch to
+  the roadmap's single current next step, and made desktop, cross-device,
+  selective-authority, and deep-recovery work conditional on the announcement rather
+  than universal blockers. Four choices remain Adrian-gated: new name,
+  independent-deployment topology, web-only versus desktop-inclusive launch, and
+  rename depth. No product code, deployment, cloud fixture, push, PR, or release was
+  changed.
+- 2026-07-15 — Adrian accepted the launch defaults and required macOS for agent
+  access. Fixed independent deployment on operator-owned managed Convex, public web
+  plus macOS as the launch surfaces, a public-facing rename with documented internal
+  compatibility identifiers, and one centralized source/validation boundary for
+  mutable brand values. Promoted macOS signing/notarization, fork-owned release,
+  Safe Storage/startup-file onboarding, independent deployment targeting, and the
+  focused web → desktop → local agent → web → relaunch path to unconditional launch
+  gates. Fully self-managed infrastructure, real selective-authority cutovers, and
+  broader recovery remain backlog or claim-conditional. Only the new name remains
+  unresolved; no product code or external state changed.
+- 2026-07-15 — Selected **Tubble.md** as the intentionally replaceable launch name and
+  completed the public-launch planning baseline. Tightened the announcement to cloud
+  Workspaces on web/macOS, realtime editing/sharing, exact watched local Markdown for
+  agents, and hosted-versus-independent deployment. Explicitly excluded
+  selective-authority movement, broad offline/history/recovery, and editor-polish
+  claims so their remaining acceptance stays in backlog. The roadmap now starts the
+  next authorized implementation at the centralized brand manifest, compatibility
+  map, and rename inventory. No product code, deployment, external rename, push, PR,
+  or release changed.
+- 2026-07-15 — Executed Phase 1 steps 1–4 of the public-launch plan as reviewable
+  local artifacts: `specs/public-try-it-today-launch/BRAND-INVENTORY.md` (every
+  Hubble/`bholmesdev` surface classified PUBLIC RENAME / COMPAT ALIAS / CLEANUP with a
+  fixed no-stranding migration rule), `config/brand.json` (single source of truth for
+  mutable public values; hosted web URL left UNRESOLVED; `@bholmesdev` retained as
+  labeled attribution), `config/compatibility.json` (5 intentionally-retained
+  identifiers), and `scripts/check-brand.mjs` / `pnpm check:brand` (report-only
+  validator; `--strict` gates). Captured Adrian's decisions: public repo
+  `adrianricardo/tubble.md`, placeholder web URL, `@bholmesdev` as attribution. Current
+  punch list: 24 divergent public values + 1 unresolved. No rename applied, no external
+  resource, deployment, push, PR, or release changed. Awaiting boundary review before
+  Phase 1 steps 5–7.
+- 2026-07-15 — Applied the Phase 1 in-repo rename (steps 5–6) driven by the manifest.
+  All 13 package.json repository/bugs/homepage/description values, desktop
+  productName/appName → Tubble, publish owner/repo → adrianricardo/tubble.md, protocol
+  label → Tubble URL, both HTML titles, SECURITY.md, www auth/guest copy + download link,
+  and a full README front-door rewrite (Tubble identity, upstream lineage/credits keeping
+  @bholmesdev attribution, two-path try-it-today with best-effort trial warning, compat
+  note). `pnpm check:brand` now reports 0 divergent public values (only the intentional
+  UNRESOLVED web URL remains); `pnpm build:desktop` passes; biome clean. Corrected the
+  compatibility map: productName/appName/userData follow the rename (no public installs to
+  migrate); appId + hubble:// scheme + @hubble.md/* namespace + hubble CLI bin + upstream
+  hubble-skills stay retained. Remaining Phase 1 work is EXTERNAL and Adrian-gated (GitHub
+  repo rename, hosted web URL, clean-browser link audit). No external resource,
+  deployment, push, PR, or release changed.
+- 2026-07-15 — Attempted the authorized GitHub repo rename (adrianricardo/hubble.md →
+  tubble.md) but the local `gh` token is invalid; recorded the exact re-auth + rename
+  commands in the roadmap for Adrian. Then drafted Phase 2:
+  `specs/public-try-it-today-launch/DEPLOY.md`, a complete clean-clone independent-
+  deployment guide for the managed-Convex topology (backend deploy, Convex Auth env,
+  100/day signup cap, web build/host, optional deployment-targeted desktop build with
+  no-silent-fallback identity, data/backup/upgrade/teardown, and a DEPLOY-5 verification
+  record). README "Deploy your own" links it as a draft. The guide is UNVERIFIED — the
+  DEPLOY-5 clean-clone pass by a second operator (needs a real Convex account + host) is
+  still required before the deploy claim is evidence-backed. No external resource,
+  deployment, push, PR, or release changed.
+- 2026-07-16 — Session wrap / handoff. Added a "⟳ RESUME HERE" block to the top of
+  `roadmap.md` for a fresh agent and de-staled the old planning-only language. State at
+  handoff: Phase 1 in-repo rename applied and verified (`check:brand` 0 divergent,
+  `build:desktop` passes) but the working tree is entirely UNCOMMITTED; the GitHub repo
+  rename is still blocked — the invalid `gh` token was NOT confirmed re-fixed this
+  session (auth verification was interrupted), so the next agent must re-run
+  `gh auth status` before assuming it works. Phase 2 `DEPLOY.md` remains a draft pending
+  DEPLOY-5. No commit, push, deploy, or external mutation occurred.
+- 2026-07-16 — Resumed the public-launch milestone from the roadmap, confirmed GitHub
+  authentication is healthy for `adrianricardo`, and prepared the full Phase 1 in-repo
+  identity boundary plus Phase 2 deployment-guide draft as one cohesive commit.
+  `pnpm check:brand` reports 0 divergent public values and only the intentionally
+  unresolved hosted URL; `pnpm build:desktop` passes. The simplify pass found no
+  behavior-preserving reduction worth making. No push, deployment, or release occurred.

@@ -3,7 +3,181 @@
 Build state and current next step. Track strategy lives in
 `brain/synthesized/track-strategy.md`.
 
-## ➔ CURRENT NEXT STEP (updated 2026-07-15, authority local acceptance complete)
+## ⟳ RESUME HERE — public launch, Phase 1 landing (2026-07-16)
+
+Implementation of the public "try it today" launch is underway (plan:
+`specs/public-try-it-today-launch/PLAN.md`; contract: same dir `PRODUCT.md`). The
+Phase 1 in-repo rename, brand boundary, and Phase 2 deployment-guide draft are landing
+as one verified commit. No push, deployment, or release has occurred.
+
+**Done & verified (Phase 1 steps 1–6, in-repo):**
+- Brand boundary built: `config/brand.json` (source of truth), `config/compatibility.json`
+  (retained identifiers), `scripts/check-brand.mjs` (`pnpm check:brand`), and
+  `specs/public-try-it-today-launch/BRAND-INVENTORY.md`.
+- In-repo rename APPLIED across README (full front-door rewrite w/ lineage + trial
+  warning), SECURITY.md, both HTML titles, desktop `productName`/`appName`/publish/
+  protocol label, www auth+guest copy, and all 13 package.json (repo/bugs/homepage/desc).
+- `pnpm check:brand` → **0 divergent public values** (only the intentional UNRESOLVED
+  hosted web URL remains). `pnpm build:desktop` passes. Biome clean.
+- Phase 2 guide DRAFTED: `specs/public-try-it-today-launch/DEPLOY.md` (managed-Convex
+  clean-clone deployment), linked from README as a draft.
+
+**Immediate open items (pick any; none block the others except where noted):**
+1. **GitHub repo rename — external and authorized.** `gh auth status` is healthy for
+   `adrianricardo`. Run `gh repo rename tubble.md --repo adrianricardo/hubble.md` then
+   `git remote set-url origin git@github.com:adrianricardo/tubble.md.git`, and confirm the
+   `desktop-dev-latest` release/auto-update feed still resolves.
+2. **Resolve hosted web URL** (Phase 1 step 7): set `config/brand.json` → `web.url`,
+   update README hosted-trial link + `homepage` fields, verify control. Clears the last
+   `check:brand` flag.
+3. **Clean-browser public-link audit** (Phase 1 step 6).
+4. **Phase 2 DEPLOY-5**: a second operator follows `DEPLOY.md` from a clean clone and
+   fills its verification record (needs a real Convex account + web host).
+5. **Internal CLEANUP** (non-launch-blocking): agent docs / `CLAUDE.md` / `docs/agents/*`
+   / `.agents/skills/*` still reference `bholmesdev/hubble.md` issue tracker.
+6. **Phase 3**: stand up production hosted deployment + trial-boundary copy in signup.
+
+Other previously-pending work (selective-authority acceptance, Phase 6 recovery,
+cross-device matrix, Adrian's todos 1–5) remains tracked in its own sections below and
+is untouched.
+
+Detail for the above is in the two dated sub-sections further down
+("Phase 1 in-repo rename APPLIED" and "Phase 2 independent-deployment guide DRAFTED").
+
+## ➔ CURRENT NEXT STEP (updated 2026-07-15, public launch prioritized)
+
+Plan and execute the public “try it today” milestone in
+`/specs/public-try-it-today-launch/PLAN.md`. The milestone is: launch the fork under a
+distinct name; explain its upstream lineage and meaningful additions; let a visitor
+create an account and persist a Markdown document in an explicitly best-effort hosted
+trial; and prove an independent deployment from a clean clone. This planning pass does
+not authorize implementation, deployment, push, PR, release, or cloud-fixture changes.
+
+Adrian selected **Tubble.md** as an intentionally replaceable launch name, the
+managed-Convex independent-deployment path, hosted web plus public macOS, and a
+public-surface rename with intentional compatibility identifiers. Mutable public
+brand values must have one repo-owned source plus generation or validation so a future
+rename is bounded. No product decision remains gated. The hosted-service warning
+promises no SLA or maintenance term and rejects critical, sensitive, or irreplaceable
+use.
+
+The scope rule is claim-shaped: work is critical only when required to make a public
+sentence true. Production web deployment, signup/private-workspace persistence,
+trial-boundary copy, fork attribution, owned public links, a fresh-operator deploy
+record, and a permission smoke are unconditional. Because macOS is the agent-access
+bridge, signing/notarization, fork-owned releases, Safe Storage/startup-file fixes,
+independent-deployment targeting, and a focused web → desktop → local-agent edit → web
+→ relaunch acceptance path are also unconditional. The initial story does not claim
+selective-authority moves, broad offline editing, comments/history, exhaustive
+recovery, or editor polish, so their pending work is backlog for this milestone. If an
+optional feature misses its focused gate, omit or narrow the claim and return the work
+to backlog unless the failure risks data loss or exposure.
+
+**Implementation is now underway** — see the **⟳ RESUME HERE** block at the top of this
+file for the current pickup point. Phase 1 planning items (brand manifest, compatibility
+map, rename inventory) are built and the in-repo rename is applied in the working tree.
+The GitHub rename is authorized and authentication is healthy; the hosted web URL
+remains unresolved.
+
+Source: `brain/sources/2026-07-15-public-launch-milestone.md`. Observable contract:
+`/specs/public-try-it-today-launch/PRODUCT.md`.
+
+### Phase 1 in-repo rename APPLIED; external steps pending (2026-07-15)
+
+The brand boundary is in place AND the in-repo rename is applied. `pnpm check:brand`
+now reports **0 divergent public values** (down from 24); the only remaining flag is the
+intentional `UNRESOLVED` hosted web URL. `pnpm build:desktop` passes; biome clean; all
+touched package.json valid. No external resource has been touched.
+
+Applied this pass (Phase 1 steps 5–6, in-repo): all 13 package.json `repository`/`bugs`
+URLs, `homepage` (→ fork repo as honest interim until web URL resolves), and
+descriptions; desktop `productName`/`appName` → **Tubble**, publish owner/repo →
+`adrianricardo/tubble.md`, protocol display label → **Tubble URL**; both HTML `<title>`s;
+`SECURITY.md`; www auth + guest-screen copy and download link; and a full README front-door
+rewrite (Tubble identity, upstream lineage/credits with `@bholmesdev` attribution,
+two-path "Try it today" with the best-effort trial warning, macOS platform, compat-note
+box). Compatibility map corrected: `productName`/`appName`/userData follow the rename
+(no public installs to migrate); appId + `hubble://` scheme + `@hubble.md/*` namespace +
+`hubble` CLI bin + upstream `hubble-skills` remain retained/documented.
+
+**Remaining (Phase 1 steps 5–7, EXTERNAL — gated on Adrian):**
+
+- Rename the GitHub repo `adrianricardo/hubble.md` → `adrianricardo/tubble.md` (GitHub
+  auto-redirects old URLs; verify the existing `desktop-dev-latest` release/auto-update
+  feed still resolves).
+- Resolve the hosted web URL and set `config/brand.json` → `web.url` (+ update README
+  hosted-trial link and root/package `homepage`), verifying control before publishing.
+- Clean-browser audit of every public link (README, download, security, www copy).
+
+Internal CLEANUP still stale (non-launch-blocking): agent docs / `CLAUDE.md` /
+`docs/agents/*` / `.agents/skills/*` still say `bholmesdev/hubble.md` for the issue
+tracker; `specs/**` and `brain/**` history retain Hubble references. Not public-facing.
+
+**GitHub repo rename — BLOCKED on auth (2026-07-15):** Adrian authorized renaming
+`adrianricardo/hubble.md` → `adrianricardo/tubble.md`, but the local `gh` token is
+invalid (`gh auth status` fails). Re-auth with `gh auth login -h github.com`, then run
+`gh repo rename tubble.md --repo adrianricardo/hubble.md` and
+`git remote set-url origin git@github.com:adrianricardo/tubble.md.git`; afterward verify
+the existing `desktop-dev-latest` release + auto-update feed still resolve (GitHub
+auto-redirects the old owner/name).
+
+### Phase 2 independent-deployment guide DRAFTED — verification pending (2026-07-15)
+
+`specs/public-try-it-today-launch/DEPLOY.md` is a complete linear clean-clone guide for
+the managed-Convex topology: prerequisites/costs, backend deploy from
+`packages/sync-backend` (`npx convex deploy`, prosemirror-sync component), Convex Auth
+env (`JWT_PRIVATE_KEY`/`JWKS` via `npx @convex-dev/auth`, operator-set `SITE_URL`;
+`CONVEX_SITE_URL` auto), the **100/day `DAILY_SIGNUP_CAP` code constant**, web build/host
+(`VITE_CONVEX_URL` baked into `apps/www` build → static SPA host), optional desktop build
+targeting the operator deployment with visible-identity/no-silent-fallback notes
+(DEPLOY-4/6), and data/backup/upgrade/teardown. The README "Deploy your own" path links
+it, labeled a draft. **DEPLOY-5 gate NOT met:** a second operator must follow it from a
+clean clone and fill the verification record before the "deploy your own" launch claim is
+evidence-backed — this needs a real Convex account + host and is external, so it was not
+executed here.
+
+Older detail retained below for reference.
+
+---
+
+The reviewable brand boundary (built earlier this session):
+
+- **Rename inventory + migration rule:** `specs/public-try-it-today-launch/BRAND-INVENTORY.md`
+  classifies every Hubble/`bholmesdev` surface as PUBLIC RENAME, COMPAT ALIAS, or
+  CLEANUP, with the fixed migration rule (no rename may strand an existing account,
+  installed app, on-disk files, or deep links).
+- **Brand manifest (single source of truth):** `config/brand.json` — mutable public
+  values for `Tubble.md` / product `Tubble` / repo `adrianricardo/tubble.md`. The
+  hosted web URL is deliberately `UNRESOLVED` pending Phase 1 step 7. `@bholmesdev` and
+  the upstream repo are retained under `attribution` as labeled original-author credit.
+- **Compatibility map:** `config/compatibility.json` — 5 intentionally-retained
+  identifiers (appId `com.benholmes.hubblemd.desktop`, `hubble://` scheme, `@hubble.md/*`
+  npm namespace, `Hubble` userData/Safe Storage identity, upstream `hubble-skills`).
+  Note: `productName`/`appName` ARE public-rename; the first public packaged release
+  ships the new name so no public user ever migrates Keychain/userData.
+- **Validation check:** `scripts/check-brand.mjs` (`pnpm check:brand`). Report-only by
+  default (exit 0); `--strict` gates. Current punch list: **24 divergent public values**
+  (11 package.json link pairs, README, both HTML titles, desktop productName/appName/
+  publish owner/protocol label, SECURITY.md, two www copy surfaces) + **1 unresolved**
+  (web URL). Not yet wired into `pnpm check`/`build:desktop` so it doesn't fail existing
+  gates mid-rename.
+
+**Decisions captured this session (Adrian, 2026-07-15):** public repo →
+`adrianricardo/tubble.md` (GitHub repo rename, external — not yet done); hosted web URL
+→ placeholder for now, confirm real hosting domain before publishing; social handle →
+keep `@bholmesdev` as clearly-labeled upstream attribution ("fork of" language), no
+separate fork social account.
+
+**Next:** review/approve the inventory classification + migration boundary above. Once
+approved, execute Phase 1 steps 5–7 as the mechanical rename driven by the manifest:
+update the 24 in-repo public surfaces (README front door with lineage/attribution +
+trial warning, package.json links, titles, desktop metadata, SECURITY.md, www copy),
+then the external steps (rename the GitHub repo to `adrianricardo/tubble.md`, resolve
+the web URL, clean-browser link audit). Re-run `pnpm check:brand` to confirm the punch
+list clears. Do not rename the GitHub repo or set the web URL until the boundary is
+approved.
+
+## Deferred launch input — selective folder-authority acceptance (2026-07-15)
 
 Run the remaining production-packaged and real-cutover portions of the selective
 folder-authority acceptance gate only with fresh authorization. The local Electron

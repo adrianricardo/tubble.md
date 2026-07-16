@@ -3,16 +3,16 @@
 	"type": "module",
 	"version": "0.0.1",
 	"private": true,
-	"description": "Hubble.md in the browser",
+	"description": "Tubble.md in the browser",
 	"license": "MIT",
 	"author": "Ben Holmes <hey@bholmes.dev>",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/bholmesdev/hubble.md.git",
+		"url": "git+https://github.com/adrianricardo/tubble.md.git",
 		"directory": "apps/www"
 	},
-	"homepage": "https://hubble.md",
-	"bugs": "https://github.com/bholmesdev/hubble.md/issues",
+	"homepage": "https://github.com/adrianricardo/tubble.md",
+	"bugs": "https://github.com/adrianricardo/tubble.md/issues",
 	"scripts": {
 		"upstream:audit": "pnpm -w upstream:audit",
 		"dev": "vite",
