@@ -32,6 +32,8 @@ RENAME.
 | Location | Current value | Class | Notes |
 | --- | --- | --- | --- |
 | `README.md` Download / Releases / Contributing / social links | `bholmesdev/hubble.md`, `@bholmesdev` | PUBLIC RENAME | Front door; must resolve to fork-owned destinations + labeled upstream attribution. |
+| `CONTRIBUTING.md` identity copy | `Contributing to Hubble` | PUBLIC RENAME | Linked directly from the public README. |
+| `CONTEXT.md` title + product display copy | `hubble.md context`, `Hubble Cloud` | PUBLIC RENAME | Linked directly from the public README; compatibility identifiers inside remain unchanged. |
 | `CHANGELOG.md` current product introduction | `All notable user-facing changes to Hubble` | PUBLIC RENAME | Release-note front matter names the current fork; historical version entries retain their shipped names. |
 | `README.md` skills link | `bholmesdev/hubble-skills` | COMPAT ALIAS or PUBLIC | Skills repo is upstream-owned; keep as attribution unless a fork skills repo exists. |
 | `apps/www/index.html` `<title>` | `hubble.md` | PUBLIC RENAME | Hosted web app tab title. |
@@ -72,7 +74,8 @@ RENAME.
 | --- | --- | --- | --- |
 | `SECURITY.md` advisory link | `bholmesdev/hubble.md/security` | PUBLIC RENAME | Security destination must be fork-owned. |
 | `CLAUDE.md`, `docs/agents/*`, `.agents/skills/*` | `bholmesdev/hubble.md` issue tracker | CLEANUP | Internal agent docs; point at fork repo but non-launch-blocking. |
-| `specs/**`, `brain/**`, `apps/desktop/README.md` | mixed Hubble refs | CLEANUP | Internal history; not public-facing. |
+| `apps/desktop/README.md` display copy + release owner | Hubble / `bholmesdev/hubble.md` | PUBLIC RENAME | Linked directly from the public README; package names and environment-variable compatibility identifiers remain unchanged. |
+| `specs/**`, `brain/**` | mixed Hubble refs | CLEANUP | Internal history; not public-facing. |
 
 ## Explicitly-retained upstream references (attribution, NOT rename)
 

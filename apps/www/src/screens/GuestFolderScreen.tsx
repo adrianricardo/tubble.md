@@ -468,14 +468,11 @@ class GuestFolderErrorBoundary extends Component<
 	}
 }
 
-// "Bring your agent" prompt (RB6, VISION happy-path step 5–6): the web view is
-// zero-install human editing; to point a local agent (Cowork, Claude Code) at
-// these same docs, the guest installs the desktop app, signs in with this same
-// account, and their shared folders appear as files — no clone, no git. One
-// dismissal per folder (not global) since a guest may have several shares.
+// Keep this route honest while the signed public desktop release is pending.
+// One dismissal is stored per folder since a guest may have several shares.
 const AGENT_BANNER_DISMISSED_PREFIX = "hubble:agent-banner-dismissed:";
-const DESKTOP_DOWNLOAD_URL =
-	"https://github.com/adrianricardo/tubble.md/releases/latest";
+const DESKTOP_RELEASES_URL =
+	"https://github.com/adrianricardo/tubble.md/releases";
 
 function BringYourAgentBanner({ folderId }: { folderId: string }) {
 	const storageKey = `${AGENT_BANNER_DISMISSED_PREFIX}${folderId}`;
@@ -488,18 +485,17 @@ function BringYourAgentBanner({ folderId }: { folderId: string }) {
 		<div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/40 [padding-block:0.5rem] [padding-inline:0.75rem]">
 			<p className="m-0 min-w-0 flex-1 text-xs text-foreground">
 				<span className="font-medium">Want your agent working here too?</span>{" "}
-				Install the Tubble desktop app and sign in with this same account — your
-				shared folders show up as real files, ready to point Cowork or Claude
-				Code at.
+				The public Tubble macOS release is coming soon. Existing unsigned
+				development builds are available for testing.
 			</p>
 			<div className="flex shrink-0 items-center gap-2">
 				<a
-					href={DESKTOP_DOWNLOAD_URL}
+					href={DESKTOP_RELEASES_URL}
 					target="_blank"
 					rel="noopener noreferrer"
 					className="rounded-sm bg-primary text-xs font-medium text-primary-foreground [padding-block:0.3125rem] [padding-inline:0.625rem]"
 				>
-					Get the desktop app
+					View development builds
 				</a>
 				<button
 					type="button"

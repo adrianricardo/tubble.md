@@ -1,9 +1,9 @@
-# hubble.md context
+# Tubble.md context
 
 Glossary for shared terms across the project. Implementation details belong in code or ADRs — not here.
 
 > **Target-product note (2026-07-15):** Repository content is Git-authoritative by
-> default. A selected folder may move to Hubble Cloud for realtime collaboration or
+> default. A selected folder may move to Tubble Cloud for realtime collaboration or
 > repository-independent access/privacy, and may move back later. Every folder has one
 > authority at a time; a watched cloud projection is not Git authority. See
 > `/specs/folder-authority-mobility/PRODUCT.md` and ADR-0011. The current implementation
@@ -65,7 +65,7 @@ Live Documents are distinct from ordinary [[Markdown File]] editing. Local-only 
 
 ### HTML App
 
-A folder-local `.html` file that Hubble runs as a self-contained, interactive UI. Opening an HTML App directly shows it in the main content panel instead of the Markdown editor. An HTML App reaches files in the open Folder only through a capability-scoped, async **broker**, never directly.
+A folder-local `.html` file that Tubble runs as a self-contained, interactive UI. Opening an HTML App directly shows it in the main content panel instead of the Markdown editor. An HTML App reaches files in the open Folder only through a capability-scoped, async **broker**, never directly.
 
 ### Slash Command
 

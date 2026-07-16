@@ -9,8 +9,6 @@ Workspaces.** Free, open source, backed by Markdown and HTML.
 > project does not maintain or endorse this fork. See [lineage](#lineage-and-credits).
 
 <p align="center">
-  <a href="https://github.com/adrianricardo/tubble.md/releases/latest">Download for macOS</a>
-  ·
   <a href="https://github.com/adrianricardo/tubble.md/releases">Releases</a>
   ·
   <a href="CONTRIBUTING.md">Contributing</a>
@@ -61,8 +59,9 @@ host, with a macOS desktop app built against your deployment. See the
 
 ## Download (macOS)
 
-Tubble ships as a desktop app. Install the latest build from the
-[releases page](https://github.com/adrianricardo/tubble.md/releases/latest).
+The signed and notarized public macOS launch build is forthcoming. Existing
+[unsigned development builds](https://github.com/adrianricardo/tubble.md/releases)
+are available for testing, but they are not the public launch release.
 
 macOS is supported today. Windows and Linux are not built yet — contributions are
 welcome.

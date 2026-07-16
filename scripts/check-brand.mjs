@@ -53,9 +53,30 @@ const publicSurfaces = [
 		divergent: (t) => t.includes(`${upstreamRepoSlug}/releases`),
 	},
 	{
-		label: "README download link",
+		label: "README release destination",
 		file: "README.md",
-		divergent: (t) => t.includes(`${upstreamRepoSlug}/releases/latest`),
+		divergent: (t) => !t.includes(brand.links.download),
+	},
+	{
+		label: "Contributing guide public identity",
+		file: "CONTRIBUTING.md",
+		divergent: (t) =>
+			/^# Contributing to Hubble$/m.test(t) ||
+			/interest in Hubble|idea for Hubble/.test(t),
+	},
+	{
+		label: "Context guide public identity",
+		file: "CONTEXT.md",
+		divergent: (t) =>
+			/^# hubble\.md context$/im.test(t) ||
+			/Hubble Cloud|that Hubble runs/.test(t),
+	},
+	{
+		label: "Desktop guide public identity + release owner",
+		file: "apps/desktop/README.md",
+		divergent: (t) =>
+			/Desktop app for Hubble\.md/.test(t) ||
+			t.includes(`on \`${upstreamRepoSlug}\``),
 	},
 	{
 		label: "Changelog public identity",
@@ -131,8 +152,7 @@ const publicSurfaces = [
 		label: "Guest screen desktop copy + download",
 		file: "apps/www/src/screens/GuestFolderScreen.tsx",
 		divergent: (t) =>
-			/Hubble desktop app/.test(t) ||
-			t.includes(`${upstreamRepoSlug}/releases/latest`),
+			/Hubble desktop app/.test(t) || !t.includes(`"${brand.links.download}"`),
 	},
 ];
 

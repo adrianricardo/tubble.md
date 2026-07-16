@@ -22,6 +22,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 - Cloud sidebar rows now offer permission-aware rename, safe move, sharing, Trash/Undo, and local availability actions
 
 ### Changed
+- Public download links now label existing macOS builds as unsigned development builds until the signed launch release is available
 - Hubble now rejects overlapping local or cloud folder projections before changing files, repository settings, or cloud metadata
 
 ### Fixed
