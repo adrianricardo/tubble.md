@@ -68,6 +68,16 @@ const publicSurfaces = [
 		divergent: (t) => /"owner"\s*:\s*"bholmesdev"/.test(t),
 	},
 	{
+		label: "Desktop dev release presentation",
+		file: ".github/workflows/desktop-dev-release.yml",
+		divergent: (t) => /Hubble Desktop Dev|Hubble-dev-/.test(t),
+	},
+	{
+		label: "Desktop dev release asset names",
+		file: "scripts/create-desktop-dev-manifest.mjs",
+		divergent: (t) => /Hubble-dev-/.test(t),
+	},
+	{
 		label: "Desktop appName default",
 		file: "apps/desktop/electron/main.ts",
 		divergent: (t) => /devAppName\s*\?\?\s*"Hubble"/.test(t),

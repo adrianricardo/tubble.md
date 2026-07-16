@@ -925,3 +925,12 @@ acceptance roots. Desktop tests pass 166/166 and `pnpm build:desktop` passes. Mi
   `pnpm check:brand` reports 0 divergent public values and only the intentionally
   unresolved hosted URL; `pnpm build:desktop` passes. The simplify pass found no
   behavior-preserving reduction worth making. No push, deployment, or release occurred.
+- 2026-07-16 — Completed the repository-identity follow-through. GitHub already
+  reported the renamed `adrianricardo/tubble.md`; updated local `origin`, confirmed the
+  old repository URL redirects, and verified the `desktop-dev-latest` prerelease and
+  assets resolve. Fixed a missed public brand surface: future dev-release titles and
+  assets now use Tubble, and `check:brand` validates both workflow and generator. Updated
+  the live prerelease title without changing existing binary bytes. All README/security
+  external links return successful signed-out HTTP destinations and all relative links
+  exist. The literal clean-browser audit remains pending because the in-app browser
+  failed to start due to a local native-module signature error.

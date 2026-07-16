@@ -52,11 +52,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if ! gh release view desktop-dev-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create desktop-dev-latest --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "Hubble Desktop Dev (latest)"
+            gh release create desktop-dev-latest --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "Tubble Desktop Dev (latest)"
           fi
           gh release upload desktop-dev-latest --repo "$GITHUB_REPOSITORY" --clobber \
-            apps/desktop/release/Hubble-dev-arm64-mac.zip \
-            apps/desktop/release/Hubble-dev-x64-mac.zip \
+            apps/desktop/release/Tubble-dev-arm64-mac.zip \
+            apps/desktop/release/Tubble-dev-x64-mac.zip \
             apps/desktop/release/desktop-dev-manifest.json
           gh release edit desktop-dev-latest --repo "$GITHUB_REPOSITORY" --prerelease \
             --notes "Unsigned development build from commit $GITHUB_SHA. Installed only after explicit CLI confirmation."

@@ -14,7 +14,7 @@ const entries = await fs.readdir(releaseDir);
 const sourceZips = entries.filter(
 	(name) =>
 		name.endsWith("-mac.zip") &&
-		!name.startsWith("Hubble-dev-") &&
+		!name.startsWith("Tubble-dev-") &&
 		!name.endsWith(".blockmap"),
 );
 
@@ -36,7 +36,7 @@ for (const arch of ["arm64", "x64"]) {
 const assets = [];
 for (const arch of ["arm64", "x64"]) {
 	const source = path.join(releaseDir, sourcesByArch.get(arch));
-	const name = `Hubble-dev-${arch}-mac.zip`;
+	const name = `Tubble-dev-${arch}-mac.zip`;
 	const destination = path.join(releaseDir, name);
 	await fs.copyFile(source, destination);
 	const stat = await fs.stat(destination);

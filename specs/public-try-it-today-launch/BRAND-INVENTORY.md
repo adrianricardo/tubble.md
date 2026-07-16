@@ -46,6 +46,7 @@ RENAME.
 | `apps/desktop/electron/main.ts` `appName = "Hubble"` | `Hubble` | PUBLIC RENAME | Must derive from brand manifest; drives `app.setName`, tray, dialog titles. |
 | `apps/desktop/package.json` `build.appId` | `com.benholmes.hubblemd.desktop` | COMPAT ALIAS | Changing appId makes macOS treat it as a different app (breaks auto-update continuity for any installed build). Retain; document. |
 | `apps/desktop/package.json` `build.publish.owner/repo` | `bholmesdev` / `hubble.md` | PUBLIC RENAME | Auto-update + release feed must be fork-owned. |
+| `.github/workflows/desktop-dev-release.yml` release title + uploaded asset names; `scripts/create-desktop-dev-manifest.mjs` generated asset names | `Hubble Desktop Dev`, `Hubble-dev-*` | PUBLIC RENAME | Public prerelease presentation must use the fork name. Already-published legacy binaries keep their immutable bytes; future channel publications use Tubble names. |
 | Desktop copyright / attribution | (via LICENSE) | PUBLIC RENAME | Add fork identity while preserving upstream MIT notice. |
 
 ## Protocol & file associations
