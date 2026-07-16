@@ -4,8 +4,13 @@
 
 import prosemirrorSync from "@convex-dev/prosemirror-sync/convex.config.js";
 import { defineApp } from "convex/server";
+import { v } from "convex/values";
 
-const app = defineApp();
+const app = defineApp({
+	env: {
+		LAUNCH_SIGNUPS_DISABLED: v.optional(v.string()),
+	},
+});
 app.use(prosemirrorSync);
 
 export default app;

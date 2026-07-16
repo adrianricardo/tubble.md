@@ -4,7 +4,7 @@ import { convexAuth } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { type MutationCtx, query } from "./_generated/server";
+import { env, type MutationCtx, query } from "./_generated/server";
 import { ensurePersonalWorkspace, resolveInvitesForUser } from "./members";
 
 export const DAILY_SIGNUP_CAP = 100;
@@ -109,6 +109,6 @@ export const signupAvailability = query({
 
 function launchSignupsPaused(): boolean {
 	return ["1", "true", "yes"].includes(
-		(process.env.LAUNCH_SIGNUPS_DISABLED ?? "").trim().toLowerCase(),
+		(env.LAUNCH_SIGNUPS_DISABLED ?? "").trim().toLowerCase(),
 	);
 }
