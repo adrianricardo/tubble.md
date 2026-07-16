@@ -8,8 +8,8 @@ Build state and current next step. Track strategy lives in
 Implementation of the public "try it today" launch is underway (plan:
 `specs/public-try-it-today-launch/PLAN.md`; contract: same dir `PRODUCT.md`). The
 Phase 1 identity work is complete and production hosted-trial infrastructure is now
-live at `https://tubble.nopalstudio.com`. No push, desktop release, external test
-account, or announcement has occurred.
+live at `https://tubble.nopalstudio.com`. Production smoke identities now exist; no
+push, desktop release, or announcement has occurred.
 
 **Done & verified (Phase 1 steps 1–6, in-repo):**
 - Brand boundary built: `config/brand.json` (source of truth), `config/compatibility.json`
@@ -61,22 +61,31 @@ account, or announcement has occurred.
   deployment-error copy, extends strict brand coverage, and is live/verified as
   `TUBBLE`. Cloud UI tests pass 10/10, web tests 7/7, www typecheck and
   `pnpm build:desktop` pass.
+- The full production persistence boundary now passes with an approved replacement
+  identity: private Space, one live document with the exact marker
+  `Tubble production persistence boundary 2026-07-16T19:15:21.833Z 028af91fe1fe`,
+  cache-bypassing reload, sign-out/private-route denial, same-identity sign-in, and
+  exact Space/document/marker recovery. Account B could neither discover account A in
+  the dashboard/search nor read account A's direct private-document URL; account B's
+  own document remained available. No development fixtures, teams, shares, or unrelated
+  production accounts/Spaces appeared in account B's UI. Final signed-out denial passed.
+- Normal macOS resolution and a new isolated Chrome profile reverified the public root
+  at `2026-07-16T18:52–18:54Z`; no DNS or Cloudflare change was needed. The in-app
+  browser plugin remains locally blocked because Apple reports its bundled native
+  certificate as revoked, but the isolated Chrome fallback passed the public-root
+  signed-out boundary. The every-link clean-browser audit remains separate.
 
 **Immediate open items (pick any; none block the others except where noted):**
-1. **With renewed action-time approval, create one replacement disposable account to
-   finish sign-out/sign-in recovery and private-Workspace isolation** (Phase 3). The
-   first account passed signup/private Space/create/edit/reload, but its volatile
-   generated password was discarded during a required browser restart. Keep the
-   replacement password in one uninterrupted process, recover its document after
-   sign-out/sign-in, and prove it cannot discover/read account A's private document.
-2. **Clean-browser public-link audit** (Phase 1 step 6); HTTP fallback is complete.
-3. **Phase 2 DEPLOY-5**: a second operator follows `DEPLOY.md` from a clean clone and
+1. **Clean-browser public-link audit** (Phase 1 step 6): open every README, download,
+   security, and www public destination in an isolated browser. HTTP fallback and the
+   public-root clean-browser pass are complete; the full every-link pass is not.
+2. **Phase 2 DEPLOY-5**: a second operator follows `DEPLOY.md` from a clean clone and
    fills its verification record (needs a real Convex account + web host).
-4. **Internal CLEANUP** (non-launch-blocking): agent docs / `CLAUDE.md` / `docs/agents/*`
+3. **Internal CLEANUP** (non-launch-blocking): agent docs / `CLAUDE.md` / `docs/agents/*`
    / `.agents/skills/*` still reference `bholmesdev/hubble.md` issue tracker.
-5. **Phase 3**: production Convex/Auth/hosting, signed-out boundary, first signup, and
-   reload persistence are verified; finish sign-in recovery, isolation, sharing,
-   failure-state, and operational gates.
+4. **Phase 3**: production Convex/Auth/hosting, signed-out boundary, first use,
+   reload/sign-in persistence, signed-out denial, and private-Space isolation are
+   verified; finish sharing, failure-state, and operational gates.
 
 Other previously-pending work (selective-authority acceptance, Phase 6 recovery,
 cross-device matrix, Adrian's todos 1–5) remains tracked in its own sections below and

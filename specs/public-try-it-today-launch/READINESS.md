@@ -67,22 +67,48 @@ These results still need to be included in the exact revision deployed and relea
 - Sign-out/sign-in recovery remains unproven for the first identity because its
   generated password was intentionally kept only in volatile browser memory and was
   discarded when the headless renderer had to restart. Creating a replacement
-  identity requires renewed action-time approval.
+  identity required renewed action-time approval.
+- At `2026-07-16T18:52:43Z`, the normal macOS resolver returned Cloudflare A/AAAA
+  addresses for `tubble.nopalstudio.com` and an ordinary HTTPS request returned 200.
+  No DNS-cache flush or Cloudflare change was needed. At `2026-07-16T18:54:01Z`, a
+  new isolated Chrome profile reached the same URL signed out and rendered the Tubble
+  auth surface plus the complete best-effort trial warning. The in-app browser plugin
+  remains unavailable because Apple reports its bundled native certificate as revoked;
+  the clean Chrome fallback used the normal system resolver and no saved profile data.
+- With Adrian's action-time approval, a disposable identity was created at
+  `2026-07-16T18:58:34Z`; a verifier capitalization error discarded its volatile
+  secret immediately after signup. It has one private starter Space and no documents.
+  With renewed approval, the replacement identity was created at
+  `2026-07-16T19:06:51Z`. Its secret was rotated three times through the authenticated
+  production operator path while resuming verifier mismatches against the same approved
+  test, never printed or committed, and discarded after final sign-out/profile cleanup.
+- The replacement's private `Tubble Disposable QA's space 2` showed no teams, shared
+  content, development target, account-A content, or other production account/Space.
+  It created one active `Untitled` document containing the exact marker
+  `Tubble production persistence boundary 2026-07-16T19:15:21.833Z 028af91fe1fe`.
+  The marker survived a cache-bypassing reload at `2026-07-16T19:15:32Z`.
+- The replacement signed out, its private document URL redirected to the signed-out
+  root without exposing the marker, and the same identity signed back in. The same
+  private Space and document returned, and the exact marker was recovered at
+  `2026-07-16T19:16:39Z`. A direct request for account A's private document returned
+  only the production denial error—no editor or account-A marker—while account B's own
+  document remained readable. A final sign-out and private-route denial passed at
+  `2026-07-16T19:18:08Z`.
 
 ## Pending before launch
 
 | Area | Required evidence | Status / dependency |
 | --- | --- | --- |
 | Public destination | Configure DNS/TLS/hosting for the selected temporary URL, deploy Tubble there, verify control, then set it in `config/brand.json`, README, and package homepages. A dedicated custom domain comes later. | **Complete at `https://tubble.nopalstudio.com`; DNS, TLS, SPA hosting, app control, and brand boundary verified.** |
-| Fresh-browser links | Open every README, download, security, and www public destination in a clean browser. | **Pending.** HTTP fallback passes; the in-app browser cannot currently start because its native module has an invalid local signature. |
+| Fresh-browser links | Open every README, download, security, and www public destination in a clean browser. | **Pending full every-link pass.** HTTP fallback and a clean isolated-Chrome public-root pass succeed; the in-app browser cannot start because Apple reports its bundled native certificate as revoked. |
 | Independent deployment | A second operator follows `DEPLOY.md` from a clean clone, records corrections, and proves web create/edit/reload plus macOS sign-in/local-agent edit on their deployment. | **Needs a second operator, Convex account, host, and Mac.** |
-| Production trial | Create a production Convex project separate from development, configure auth/secrets, deploy the backend, host `apps/www` against it, and record backend/frontend revisions. | **Infrastructure complete: backend `c40f963`, frontend `fce0a1e`, auth and real URL verified; one approved smoke account now exists.** |
-| Trial first use | From signed out on the real URL: see the trial boundary and availability, create an account/private Workspace/document, reload, sign out/in, and recover the same content. | **Signup, private starter Space, create/edit, and reload persistence pass. Sign-out/sign-in recovery needs a replacement disposable identity because the first volatile password was discarded; renewed approval required.** |
+| Production trial | Create a production Convex project separate from development, configure auth/secrets, deploy the backend, host `apps/www` against it, and record backend/frontend revisions. | **Infrastructure complete: backend `c40f963`, frontend `fce0a1e`, auth and real URL verified; approved smoke identities now exist.** |
+| Trial first use | From signed out on the real URL: see the trial boundary and availability, create an account/private Workspace/document, reload, sign out/in, and recover the same content. | **Complete on production.** The replacement disposable identity passed signup, private Space, create/edit, cache-bypassing reload, sign-out denial, same-identity sign-in, and exact marker recovery. |
 | Trial failure states | Verify reached-cap, operator-pause, outage, deployment mismatch, and unavailable-account copy on the production configuration. | **Implementation exists for cap/pause; production evidence pending.** |
 | Operational floor | Name deployment ownership; prove secret rotation/revocation, error visibility, pause/reopen signups, backup/export, and a service/retirement notice path. | **Partially documented; operator choices and production drills pending.** |
-| Production configuration | Audit production environment, build output, repository history, and release assets for leaked secrets or unintended development/test targets and fixtures. | **Backend/frontend environment and web artifact pass: production endpoint present; no dev deployment, test-variable, or private-key markers; production users empty. Desktop release assets remain a later gate.** |
-| Private Workspace isolation | With two production accounts, prove account B cannot discover or read account A's private Workspace/document. | **Account A and its private document exist. A second approved disposable account can finish this gate while completing sign-out/sign-in recovery.** |
-| Realtime sharing | With two production accounts, prove share, simultaneous edit, revoke, and post-revocation denial. | **Pending production deployment and two accounts.** |
+| Production configuration | Audit production environment, build output, repository history, and release assets for leaked secrets or unintended development/test targets and fixtures. | **Backend/frontend environment and web artifact pass: production endpoint present; no dev deployment, test-variable, private-key markers, or development fixtures appeared. Production now contains approved smoke/user data. Desktop release assets remain a later gate.** |
+| Private Workspace isolation | With two production accounts, prove account B cannot discover or read account A's private Workspace/document. | **Complete on production.** Account B's dashboard/search exposed no account-A or unrelated content; account A's direct private-document URL returned no document/editor/marker; account B's own document remained readable afterward. |
+| Realtime sharing | With two production accounts, prove share, simultaneous edit, revoke, and post-revocation denial. | **Pending the production two-account share/edit/revoke smoke; infrastructure and accounts exist.** |
 | Public macOS release | Build the exact tested revision, sign and notarize it under the fork identity, publish it to a fork-owned release, publish integrity information, and verify download/install/update destinations. | **Pending signing credentials, release revision/tag, and publication.** |
 | macOS first run | From a clean profile, verify pre-prompt Safe Storage context, expected Tubble identity, sign-in handoff, and no unexplained startup-file prompt. | **Pending signed production build and clean profile.** |
 | Hosted agent round trip | Web create → same account/content on macOS → make exact scope locally available → external Markdown edit → observe on web → relaunch desktop → confirm same scope/path reconnects. | **Pending production web, signed desktop, and two-device acceptance.** |

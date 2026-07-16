@@ -1003,3 +1003,20 @@ acceptance roots. Desktop tests pass 166/166 and `pnpm build:desktop` passes. Mi
   when the headless renderer had to restart. A replacement disposable account—and the
   opportunity to prove account-A isolation—requires renewed action-time approval. No
   push, release, announcement, or unrelated external mutation occurred.
+- 2026-07-16 — Completed the public hosted-trial persistence and isolation boundary.
+  Normal macOS resolution and a fresh isolated Chrome profile reverified
+  `https://tubble.nopalstudio.com` signed out without any DNS/Cloudflare change. Two
+  action-time-approved disposable identities were created: the first verifier lost its
+  volatile secret immediately after signup and left only an empty private Space; the
+  renewed replacement completed the gate. Its credential was rotated three times
+  through the authenticated production operator path while resuming verifier
+  mismatches against the same approved test, never printed/committed, and discarded
+  after final sign-out/profile cleanup. The
+  replacement's exact marker survived cache-bypassing reload and sign-out/sign-in; the
+  same private Space/document returned; no development fixtures, teams, shares, or
+  unrelated accounts/Spaces appeared; account A's direct private document returned no
+  editor/marker; account B's document remained available; and final signed-out route
+  denial passed. Updated `READINESS.md` and the canonical roadmap. Remaining launch
+  gates begin with the every-link clean-browser audit, then DEPLOY-5, production
+  failure/operations/sharing evidence, and macOS release/round-trip work. No push,
+  release, announcement, DNS/hosting change, or unrelated external mutation occurred.
