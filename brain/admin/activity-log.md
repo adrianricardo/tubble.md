@@ -1020,3 +1020,20 @@ acceptance roots. Desktop tests pass 166/166 and `pnpm build:desktop` passes. Mi
   gates begin with the every-link clean-browser audit, then DEPLOY-5, production
   failure/operations/sharing evidence, and macOS release/round-trip work. No push,
   release, announcement, DNS/hosting change, or unrelated external mutation occurred.
+- 2026-07-16 — Completed the literal every-link public-browser run from the tracked
+  README, download UI, SECURITY, and www copy. The managed browser still fails because
+  Apple rejects its bundled `classic-level.node` signature, so the accepted fallback
+  used Chrome 150 with a new temporary profile, normal system DNS, 0 initial cookies,
+  and no local app configuration. All provider/upstream/owned pages rendered signed
+  out with no auth/session leakage, but the launch gate failed: public `main` still
+  serves the old Hubble README and stale Hubble-branded linked docs; `DEPLOY.md`,
+  `config/compatibility.json`, and `config/brand.json` return browser-visible 404s; and
+  `releases/latest` resolves to the releases index containing only the unsigned
+  `desktop-dev-latest` prerelease for `d0a2cc1` with legacy Hubble ZIP names. Recorded
+  every destination, redirect, status, visible ownership/brand, and release metadata in
+  `specs/public-try-it-today-launch/READINESS.md`. The next gate is to land/deploy the
+  corrected public documentation revision and rerun the table; DEPLOY-5 follows only
+  after it passes. `pnpm check:brand --strict` passes with 0 divergent and 0 unresolved
+  public values, and `pnpm build:desktop` passes. No push, deploy, release
+  publication/replacement, account action, credential use, DNS/Cloudflare change, or
+  other external mutation occurred.

@@ -95,12 +95,66 @@ These results still need to be included in the exact revision deployed and relea
   document remained readable. A final sign-out and private-route denial passed at
   `2026-07-16T19:18:08Z`.
 
+## Clean-browser public-link audit — 2026-07-16T19:50Z
+
+The literal every-link browser run used Chrome 150 with a new temporary profile and
+the normal macOS resolver. The profile began with **0 cookies** and no saved local app
+configuration. Every page rendered signed out; GitHub showed **Sign in**, X used only
+guest state, and the hosted trial retained zero cookies/local-storage/session-storage
+entries. No account or credential was created or supplied. The managed in-app browser
+was attempted first and remains blocked because Apple rejects its bundled
+`classic-level.node` signature; no macOS security setting was weakened.
+
+Duplicate occurrences of the same destination are collapsed below. Relative README
+targets are recorded as the public `main`-branch destinations a visitor receives from
+GitHub.
+
+| Tracked destination | Browser result | Ownership / brand / session result |
+| --- | --- | --- |
+| Fork repository / public README | **200**, stayed at `github.com/adrianricardo/tubble.md` | Fork-owned and anonymous, but public `main` still renders the old Hubble README/tagline at commit `3b22657`; the current Tubble documentation commit is not public. **Fail.** |
+| Original Hubble repository | **200**, no redirect | Correctly upstream-owned and labeled as attribution in the tracked README; anonymous. **Pass.** |
+| `twitter.com/bholmesdev` | **200**, redirected to `x.com/bholmesdev` | Correct upstream-author profile and guest-only browser state. **Pass.** |
+| Fork `releases/latest` (README + download UI) | **200**, redirected to the fork releases index | Fork-owned, but there is no stable latest release. The visible artifact is the unsigned `desktop-dev-latest` prerelease for `d0a2cc1`, not a launch build. Link resolves, but download metadata is **not launch-ready**. |
+| Fork releases index | **200**, no redirect | Fork-owned, visibly titled “Tubble Desktop Dev (latest),” anonymous. **Pass as a destination; release gate remains pending.** |
+| `CONTRIBUTING.md` on fork `main` | **200**, no redirect | Fork-owned, but the public file still says “Contributing to Hubble.” Current linked public copy is stale. **Fail brand check.** |
+| Original `hubble-skills` repository | **200**, no redirect | Correct upstream-owned functional dependency and attribution; anonymous. **Pass.** |
+| `https://tubble.nopalstudio.com` | **200**, normalized to trailing slash | Tubble title, “Sign in to Tubble,” complete trial warning and deploy link; zero browser storage/cookies. **Pass.** |
+| Convex | **200**, redirected to `www.convex.dev` | Expected managed-backend provider brand; anonymous. **Pass.** |
+| `DEPLOY.md` on fork `main` (README + www copy) | **404**, no redirect | GitHub explicitly reports that `main` lacks the path. **Fail.** |
+| Node.js download | **200**, no redirect | Expected Node.js download page; anonymous. **Pass.** |
+| pnpm installation | **200**, no redirect | Expected pnpm installation page; anonymous. **Pass.** |
+| `apps/desktop/README.md` on fork `main` | **200**, no redirect | Fork-owned, but visible copy still says “Desktop app for Hubble.md” and names the upstream release destination. **Fail brand/ownership check.** |
+| `config/compatibility.json` on fork `main` | **404**, no redirect | GitHub explicitly reports that `main` lacks the path. **Fail.** |
+| `config/brand.json` on fork `main` | **404**, no redirect | GitHub explicitly reports that `main` lacks the path. **Fail.** |
+| `CONTEXT.md` on fork `main` | **200**, no redirect | Fork-owned, but visible title/copy still presents `hubble.md`/Hubble. **Fail brand check.** |
+| `CODE_OF_CONDUCT.md` on fork `main` | **200**, no redirect | Fork-owned Contributor Covenant content; anonymous. **Pass.** |
+| `SECURITY.md` on fork `main` | **200**, no redirect | Fork-owned, but public copy still says Hubble because the current Tubble security update is not public. **Fail brand check.** |
+| `LICENSE` on fork `main` | **200**, no redirect | Fork-owned MIT page with the required upstream notice. **Pass.** |
+| Fork private-advisory form | **200**, redirected to GitHub sign-in with the fork advisory URL preserved in `return_to` | Expected authentication boundary for private reporting; no saved GitHub session leaked. **Pass.** |
+
+Release metadata was inspected without downloading or replacing assets. The existing
+prerelease is `desktop-dev-latest`, published `2026-07-14T01:01:29Z`, targeting
+`d0a2cc16bf29d943d9074c1942e7ef600d548844`. Its manifest is 538 bytes with SHA-256
+`4cbc5c2ed9e326fa885aea3ca41c992c522cb2bbc6c8bb37b5171e5da0072df4`; its existing
+ZIPs are still named `Hubble-dev-arm64-mac.zip` (138,830,397 bytes, SHA-256
+`60efbc81b6e2b400f5960bcf566122b6ca5a3609c325489edeb31d6b397dc469`) and
+`Hubble-dev-x64-mac.zip` (144,625,561 bytes, SHA-256
+`47b3aca943c793dcf06170fc05e8f4cb6f4545f86ab39d1c8c3bda7048c59e86`). These
+immutable development assets were not downloaded, relabeled, or replaced.
+
+**Gate result: fail, with complete browser evidence.** The exact next gate is to land
+the current Tubble documentation/brand files on the public repository, correct the
+tracked linked documents that still expose stale Hubble ownership/brand, redeploy the
+www build containing the final public links, and rerun this isolated-browser table.
+No push or deployment is authorized by this record. DEPLOY-5 becomes the next major
+gate only after this link audit passes.
+
 ## Pending before launch
 
 | Area | Required evidence | Status / dependency |
 | --- | --- | --- |
 | Public destination | Configure DNS/TLS/hosting for the selected temporary URL, deploy Tubble there, verify control, then set it in `config/brand.json`, README, and package homepages. A dedicated custom domain comes later. | **Complete at `https://tubble.nopalstudio.com`; DNS, TLS, SPA hosting, app control, and brand boundary verified.** |
-| Fresh-browser links | Open every README, download, security, and www public destination in a clean browser. | **Pending full every-link pass.** HTTP fallback and a clean isolated-Chrome public-root pass succeed; the in-app browser cannot start because Apple reports its bundled native certificate as revoked. |
+| Fresh-browser links | Open every README, download, security, and www public destination in a clean browser. | **Full every-link browser run completed but failed.** The isolated profile started with 0 cookies; owned/app/provider/upstream destinations rendered anonymously. Public `main` still serves the old README and stale Hubble-linked docs; `DEPLOY.md`, `config/compatibility.json`, and `config/brand.json` are 404; and `releases/latest` exposes only the unsigned development prerelease. Land/deploy the current public docs and corrected linked copy, then rerun. |
 | Independent deployment | A second operator follows `DEPLOY.md` from a clean clone, records corrections, and proves web create/edit/reload plus macOS sign-in/local-agent edit on their deployment. | **Needs a second operator, Convex account, host, and Mac.** |
 | Production trial | Create a production Convex project separate from development, configure auth/secrets, deploy the backend, host `apps/www` against it, and record backend/frontend revisions. | **Infrastructure complete: backend `c40f963`, frontend `fce0a1e`, auth and real URL verified; approved smoke identities now exist.** |
 | Trial first use | From signed out on the real URL: see the trial boundary and availability, create an account/private Workspace/document, reload, sign out/in, and recover the same content. | **Complete on production.** The replacement disposable identity passed signup, private Space, create/edit, cache-bypassing reload, sign-out denial, same-identity sign-in, and exact marker recovery. |

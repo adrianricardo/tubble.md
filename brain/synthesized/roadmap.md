@@ -26,8 +26,10 @@ push, desktop release, or announcement has occurred.
   repository URL redirects, and `desktop-dev-latest` plus its assets resolve. The live
   prerelease title and future workflow presentation use Tubble.
 - Signed-out HTTP audit passes for every README/security external URL and every relative
-  target exists. A literal clean-browser pass remains pending because the in-app browser
-  could not start on this host.
+  target exists locally. The literal isolated-browser pass is now complete and found
+  public-deployment failures: public `main` still serves the old Hubble README/copy,
+  `DEPLOY.md` plus both public brand JSON targets are 404, and `releases/latest` exposes
+  only the unsigned development prerelease. The gate has evidence but does not pass.
 - Phase 3 signup boundary is implemented: account creation now states the best-effort
   trial limits before submission and links to independent deployment. Web tests (6/6),
   www typecheck, and changed-file Biome pass.
@@ -73,12 +75,17 @@ push, desktop release, or announcement has occurred.
   at `2026-07-16T18:52–18:54Z`; no DNS or Cloudflare change was needed. The in-app
   browser plugin remains locally blocked because Apple reports its bundled native
   certificate as revoked, but the isolated Chrome fallback passed the public-root
-  signed-out boundary. The every-link clean-browser audit remains separate.
+  signed-out boundary. A second clean profile began with 0 cookies and completed the
+  every-link audit at `2026-07-16T19:50Z`; results are in `READINESS.md`. No auth/session
+  leakage appeared, but the undeployed/stale GitHub documentation and development-only
+  release metadata fail the gate.
 
 **Immediate open items (pick any; none block the others except where noted):**
-1. **Clean-browser public-link audit** (Phase 1 step 6): open every README, download,
-   security, and www public destination in an isolated browser. HTTP fallback and the
-   public-root clean-browser pass are complete; the full every-link pass is not.
+1. **Clean-browser public-link audit** (Phase 1 step 6): the every-link run is complete
+   but **failed**. Land the current Tubble documentation/brand files on the public repo,
+   correct linked docs that still expose stale Hubble brand/ownership, redeploy www with
+   the final URLs, then rerun the table in `READINESS.md`. Do not push/deploy without
+   authorization.
 2. **Phase 2 DEPLOY-5**: a second operator follows `DEPLOY.md` from a clean clone and
    fills its verification record (needs a real Convex account + web host).
 3. **Internal CLEANUP** (non-launch-blocking): agent docs / `CLAUDE.md` / `docs/agents/*`
@@ -133,7 +140,7 @@ application control, and the manifest-driven public URL boundary are verified.
 Source: `brain/sources/2026-07-15-public-launch-milestone.md`. Observable contract:
 `/specs/public-try-it-today-launch/PRODUCT.md`.
 
-### Phase 1 identity and hosted URL applied; full link audit pending (2026-07-16)
+### Phase 1 identity and hosted URL applied; full link audit failed (2026-07-16)
 
 The brand boundary is in place AND the in-repo rename is applied. `pnpm check:brand`
 now reports **0 divergent and 0 unresolved public values** (down from 24 + 1).
@@ -153,10 +160,14 @@ box). Compatibility map corrected: `productName`/`appName`/userData follow the r
 
 **Remaining (Phase 1 step 6):**
 
-- Complete the literal clean-browser audit of every public link (README, download,
-  security, www copy). The signed-out HTTP audit passes, but browser automation is
-  locally blocked by an invalid native-module signature. The real hosted-trial page
-  itself passed in a fresh isolated Chrome profile.
+- The literal browser audit is recorded in `READINESS.md`. A fresh Chrome profile with
+  0 initial cookies rendered the complete source-derived link set, with no session
+  leakage. It failed because the current docs are not public: public `main` still shows
+  the old Hubble README and stale linked copy; the deploy guide and both brand JSON
+  links are 404; and the fork has only an unsigned development prerelease. Land/deploy
+  the corrected public revision, then rerun. The in-app browser remains independently
+  blocked by its revoked bundled native certificate; no macOS security setting was
+  weakened.
 
 Internal CLEANUP still stale (non-launch-blocking): agent docs / `CLAUDE.md` /
 `docs/agents/*` / `.agents/skills/*` still say `bholmesdev/hubble.md` for the issue
