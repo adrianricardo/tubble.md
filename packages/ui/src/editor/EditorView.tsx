@@ -1,8 +1,10 @@
 import {
+	ContextMenuSpellcheckExtension,
 	combineMarkdownFrontMatter,
 	createHubbleEditorExtensions,
 	markdownToTiptapDoc,
 	parseMarkdownFrontMatter,
+	RichTextClipboardExtension,
 	tiptapDocToMarkdown,
 } from "@hubble.md/editor";
 import type { Content, Editor } from "@tiptap/core";
@@ -19,6 +21,7 @@ import { LinkCreationGhostExtension } from "./LinkCreationGhostExtension";
 import { LinkPopover, type WikiTarget } from "./LinkPopover";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import { SmartLinkExtension } from "./SmartLinkExtension";
+import { TableControls } from "./TableControls";
 import { VirtualCursor } from "./VirtualCursor";
 import "./EditorView.css";
 import {
@@ -133,6 +136,7 @@ export function EditorView({
 			window.clearTimeout(saveTimerRef.current);
 		}
 		saveTimerRef.current = window.setTimeout(() => {
+			saveTimerRef.current = null;
 			void onSave(savePath, latestMarkdownRef.current);
 		}, saveDebounceMs);
 	}, [onSave, persistChanges, saveDebounceMs]);
@@ -140,6 +144,8 @@ export function EditorView({
 	const editor = useEditor({
 		extensions: [
 			...createHubbleEditorExtensions({ codeBlock: HubbleCodeBlock }),
+			RichTextClipboardExtension,
+			ContextMenuSpellcheckExtension,
 			SmartLinkExtension,
 			LinkClickExtension.configure({ onOpenExternalLink, onOpenWikiLink }),
 			LinkCreationGhostExtension,
@@ -295,6 +301,7 @@ export function EditorView({
 				/>
 				<SlashCommandMenu editor={editor} viewportRef={editorViewportRef} />
 				<FormatCommandMenu editor={editor} viewportRef={editorViewportRef} />
+				<TableControls editor={editor} viewportRef={editorViewportRef} />
 			</div>
 			<FormattingStatusBar editor={editor} scrollContainer={editorViewportEl} />
 		</div>

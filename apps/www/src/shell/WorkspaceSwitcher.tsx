@@ -2,12 +2,13 @@ import { api } from "@hubble.md/sync-backend";
 import type { Doc } from "@hubble.md/sync-backend/types";
 import { Modal, WorkspaceSwitcherMenu } from "@hubble.md/ui";
 import { ConvexHttpClient } from "convex/browser";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { categorizeError, describeError } from "../connection/convex-error";
 import { CreateWorkspaceForm } from "./CreateWorkspaceForm";
 
 type Props = {
 	url: string;
+	authToken?: string;
 	currentWorkspaceId: string;
 	currentWorkspaceName: string;
 	onSelect: (id: string) => void;
@@ -16,6 +17,7 @@ type Props = {
 
 export function WorkspaceSwitcher({
 	url,
+	authToken,
 	currentWorkspaceId,
 	currentWorkspaceName,
 	onSelect,
@@ -23,7 +25,11 @@ export function WorkspaceSwitcher({
 }: Props) {
 	const [open, setOpen] = useState(false);
 	const [createOpen, setCreateOpen] = useState(false);
-	const [client] = useState(() => new ConvexHttpClient(url));
+	const client = useMemo(() => {
+		const nextClient = new ConvexHttpClient(url);
+		if (authToken) nextClient.setAuth(authToken);
+		return nextClient;
+	}, [url, authToken]);
 	const [workspaces, setWorkspaces] = useState<Doc<"workspaces">[]>([]);
 	const [error, setError] = useState<string | null>(null);
 
@@ -75,7 +81,7 @@ export function WorkspaceSwitcher({
 						setCreateOpen(true);
 					}}
 				>
-					Create workspace
+					Create space
 				</WorkspaceSwitcherMenu.Item>
 				<WorkspaceSwitcherMenu.Item
 					onClick={() => {
@@ -89,7 +95,7 @@ export function WorkspaceSwitcher({
 			<Modal
 				open={createOpen}
 				onOpenChange={setCreateOpen}
-				title="Create workspace"
+				title="Create space"
 			>
 				<CreateWorkspaceForm
 					client={client}

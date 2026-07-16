@@ -39,13 +39,13 @@ export function CreateWorkspaceForm({ client, onCreated }: Props) {
 				required
 				value={name}
 				onChange={(event) => setName(event.target.value)}
-				placeholder="Workspace name"
+				placeholder="Space name"
 				disabled={busy}
 				aria-invalid={!!error}
 			/>
 			{error && <p className="m-0 text-xs text-destructive">{error}</p>}
 			<Button type="submit" disabled={busy} className="self-end">
-				{busy ? "Creating…" : "Create Workspace"}
+				{busy ? "Creating…" : "Create space"}
 			</Button>
 		</form>
 	);

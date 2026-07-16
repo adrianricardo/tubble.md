@@ -285,7 +285,10 @@ const env = { ...process.env };
 if (process.platform === "darwin") {
 	env.ELECTRON_EXEC_PATH = await ensureDevApp();
 	env.HUBBLE_DESKTOP_FORCE_DEV = "1";
-	env.HUBBLE_DESKTOP_DEV_APP_NAME = devAppName;
+	// Acceptance runs can isolate Electron storage from the normal worktree
+	// profile without rebuilding a second wrapper app.
+	env.HUBBLE_DESKTOP_DEV_APP_NAME =
+		process.env.HUBBLE_DESKTOP_DEV_APP_NAME ?? devAppName;
 	await ensurePlayground();
 	await ensurePlaygroundHtml();
 	// Default to the playground, but let an explicit env value win (set it empty

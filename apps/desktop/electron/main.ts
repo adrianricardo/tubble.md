@@ -6,7 +6,13 @@ import path from "node:path";
 import { createConvexBackend } from "@hubble.md/convex-client";
 import hubbleRuntime from "@hubble.md/runtime/global.js?raw";
 import htmlAppTheme from "@hubble.md/runtime/html-app-theme.css?raw";
-import { contentHash, importLiveDocuments } from "@hubble.md/sync";
+import {
+	contentHash,
+	type Folder,
+	importLiveDocuments,
+	projectionScopeKey,
+	type SyncBackend,
+} from "@hubble.md/sync";
 import { createNodeFileSystem } from "@hubble.md/sync/node";
 import tailwindRuntime from "@tailwindcss/browser?raw";
 import alpineRuntime from "alpinejs/dist/cdn.min.js?raw";
@@ -17,6 +23,8 @@ import {
 	dialog,
 	ipcMain,
 	Menu,
+	Notification,
+	net,
 	protocol,
 	screen,
 	shell,
@@ -26,12 +34,35 @@ import electronUpdater from "electron-updater";
 import ignore from "ignore";
 import { z } from "zod/v4";
 import type {
+	AuthorityTransferOperation,
+	CancelCloudToGitAuthorityMoveInput,
+	CancelGitToCloudAuthorityMoveInput,
+	CloudToGitAuthorityMoveInput,
 	DesktopUpdateState,
 	DirectoryListing,
+	GitDestinationInspectionInput,
+	GitToCloudAuthorityMoveInput,
 	LiveSyncConnectInput,
 	LiveSyncReconcileInput,
+	LocalAvailabilityCreateInput,
+	LocalAvailabilityReconnectInput,
+	LocalAvailabilityRecord,
+	LocalAvailabilityRelocateInput,
+	LocalAvailabilityRelocateResult,
+	LocalAvailabilityStopInput,
+	LocalAvailabilityStopResult,
+	RepoLinkInput,
+	RepoLinkResult,
+	RepoMount,
+	RepoMountCleanliness,
+	RepoMountReconnectInput,
+	RepoMountRelocateInput,
+	RepoMountRelocateResult,
+	RepoMountStopResult,
 	SyncedFolderConnectInput,
+	SyncedFolderEvent,
 	SyncedFolderImportInput,
+	UndoCloudToGitAuthorityMoveInput,
 	WorkspaceConfig,
 } from "../src/desktopApi/types";
 import {
@@ -40,13 +71,50 @@ import {
 	markdownAssetFolderPath,
 	withMarkdownExtension,
 } from "../src/lib/filePath";
+import { AuthorityMoveCoordinator } from "./authorityMoveCoordinator";
+import { AuthorityTransferStore } from "./authorityTransferStore";
+import { type CliServer, startCliServer } from "./cliServer";
+import {
+	CloudToGitAuthorityMoveCoordinator,
+	isCloudToGitUndoEligible,
+} from "./cloudToGitAuthorityMoveCoordinator";
+import { FolderAuthorityStore } from "./folderAuthorityStore";
+import { inspectGitDestination, inspectGitFolder } from "./gitFolderInspection";
 import { LiveSyncService } from "./liveSync";
+import {
+	LocalAvailabilityStore,
+	type StoredLocalAvailability,
+} from "./localAvailabilityStore";
+import { ProjectionManager } from "./projectionManager";
+import {
+	assertCloudProjectionRootsDisjoint,
+	assertLocalProjectionDestinationAvailable,
+	assertLocalProjectionRootsDisjoint,
+	type ProjectionMount,
+} from "./projectionMounts";
+import {
+	BRAIN_DOC_FILENAME,
+	buildBrainMarkdown,
+	excludeMountFromGit,
+	hasBrainDocument,
+	parseGitOriginUrl,
+	repoNameFrom,
+	resolveGitRepo,
+	sanitizeMountSegment,
+} from "./repoLink";
+import {
+	isMountClean,
+	mountCleanliness,
+	rewriteProjectionIndexRoot,
+} from "./repoMountClean";
 import {
 	classifySyncedFolderRoot,
 	SYNCED_FOLDER_INDEX_REL,
 	shouldIgnoreForWatch,
 } from "./syncedFolderClassify";
 import { SyncedFolderService } from "./syncedFolderService";
+import { buildTextContextMenuTemplate } from "./textContextMenu";
+import { requireEncodedTextBytes } from "./textFileIpc";
 import { createAppTray } from "./tray";
 import {
 	loadZoomFactor,
@@ -94,10 +162,16 @@ type WindowBounds = {
 	height: number;
 };
 
+type DesktopAuthState = {
+	deploymentUrl: string;
+	email?: string;
+	name?: string;
+} | null;
+
 const isDev = !app.isPackaged || process.env.HUBBLE_DESKTOP_FORCE_DEV === "1";
 const { autoUpdater } = electronUpdater;
 const devAppName = isDev ? process.env.HUBBLE_DESKTOP_DEV_APP_NAME : undefined;
-const appName = devAppName ?? "Hubble";
+const appName = devAppName ?? "Tubble";
 const debugPort = process.env.HUBBLE_DESKTOP_DEBUG_PORT ?? "9222";
 const updateFeedUrl = process.env.HUBBLE_DESKTOP_UPDATE_URL;
 const supportsAutoUpdates = !isDev && process.platform === "darwin";
@@ -105,6 +179,7 @@ const supportsAutoUpdates = !isDev && process.platform === "darwin";
 const updateCheckIntervalMs = 4 * 60 * 60 * 1000;
 
 app.setName(appName);
+app.setAsDefaultProtocolClient("hubble");
 if (devAppName) {
 	app.setPath("userData", path.join(app.getPath("appData"), devAppName));
 }
@@ -136,6 +211,10 @@ let updateState: DesktopUpdateState = {
 	lastCheckedAt: null,
 };
 const watchers = new Map<string, FSWatcher>();
+let cachedAuthState: DesktopAuthState = null;
+let authHandoffRendererReady = false;
+let pendingAuthHandoff: z.infer<typeof desktopAuthHandoffSchema> | null = null;
+let cliServer: CliServer | null = null;
 // Always-on lifecycle (Decision C): background mode + tray are only engaged
 // while a cloud Live-Document workspace is connected.
 let tray: Tray | null = null;
@@ -147,41 +226,132 @@ const liveSync = new LiveSyncService();
 // Synced-folder watcher engine (Phase 3b): bounded chokidar watch over the sync
 // root → classify → reconcile/rename/move/create back to the cloud. The watcher
 // factory is injected here so the engine itself stays headless/unit-tested.
-const syncedFolder = new SyncedFolderService({
-	emit: (event) => sendToRenderer("desktop:live-sync:event", event),
-	deviceId: os.hostname(),
-	createWatcher: ({ syncRoot, onEvent }) => {
-		const watcher = chokidar.watch(syncRoot, {
-			ignoreInitial: true,
-			ignored: (candidate: string) =>
-				shouldIgnoreForWatch(path.resolve(candidate), syncRoot),
-		});
-		const emit = async (
-			type: "add" | "change" | "unlink",
-			changedPath: string,
-		) => {
-			const absPath = path.resolve(changedPath);
-			let inode: number | null = null;
-			let hash: string | null = null;
-			if (type !== "unlink") {
-				try {
-					inode = fsSync.statSync(absPath).ino;
-					hash = await contentHash(fsSync.readFileSync(absPath, "utf-8"));
-				} catch {
-					// File vanished between event and stat; correlation falls back to
-					// the held entry's stored inode/hash.
-				}
+function createSyncedFolderWatcher({
+	syncRoot,
+	onEvent,
+}: {
+	syncRoot: string;
+	onEvent: (event: {
+		type: "add" | "change" | "unlink";
+		absPath: string;
+		inode: number | null;
+		hash: string | null;
+		at: number;
+	}) => void;
+}) {
+	const watcher = chokidar.watch(syncRoot, {
+		ignoreInitial: true,
+		ignored: (candidate: string) =>
+			shouldIgnoreForWatch(path.resolve(candidate), syncRoot),
+	});
+	const emit = async (
+		type: "add" | "change" | "unlink",
+		changedPath: string,
+	) => {
+		const absPath = path.resolve(changedPath);
+		let inode: number | null = null;
+		let hash: string | null = null;
+		if (type !== "unlink") {
+			try {
+				inode = fsSync.statSync(absPath).ino;
+				hash = await contentHash(fsSync.readFileSync(absPath, "utf-8"));
+			} catch {
+				// File vanished between event and stat; correlation falls back to
+				// the held entry's stored inode/hash.
 			}
-			onEvent({ type, absPath, inode, hash, at: Date.now() });
-		};
-		watcher.on("add", (p) => void emit("add", p));
-		watcher.on("change", (p) => void emit("change", p));
-		watcher.on("unlink", (p) => void emit("unlink", p));
-		watcher.on("error", (error) =>
-			console.error("Synced-folder watcher failed:", error),
-		);
-		return { close: () => watcher.close() };
-	},
+		}
+		onEvent({ type, absPath, inode, hash, at: Date.now() });
+	};
+	watcher.on("add", (p) => void emit("add", p));
+	watcher.on("change", (p) => void emit("change", p));
+	watcher.on("unlink", (p) => void emit("unlink", p));
+	watcher.on("error", (error) =>
+		console.error("Synced-folder watcher failed:", error),
+	);
+	return { close: () => watcher.close() };
+}
+
+const offlineSentinel = process.env.HUBBLE_DESKTOP_OFFLINE_SENTINEL;
+
+function isDesktopOffline(): boolean {
+	// The sentinel gives acceptance tests a process-local offline switch without
+	// disconnecting the developer's whole machine from the network.
+	if (offlineSentinel && fsSync.existsSync(offlineSentinel)) return true;
+	return !net.isOnline();
+}
+
+function emitProjectionEvent(event: SyncedFolderEvent): void {
+	sendToRenderer("desktop:live-sync:event", event);
+	if (
+		(event.kind === "move-review-required" || event.kind === "trashed-local") &&
+		(!mainWindow?.isVisible() || !mainWindow.isFocused()) &&
+		Notification.isSupported()
+	) {
+		const notification = new Notification({
+			title:
+				event.kind === "trashed-local"
+					? "Document moved to Trash"
+					: "Review a document move",
+			body:
+				event.kind === "trashed-local"
+					? "Open Hubble to undo."
+					: "This move changes access or linked repository exposure.",
+		});
+		notification.on("click", () => {
+			mainWindow?.show();
+			mainWindow?.focus();
+			sendToRenderer("desktop:live-sync:event", event);
+		});
+		notification.show();
+	}
+}
+
+const syncedFolder = new SyncedFolderService({
+	scope: { kind: "all-accessible" },
+	emit: (event) =>
+		emitProjectionEvent({
+			...event,
+			scope: {
+				scopeKey: "all-accessible",
+				kind: "all-accessible",
+				workspaceId: null,
+				folderId: null,
+				localRoot: syncedFolder.getStatus().syncRoot,
+			},
+		}),
+	deviceId: os.hostname(),
+	isOffline: isDesktopOffline,
+	createWatcher: createSyncedFolderWatcher,
+});
+
+const projectionManager = new ProjectionManager({
+	wholeWorkspace: syncedFolder,
+	createMount: (projectionScope) =>
+		new SyncedFolderService({
+			scope: projectionScope,
+			emit: (event) => {
+				const scopeKey = projectionScopeKey(projectionScope);
+				const scope = projectionManager
+					.listStatuses()
+					.find((entry) => entry.scope.scopeKey === scopeKey)?.scope;
+				emitProjectionEvent({
+					...event,
+					scope: scope ?? {
+						scopeKey,
+						kind: projectionScope.kind,
+						workspaceId: projectionScope.workspaceId,
+						folderId:
+							projectionScope.kind === "folder"
+								? projectionScope.folderId
+								: null,
+						localRoot: null,
+					},
+				});
+			},
+			deviceId: os.hostname(),
+			isOffline: isDesktopOffline,
+			createWatcher: createSyncedFolderWatcher,
+		}),
 });
 const grantedFiles = new Set<string>();
 const grantedRoots = new Set<string>();
@@ -235,6 +405,92 @@ const syncedFolderImportSchema = z.object({
 	syncRoot: z.string().min(1),
 	deploymentUrl: convexDeploymentUrlSchema,
 	workspaceId: z.string().min(1),
+	authToken: authTokenSchema,
+});
+const repoLinkSchema = z.object({
+	folderId: z.string().min(1),
+	folderName: z.string().min(1),
+	workspaceId: z.string().min(1),
+	repoDir: z.string().min(1),
+	mountPath: z.string().min(1).optional(),
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+});
+const repoMountReconnectSchema = z.object({
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+});
+const desktopAuthStateSchema = z
+	.object({
+		deploymentUrl: convexDeploymentUrlSchema,
+		email: z.string().optional(),
+		name: z.string().optional(),
+	})
+	.nullable();
+const desktopAuthHandoffSchema = z.object({
+	deploymentUrl: convexDeploymentUrlSchema,
+	code: z.string().min(32),
+});
+const repoLinkUndoSchema = z.object({
+	folderId: z.string().min(1),
+});
+const repoMountStopSchema = z.object({
+	folderId: z.string().min(1),
+	keepFiles: z.boolean(),
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+});
+const repoMountRelocateSchema = z.object({
+	folderId: z.string().min(1),
+	mountPath: z.string().min(1),
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+});
+const directProjectionScopeSchema = z.discriminatedUnion("kind", [
+	z.object({ kind: z.literal("workspace"), workspaceId: z.string().min(1) }),
+	z.object({
+		kind: z.literal("folder"),
+		workspaceId: z.string().min(1),
+		folderId: z.string().min(1),
+	}),
+]);
+const localAvailabilityCreateSchema = z.discriminatedUnion("association", [
+	z.object({
+		association: z.literal("standalone"),
+		scope: directProjectionScopeSchema,
+		displayName: z.string().min(1),
+		localRoot: z.string().min(1),
+		deploymentUrl: convexDeploymentUrlSchema,
+		authToken: authTokenSchema,
+	}),
+	z.object({
+		association: z.literal("repo"),
+		scope: z.object({
+			kind: z.literal("folder"),
+			workspaceId: z.string().min(1),
+			folderId: z.string().min(1),
+		}),
+		displayName: z.string().min(1),
+		localRoot: z.string().min(1),
+		repoRoot: z.string().min(1),
+		deploymentUrl: convexDeploymentUrlSchema,
+		authToken: authTokenSchema,
+	}),
+]);
+const localAvailabilityRelocateSchema = z.object({
+	scopeKey: z.string().min(1),
+	localRoot: z.string().min(1),
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+});
+const localAvailabilityStopSchema = z.object({
+	scopeKey: z.string().min(1),
+	keepFiles: z.boolean(),
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+});
+const localAvailabilityReconnectSchema = z.object({
+	deploymentUrl: convexDeploymentUrlSchema,
 	authToken: authTokenSchema,
 });
 const defaultWindowState: WindowState = { width: 920, height: 720 };
@@ -329,6 +585,830 @@ async function saveGrants() {
 			2,
 		),
 	);
+}
+
+const gitToCloudAuthorityMoveSchema = z.object({
+	operationId: z.string().min(1),
+	folderPath: z.string().min(1),
+	workspaceId: z.string().min(1),
+	parentFolderId: z.string().min(1).nullable(),
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+	expectedPreviewFingerprint: z.string().min(1),
+	expectedAudienceFingerprint: z.string().min(1),
+	intent: z.enum(["move", "share"]),
+});
+const cancelGitToCloudAuthorityMoveSchema = z.object({
+	operationId: z.string().min(1),
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+});
+const cloudToGitAuthorityMoveSchema = z.object({
+	operationId: z.string().min(1),
+	cloudFolderId: z.string().min(1),
+	repositoryPath: z.string().min(1),
+	relativePath: z.string().min(1),
+	placementId: z.string().min(1).nullable(),
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+	expectedCloudPreviewFingerprint: z.string().min(1),
+	expectedDestinationFingerprint: z.string().min(1),
+	intent: z.enum(["move", "export-copy"]),
+});
+const cancelCloudToGitAuthorityMoveSchema = z.object({
+	operationId: z.string().min(1),
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+});
+const undoCloudToGitAuthorityMoveSchema = z.object({
+	operationId: z.string().min(1),
+	deploymentUrl: convexDeploymentUrlSchema,
+	authToken: authTokenSchema,
+});
+
+function repoMountsPath(): string {
+	return path.join(app.getPath("userData"), "repo-mounts.json");
+}
+
+function localAvailabilityPath(): string {
+	return path.join(app.getPath("userData"), "local-availability.json");
+}
+
+function folderAuthorityPath(): string {
+	return path.join(app.getPath("userData"), "folder-authority.json");
+}
+
+function authorityTransfersPath(): string {
+	return path.join(app.getPath("userData"), "authority-transfers.json");
+}
+
+const localAvailabilityStore = new LocalAvailabilityStore({
+	filePath: localAvailabilityPath(),
+	legacyRepoMountsPath: repoMountsPath(),
+});
+const folderAuthorityStore = new FolderAuthorityStore(folderAuthorityPath());
+const authorityTransferStore = new AuthorityTransferStore(
+	authorityTransfersPath(),
+);
+
+function toProjectionMount(mount: StoredLocalAvailability): ProjectionMount {
+	return {
+		scope: mount.scope,
+		localRoot: mount.localRoot,
+	};
+}
+
+async function accessibleFolderTopology(
+	backend: SyncBackend,
+	workspaceId: string,
+): Promise<Folder[]> {
+	try {
+		return await backend.getFolders(workspaceId);
+	} catch {
+		// Folder editors may mount a shared subtree without Workspace membership.
+		// Their Shared-with-me tree is the complete topology they can project.
+		const shared = await backend.getSharedWithMe();
+		return shared.folders
+			.filter((root) => root.workspaceId === workspaceId)
+			.flatMap((root) => [
+				{
+					_id: root.folderId,
+					name: root.name,
+					parentId: root.parentId,
+					workspaceId: root.workspaceId,
+				},
+				...root.folders.map((folder) => ({
+					_id: folder._id,
+					name: folder.name,
+					parentId: folder.parentId,
+					workspaceId: root.workspaceId,
+				})),
+			]);
+	}
+}
+
+async function assertLocalAvailabilityAvailable(
+	candidate: ProjectionMount,
+	backend: SyncBackend,
+	ignoreScopeKey?: string,
+): Promise<void> {
+	if (projectionManager.wholeWorkspaceConnected) {
+		throw new Error(
+			"The legacy all-accessible mirror is incompatible with direct local availability. Stop it in Settings before making this Space or folder available.",
+		);
+	}
+	const records = await localAvailabilityStore.list();
+	const candidateScopeKey = projectionScopeKey(candidate.scope);
+	if (
+		candidateScopeKey !== ignoreScopeKey &&
+		records.some((record) => record.scopeKey === candidateScopeKey)
+	) {
+		throw new Error(
+			"This cloud scope is already available on this computer. Reconnect or relocate the existing projection.",
+		);
+	}
+	const existing = records
+		.filter((record) => record.scopeKey !== ignoreScopeKey)
+		.map(toProjectionMount);
+	await assertLocalProjectionRootsDisjoint(candidate, existing, {
+		realpath: fs.realpath,
+		caseInsensitive:
+			process.platform === "darwin" || process.platform === "win32",
+	});
+	// Only an empty root or the same indexed projection is safe before setup writes.
+	let rootEntries: string[] = [];
+	try {
+		rootEntries = await fs.readdir(candidate.localRoot);
+	} catch (error) {
+		if (
+			typeof error !== "object" ||
+			error === null ||
+			!("code" in error) ||
+			error.code !== "ENOENT"
+		) {
+			throw error;
+		}
+	}
+	const indexPath = path.join(
+		candidate.localRoot,
+		...SYNCED_FOLDER_INDEX_REL.split("/"),
+	);
+	const hasIndex = await pathExistsAsFile(indexPath);
+	let indexedMount = null;
+	if (hasIndex) {
+		try {
+			const parsed = JSON.parse(await fs.readFile(indexPath, "utf8")) as {
+				version?: unknown;
+				mount?: unknown;
+			};
+			if (parsed.version === 2 && typeof parsed.mount === "object") {
+				indexedMount = parsed.mount as
+					| { kind: "workspace-mirror" }
+					| { kind: "workspace"; workspaceId: string }
+					| { kind: "folder"; folderId: string };
+			}
+		} catch {
+			indexedMount = null;
+		}
+	}
+	assertLocalProjectionDestinationAvailable(
+		classifySyncedFolderRoot(
+			hasIndex ? [...rootEntries, SYNCED_FOLDER_INDEX_REL] : rootEntries,
+		).state,
+		indexedMount,
+		candidate.scope,
+	);
+	if (
+		existing.some(
+			(mount) => mount.scope.workspaceId === candidate.scope.workspaceId,
+		)
+	) {
+		assertCloudProjectionRootsDisjoint(
+			candidate,
+			existing,
+			await accessibleFolderTopology(backend, candidate.scope.workspaceId),
+		);
+	}
+}
+
+function localAvailabilityStatus(
+	stored: StoredLocalAvailability,
+	recoveryCount: number,
+): LocalAvailabilityRecord {
+	const status = projectionManager.getMountStatus(stored.scopeKey);
+	return {
+		...stored,
+		incompatible: false,
+		state: status?.state ?? "disconnected",
+		lastSyncAt: status?.lastReconcileAt ?? null,
+		pendingOperationCount: status?.pendingOperationCount ?? 0,
+		recoveryCount,
+	};
+}
+
+async function currentLocalAvailabilityStatus(
+	stored: StoredLocalAvailability,
+): Promise<LocalAvailabilityRecord> {
+	const agentStatus = (await projectionManager.getAgentStatus()).find(
+		(entry) => entry.scope.scopeKey === stored.scopeKey,
+	);
+	return localAvailabilityStatus(stored, agentStatus?.operations.recovery ?? 0);
+}
+
+async function listLocalAvailability(): Promise<LocalAvailabilityRecord[]> {
+	const agentStatuses = await projectionManager.getAgentStatus();
+	const records = (await localAvailabilityStore.list()).map((stored) =>
+		localAvailabilityStatus(
+			stored,
+			agentStatuses.find((entry) => entry.scope.scopeKey === stored.scopeKey)
+				?.operations.recovery ?? 0,
+		),
+	);
+	const legacyStatus = projectionManager.getWholeWorkspaceStatus();
+	if (legacyStatus.syncRoot || legacyStatus.state !== "idle") {
+		const agentStatus = agentStatuses.find(
+			(entry) => entry.scope.scopeKey === "all-accessible",
+		);
+		records.push({
+			scopeKey: "all-accessible",
+			scope: { kind: "all-accessible" },
+			displayName: "Legacy all-accessible mirror",
+			localRoot: legacyStatus.syncRoot ?? "",
+			association: "legacy",
+			incompatible: true,
+			repoRoot: null,
+			repoName: null,
+			repoRemoteUrl: null,
+			gitExclusion: { status: "not-applicable" },
+			state: legacyStatus.state,
+			lastSyncAt: legacyStatus.lastReconcileAt,
+			pendingOperationCount: legacyStatus.pendingOperationCount,
+			recoveryCount: agentStatus?.operations.recovery ?? 0,
+			createdAt: null,
+			updatedAt: null,
+			lastConnectedAt: null,
+		});
+	}
+	return records;
+}
+
+async function repoMountStatus(
+	stored: StoredLocalAvailability,
+): Promise<RepoMount> {
+	if (stored.scope.kind !== "folder" || stored.association !== "repo") {
+		throw new Error(`Repo mount not found: ${stored.scopeKey}`);
+	}
+	const status = projectionManager.getMountStatus(stored.scopeKey);
+	return {
+		folderId: stored.scope.folderId,
+		folderName: stored.displayName,
+		workspaceId: stored.scope.workspaceId,
+		mountPath: stored.localRoot,
+		repoDir: stored.repoRoot ?? "",
+		repoName: stored.repoName,
+		repoRemoteUrl: stored.repoRemoteUrl,
+		status: status ? status.state : "disconnected",
+		lastReconcileAt: status?.lastReconcileAt ?? null,
+	};
+}
+
+async function performRepoLink(input: unknown): Promise<RepoLinkResult> {
+	const parsed = repoLinkSchema.parse(input);
+	if (
+		cachedAuthState &&
+		cachedAuthState.deploymentUrl !== parsed.deploymentUrl
+	) {
+		throw new Error(
+			`Desktop app is signed in to ${cachedAuthState.deploymentUrl}; refusing mount for ${parsed.deploymentUrl}.`,
+		);
+	}
+
+	const selectedRepoDir = resolvePath(parsed.repoDir);
+	const repo = await resolveGitRepo(selectedRepoDir);
+	const repoDir = repo?.repoDir ?? selectedRepoDir;
+	const mountPath = parsed.mountPath
+		? resolvePath(parsed.mountPath)
+		: path.join(repoDir, sanitizeMountSegment(parsed.folderName));
+	const backend = createConvexBackend(parsed.deploymentUrl, parsed.authToken);
+	const scope = {
+		kind: "folder" as const,
+		folderId: parsed.folderId,
+		workspaceId: parsed.workspaceId,
+	};
+	const scopeKey = projectionScopeKey(scope);
+	sendToRenderer("desktop:local-availability:progress", {
+		scopeKey,
+		phase: "verifying",
+	});
+	await assertLocalAvailabilityAvailable(
+		{ scope, localRoot: mountPath },
+		backend,
+	);
+	grantRoot(repoDir);
+	grantRoot(mountPath);
+	await fs.mkdir(mountPath, { recursive: true });
+	await fs.rm(path.join(mountPath, ".hubble-export.json"), { force: true });
+
+	// Read-only best-effort origin parse → cloud display metadata (D11).
+	const repoRemoteUrl = repo
+		? await parseGitOriginUrl(repo.commonGitDir)
+		: null;
+	const repoName = repoNameFrom(repoDir, repoRemoteUrl);
+	await backend.setFolderRepoLink({
+		folderId: parsed.folderId,
+		repoName,
+		repoRemoteUrl: repoRemoteUrl ?? undefined,
+	});
+
+	// RB5: seed BRAIN.md once (idempotent, any-case).
+	let brainSeeded = false;
+	const subtreeDocs = await backend.getFolderSubtreeDocuments(parsed.folderId);
+	const hasBrain = hasBrainDocument(subtreeDocs);
+	if (!hasBrain) {
+		const markdown = buildBrainMarkdown({
+			folderName: parsed.folderName,
+			repoName,
+			repoRemoteUrl,
+			documentIndex: subtreeDocs.map((doc) => ({
+				title: doc.title,
+				relativePath: doc.relativePath,
+			})),
+		});
+		await backend.createDocument({
+			workspaceId: parsed.workspaceId,
+			folderId: parsed.folderId,
+			title: "BRAIN",
+			path: BRAIN_DOC_FILENAME,
+			markdown,
+			actor: "repo-link-seed",
+		});
+		brainSeeded = true;
+	}
+
+	sendToRenderer("desktop:local-availability:progress", {
+		scopeKey,
+		phase: "materializing",
+	});
+	// Materialize the subtree at the mount + start the per-mount engine.
+	await projectionManager.connectMount(scope, {
+		syncRoot: mountPath,
+		deploymentUrl: parsed.deploymentUrl,
+		authToken: parsed.authToken,
+	});
+	setBackgroundActive(true);
+
+	// Keep the mount invisible to git (never edits tracked files).
+	let excluded = false;
+	let manualGitignoreLine: string | null = null;
+	let gitExclusion: StoredLocalAvailability["gitExclusion"] = {
+		status: "not-applicable",
+	};
+	if (repo) {
+		const result = await excludeMountFromGit(repo, mountPath);
+		excluded = result.ok;
+		manualGitignoreLine = result.ok ? null : result.pattern;
+		gitExclusion = result.ok
+			? { status: "excluded", pattern: result.pattern }
+			: { status: "manual", pattern: result.pattern };
+	}
+
+	const now = Date.now();
+	await localAvailabilityStore.upsert({
+		scopeKey: projectionScopeKey(scope),
+		scope,
+		displayName: parsed.folderName,
+		localRoot: mountPath,
+		association: "repo",
+		repoRoot: repoDir,
+		repoName,
+		repoRemoteUrl,
+		gitExclusion,
+		createdAt: now,
+		updatedAt: now,
+		lastConnectedAt: now,
+	});
+
+	return {
+		folderId: parsed.folderId,
+		repoDir,
+		mountPath,
+		isGitRepo: repo !== null,
+		excluded,
+		manualGitignoreLine,
+		repoName,
+		repoRemoteUrl,
+		brainSeeded,
+		documentCount:
+			projectionManager.getMountStatus(projectionScopeKey(scope))
+				?.documentCount ?? 0,
+	};
+}
+
+async function unlinkRepoMount(folderId: string): Promise<void> {
+	const scopeKey = `folder:${folderId}`;
+	await projectionManager.disconnectMount(scopeKey);
+	await localAvailabilityStore.remove(scopeKey);
+	if (
+		projectionManager.mountCount === 0 &&
+		!projectionManager.wholeWorkspaceConnected
+	) {
+		setBackgroundActive(false);
+	}
+}
+
+async function undoRepoMount(folderId: string): Promise<{
+	folderId: string;
+	mountPath: string;
+	removedFiles: boolean;
+}> {
+	const scopeKey = `folder:${folderId}`;
+	const mount = (await localAvailabilityStore.list()).find(
+		(entry) => entry.scopeKey === scopeKey && entry.association === "repo",
+	);
+	if (!mount) throw new Error(`Repo mount not found: ${folderId}`);
+
+	await unlinkRepoMount(folderId);
+	const clean = await isMountClean(mount.localRoot);
+	if (clean) {
+		await fs.rm(mount.localRoot, { recursive: true, force: true });
+	}
+	return {
+		folderId,
+		mountPath: mount.localRoot,
+		removedFiles: clean,
+	};
+}
+
+async function inspectRepoMountCleanliness(
+	folderId: string,
+): Promise<RepoMountCleanliness> {
+	return inspectLocalAvailabilityCleanliness(`folder:${folderId}`);
+}
+
+async function inspectLocalAvailabilityCleanliness(
+	scopeKey: string,
+): Promise<RepoMountCleanliness> {
+	const mount = (await localAvailabilityStore.list()).find(
+		(entry) => entry.scopeKey === scopeKey,
+	);
+	if (!mount) throw new Error(`Local availability not found: ${scopeKey}`);
+	const status =
+		projectionManager.getMountStatus(scopeKey)?.state ?? "disconnected";
+	const filesClean =
+		status === "connected" && (await isMountClean(mount.localRoot));
+	return mountCleanliness(status, filesClean);
+}
+
+async function stopRepoMount(input: unknown): Promise<RepoMountStopResult> {
+	const parsed = repoMountStopSchema.parse(input);
+	const result = await stopLocalAvailability({
+		scopeKey: `folder:${parsed.folderId}`,
+		keepFiles: parsed.keepFiles,
+		deploymentUrl: parsed.deploymentUrl,
+		authToken: parsed.authToken,
+	});
+	return result.status === "stopped"
+		? {
+				status: "stopped",
+				mountPath: result.localRoot,
+				keptFiles: result.keptFiles,
+			}
+		: result;
+}
+
+async function connectLocalAvailabilityEngine(
+	record: StoredLocalAvailability,
+	deploymentUrl: string,
+	authToken: string,
+): Promise<void> {
+	await projectionManager.connectMount(record.scope, {
+		syncRoot: record.localRoot,
+		deploymentUrl,
+		authToken,
+	});
+}
+
+async function stopLocalAvailability(
+	input: LocalAvailabilityStopInput,
+): Promise<LocalAvailabilityStopResult> {
+	const parsed = localAvailabilityStopSchema.parse(input);
+	const mount = (await localAvailabilityStore.list()).find(
+		(entry) => entry.scopeKey === parsed.scopeKey,
+	);
+	if (!mount)
+		throw new Error(`Local availability not found: ${parsed.scopeKey}`);
+	const cleanliness = await inspectLocalAvailabilityCleanliness(
+		parsed.scopeKey,
+	);
+	if (cleanliness.state === "blocked") {
+		return { status: "blocked", cleanliness };
+	}
+	// The dialog inspection is advisory. Stop the watcher and verify the bytes
+	// once more so an intervening edit is preserved instead of detached/removed.
+	await projectionManager.disconnectMount(parsed.scopeKey);
+	const stoppedCleanliness = mountCleanliness(
+		"connected",
+		await isMountClean(mount.localRoot),
+	);
+	if (stoppedCleanliness.state === "blocked") {
+		await connectLocalAvailabilityEngine(
+			mount,
+			parsed.deploymentUrl,
+			parsed.authToken,
+		);
+		return { status: "blocked", cleanliness: stoppedCleanliness };
+	}
+	await localAvailabilityStore.remove(parsed.scopeKey);
+	if (parsed.keepFiles) {
+		await fs.rm(path.join(mount.localRoot, ".hubble"), {
+			recursive: true,
+			force: true,
+		});
+	} else {
+		await fs.rm(mount.localRoot, { recursive: true, force: true });
+	}
+	if (
+		projectionManager.mountCount === 0 &&
+		!projectionManager.wholeWorkspaceConnected
+	) {
+		setBackgroundActive(false);
+	}
+	return {
+		status: "stopped",
+		localRoot: mount.localRoot,
+		keptFiles: parsed.keepFiles,
+	};
+}
+
+async function moveProjectionRoot(
+	fromPath: string,
+	toPath: string,
+): Promise<void> {
+	// The picker creates the destination. rmdir fails safely if anything arrived
+	// after validation; recursive removal here could destroy an unrelated file.
+	await fs.rmdir(toPath);
+	try {
+		await fs.rename(fromPath, toPath);
+	} catch (error) {
+		if (
+			!(error instanceof Error) ||
+			!("code" in error) ||
+			error.code !== "EXDEV"
+		) {
+			throw error;
+		}
+		try {
+			await fs.cp(fromPath, toPath, {
+				recursive: true,
+				errorOnExist: true,
+				force: false,
+			});
+			await fs.rm(fromPath, { recursive: true, force: true });
+		} catch (copyError) {
+			await fs.rm(toPath, { recursive: true, force: true });
+			throw copyError;
+		}
+	}
+}
+
+async function relocateRepoMount(
+	input: RepoMountRelocateInput,
+): Promise<RepoMountRelocateResult> {
+	const parsed = repoMountRelocateSchema.parse(input);
+	const result = await relocateLocalAvailability({
+		scopeKey: `folder:${parsed.folderId}`,
+		localRoot: parsed.mountPath,
+		deploymentUrl: parsed.deploymentUrl,
+		authToken: parsed.authToken,
+	});
+	if (result.status === "blocked") return result;
+	const record = (await localAvailabilityStore.list()).find(
+		(entry) => entry.scopeKey === `folder:${parsed.folderId}`,
+	);
+	if (!record) throw new Error(`Repo mount not found: ${parsed.folderId}`);
+	return { status: "relocated", mount: await repoMountStatus(record) };
+}
+
+async function relocateLocalAvailability(
+	input: LocalAvailabilityRelocateInput,
+): Promise<LocalAvailabilityRelocateResult> {
+	const parsed = localAvailabilityRelocateSchema.parse(input);
+	const mounts = await localAvailabilityStore.list();
+	const mount = mounts.find((entry) => entry.scopeKey === parsed.scopeKey);
+	if (!mount)
+		throw new Error(`Local availability not found: ${parsed.scopeKey}`);
+	const cleanliness = await inspectLocalAvailabilityCleanliness(
+		parsed.scopeKey,
+	);
+	if (cleanliness.state === "blocked") {
+		return { status: "blocked", cleanliness };
+	}
+	const nextPath = assertGrantedRoot(parsed.localRoot);
+	if (resolvePath(mount.localRoot) === resolvePath(nextPath)) {
+		throw new Error("Choose a different folder for local availability.");
+	}
+	const entries = await fs.readdir(nextPath);
+	if (entries.length > 0) {
+		throw new Error("Choose a new empty folder for local availability.");
+	}
+	await assertLocalAvailabilityAvailable(
+		{ scope: mount.scope, localRoot: nextPath },
+		createConvexBackend(parsed.deploymentUrl, parsed.authToken),
+		parsed.scopeKey,
+	);
+	await projectionManager.disconnectMount(parsed.scopeKey);
+	// Close the watcher, then compare indexed bytes again before changing either
+	// path. This catches edits made after the renderer's initial inspection.
+	const stoppedCleanliness = mountCleanliness(
+		"connected",
+		await isMountClean(mount.localRoot),
+	);
+	if (stoppedCleanliness.state === "blocked") {
+		await connectLocalAvailabilityEngine(
+			mount,
+			parsed.deploymentUrl,
+			parsed.authToken,
+		);
+		return { status: "blocked", cleanliness: stoppedCleanliness };
+	}
+	try {
+		await rewriteProjectionIndexRoot(
+			mount.localRoot,
+			mount.localRoot,
+			nextPath,
+		);
+	} catch (error) {
+		await connectLocalAvailabilityEngine(
+			mount,
+			parsed.deploymentUrl,
+			parsed.authToken,
+		);
+		throw error;
+	}
+	try {
+		await moveProjectionRoot(mount.localRoot, nextPath);
+	} catch (error) {
+		await rewriteProjectionIndexRoot(
+			mount.localRoot,
+			nextPath,
+			mount.localRoot,
+		);
+		await connectLocalAvailabilityEngine(
+			mount,
+			parsed.deploymentUrl,
+			parsed.authToken,
+		);
+		throw error;
+	}
+	const relocated = {
+		...mount,
+		localRoot: nextPath,
+		updatedAt: Date.now(),
+		lastConnectedAt: Date.now(),
+	};
+	await localAvailabilityStore.upsert(relocated);
+	grantRoot(nextPath);
+	await connectLocalAvailabilityEngine(
+		relocated,
+		parsed.deploymentUrl,
+		parsed.authToken,
+	);
+	return {
+		status: "relocated",
+		availability: await currentLocalAvailabilityStatus(relocated),
+	};
+}
+
+async function createLocalAvailability(
+	input: LocalAvailabilityCreateInput,
+): Promise<LocalAvailabilityRecord> {
+	const parsed = localAvailabilityCreateSchema.parse(input);
+	if (
+		cachedAuthState &&
+		cachedAuthState.deploymentUrl !== parsed.deploymentUrl
+	) {
+		throw new Error(
+			`Desktop app is signed in to ${cachedAuthState.deploymentUrl}; refusing local availability for ${parsed.deploymentUrl}.`,
+		);
+	}
+	if (parsed.association === "repo") {
+		await performRepoLink({
+			folderId: parsed.scope.folderId,
+			folderName: parsed.displayName,
+			workspaceId: parsed.scope.workspaceId,
+			repoDir: parsed.repoRoot,
+			mountPath: parsed.localRoot,
+			deploymentUrl: parsed.deploymentUrl,
+			authToken: parsed.authToken,
+		});
+		const record = (await localAvailabilityStore.list()).find(
+			(entry) => entry.scopeKey === projectionScopeKey(parsed.scope),
+		);
+		if (!record)
+			throw new Error("Hubble could not persist local availability.");
+		return currentLocalAvailabilityStatus(record);
+	}
+
+	const localRoot = assertGrantedRoot(parsed.localRoot);
+	const backend = createConvexBackend(parsed.deploymentUrl, parsed.authToken);
+	const scopeKey = projectionScopeKey(parsed.scope);
+	sendToRenderer("desktop:local-availability:progress", {
+		scopeKey,
+		phase: "verifying",
+	});
+	await assertLocalAvailabilityAvailable(
+		{ scope: parsed.scope, localRoot },
+		backend,
+	);
+	sendToRenderer("desktop:local-availability:progress", {
+		scopeKey,
+		phase: "materializing",
+	});
+	await fs.mkdir(localRoot, { recursive: true });
+	const now = Date.now();
+	const record: StoredLocalAvailability = {
+		scopeKey,
+		scope: parsed.scope,
+		displayName: parsed.displayName,
+		localRoot,
+		association: "standalone",
+		repoRoot: null,
+		repoName: null,
+		repoRemoteUrl: null,
+		gitExclusion: { status: "not-applicable" },
+		createdAt: now,
+		updatedAt: now,
+		lastConnectedAt: now,
+	};
+	await connectLocalAvailabilityEngine(
+		record,
+		parsed.deploymentUrl,
+		parsed.authToken,
+	);
+	try {
+		await localAvailabilityStore.upsert(record);
+	} catch (error) {
+		await projectionManager.disconnectMount(record.scopeKey);
+		throw error;
+	}
+	setBackgroundActive(true);
+	return currentLocalAvailabilityStatus(record);
+}
+
+async function reconnectLocalAvailability(
+	input: LocalAvailabilityReconnectInput,
+): Promise<LocalAvailabilityRecord[]> {
+	const parsed = localAvailabilityReconnectSchema.parse(input);
+	const records = await localAvailabilityStore.list();
+	const backend = createConvexBackend(parsed.deploymentUrl, parsed.authToken);
+	for (const record of records) {
+		if (projectionManager.hasMount(record.scopeKey)) continue;
+		try {
+			grantRoot(record.localRoot);
+			await assertLocalAvailabilityAvailable(
+				toProjectionMount(record),
+				backend,
+				record.scopeKey,
+			);
+			await connectLocalAvailabilityEngine(
+				record,
+				parsed.deploymentUrl,
+				parsed.authToken,
+			);
+			await localAvailabilityStore.upsert({
+				...record,
+				updatedAt: Date.now(),
+				lastConnectedAt: Date.now(),
+			});
+		} catch (error) {
+			console.error(
+				`Failed to reconnect local availability ${record.scopeKey}:`,
+				error,
+			);
+		}
+	}
+	if (projectionManager.mountCount > 0) setBackgroundActive(true);
+	return listLocalAvailability();
+}
+
+async function startCliCommandServer(): Promise<void> {
+	cliServer = await startCliServer({
+		socketPath: path.join(app.getPath("userData"), "cli.sock"),
+		handlers: {
+			async status() {
+				const mounts = (await localAvailabilityStore.list()).filter(
+					(record) => record.association === "repo",
+				);
+				return {
+					appVersion: app.getVersion(),
+					auth: cachedAuthState,
+					mounts: await Promise.all(mounts.map(repoMountStatus)),
+					projections: await projectionManager.getAgentStatus(),
+				};
+			},
+			async "link-repo"(args) {
+				const parsed = repoLinkSchema.parse(args);
+				const result = await performRepoLink(parsed);
+				sendToRenderer("desktop:repo-link:linked", {
+					folderId: parsed.folderId,
+					folderName: parsed.folderName,
+					mountPath: result.mountPath,
+					repoDir: result.repoDir,
+				});
+				return result;
+			},
+			async "login-with-handoff"(args) {
+				const handoff = desktopAuthHandoffSchema.parse(args);
+				pendingAuthHandoff = handoff;
+				if (authHandoffRendererReady) {
+					sendToRenderer("desktop:auth-handoff", handoff);
+					pendingAuthHandoff = null;
+				}
+				mainWindow?.show();
+				return { accepted: true };
+			},
+		},
+	});
 }
 
 async function loadWindowState(): Promise<WindowState> {
@@ -464,6 +1544,7 @@ function grantFileWithParent(filePath: string) {
 	const resolved = resolvePath(filePath);
 	grantFile(resolved);
 	grantRoot(path.dirname(resolved));
+	return resolved;
 }
 
 function isWithin(rootPath: string, candidatePath: string): boolean {
@@ -584,6 +1665,10 @@ function firstExistingFileArg(args: string[]): string | null {
 	return null;
 }
 
+function firstProtocolUrlArg(args: string[]): string | null {
+	return args.find((arg) => arg.startsWith("hubble://")) ?? null;
+}
+
 function sendToRenderer(channel: string, ...args: unknown[]) {
 	mainWindow?.webContents.send(channel, ...args);
 }
@@ -697,7 +1782,7 @@ function buildMenu() {
 				{ type: "separator" },
 				{
 					id: "sync-workspace",
-					label: "Sync Workspace",
+					label: "Sync Folder",
 					enabled: menuState.hasWorkspace,
 					click: () => sendToRenderer("desktop:menu-sync-workspace"),
 				},
@@ -1025,6 +2110,33 @@ function showMainWindow() {
 	void createWindow();
 }
 
+function handleProtocolUrl(rawUrl: string) {
+	const focus = () => showMainWindow();
+	if (app.isReady()) {
+		focus();
+	} else {
+		app.once("ready", focus);
+	}
+
+	let route = "";
+	try {
+		const url = new URL(rawUrl);
+		if (url.protocol !== "hubble:") {
+			console.warn(`Ignoring non-hubble protocol URL: ${rawUrl}`);
+			return;
+		}
+		route = url.hostname ? `/${url.hostname}${url.pathname}` : url.pathname;
+	} catch (error) {
+		console.warn("Ignoring malformed hubble protocol URL:", error);
+		return;
+	}
+
+	switch (route) {
+		default:
+			console.warn(`Unrecognized hubble:// route: ${route || "/"}`);
+	}
+}
+
 function ensureTray() {
 	if (tray) return;
 	tray = createAppTray(trayIconPath(), appName, {
@@ -1079,6 +2191,10 @@ async function createWindow() {
 		},
 	});
 	mainWindow = window;
+	registerTextContextMenu(window);
+	window.webContents.on("did-start-loading", () => {
+		authHandoffRendererReady = false;
+	});
 	if (windowState.isFullScreen) {
 		window.setFullScreen(true);
 	} else if (windowState.isMaximized) {
@@ -1125,7 +2241,163 @@ async function createWindow() {
 	}
 }
 
+function registerTextContextMenu(window: BrowserWindow) {
+	window.webContents.on("context-menu", (_event, params) => {
+		if (!params.isEditable) return;
+		const menu = Menu.buildFromTemplate(
+			buildTextContextMenuTemplate(window.webContents, params),
+		);
+		menu.popup({
+			window,
+			// The originating frame lets macOS attach Writing Tools and text services.
+			...(process.platform === "darwin"
+				? { frame: params.frame ?? undefined }
+				: {}),
+		});
+	});
+}
+
 function registerIpc() {
+	ipcMain.handle("desktop:folder-authority:list", () =>
+		folderAuthorityStore.list(),
+	);
+	ipcMain.handle("desktop:authority-transfer:list", () =>
+		authorityTransferStore.list(),
+	);
+	ipcMain.handle(
+		"desktop:authority-transfer:save",
+		(_event, operation: AuthorityTransferOperation) =>
+			authorityTransferStore.upsert(operation),
+	);
+	ipcMain.handle(
+		"desktop:authority-transfer:cancel",
+		(_event, input: unknown) => {
+			const { operationId } = z
+				.object({ operationId: z.string().min(1) })
+				.parse(input);
+			return authorityTransferStore.cancel(operationId);
+		},
+	);
+	ipcMain.handle(
+		"desktop:git-authority:inspect-folder",
+		async (_event, input: unknown) => {
+			const folderPath = z.string().min(1).parse(input);
+			return inspectGitFolder(folderPath, await folderAuthorityStore.list());
+		},
+	);
+	ipcMain.handle(
+		"desktop:git-authority:inspect-destination",
+		(_event, input: GitDestinationInspectionInput) =>
+			inspectGitDestination(
+				z
+					.object({
+						repositoryPath: z.string().min(1),
+						relativePath: z.string().min(1),
+					})
+					.parse(input),
+			),
+	);
+	ipcMain.handle(
+		"desktop:git-authority:move-to-cloud",
+		async (_event, input: GitToCloudAuthorityMoveInput) => {
+			const parsed = gitToCloudAuthorityMoveSchema.parse(input);
+			const coordinator = new AuthorityMoveCoordinator({
+				backend: createConvexBackend(parsed.deploymentUrl, parsed.authToken),
+				transferStore: authorityTransferStore,
+				placementStore: folderAuthorityStore,
+				inspectFolder: async (folderPath) =>
+					inspectGitFolder(folderPath, await folderAuthorityStore.list()),
+			});
+			const result = await coordinator.moveGitFolderToCloud({
+				...parsed,
+				parentFolderId: parsed.parentFolderId ?? null,
+			});
+			if (result.status === "completed") {
+				sendToRenderer("desktop:folder-authority:changed");
+			}
+			return result;
+		},
+	);
+	ipcMain.handle(
+		"desktop:git-authority:cancel-move-to-cloud",
+		async (_event, input: CancelGitToCloudAuthorityMoveInput) => {
+			const parsed = cancelGitToCloudAuthorityMoveSchema.parse(input);
+			const coordinator = new AuthorityMoveCoordinator({
+				backend: createConvexBackend(parsed.deploymentUrl, parsed.authToken),
+				transferStore: authorityTransferStore,
+				placementStore: folderAuthorityStore,
+				inspectFolder: async (folderPath) =>
+					inspectGitFolder(folderPath, await folderAuthorityStore.list()),
+			});
+			return coordinator.cancelGitToCloudMove(parsed.operationId);
+		},
+	);
+	ipcMain.handle(
+		"desktop:cloud-authority:move-to-git",
+		async (_event, input: CloudToGitAuthorityMoveInput) => {
+			const parsed = cloudToGitAuthorityMoveSchema.parse(input);
+			const coordinator = new CloudToGitAuthorityMoveCoordinator({
+				backend: createConvexBackend(parsed.deploymentUrl, parsed.authToken),
+				transferStore: authorityTransferStore,
+				placementStore: folderAuthorityStore,
+				inspectDestination: inspectGitDestination,
+				stopProjection: async (placement) => {
+					if (placement.projection) {
+						await projectionManager.disconnectMount(
+							placement.projection.scopeKey,
+						);
+					}
+				},
+			});
+			const result = await coordinator.move({
+				...parsed,
+				placementId: parsed.placementId ?? null,
+			});
+			if (result.status === "completed") {
+				sendToRenderer("desktop:folder-authority:changed");
+			}
+			return result;
+		},
+	);
+	ipcMain.handle(
+		"desktop:cloud-authority:cancel-move-to-git",
+		async (_event, input: CancelCloudToGitAuthorityMoveInput) => {
+			const parsed = cancelCloudToGitAuthorityMoveSchema.parse(input);
+			const coordinator = new CloudToGitAuthorityMoveCoordinator({
+				backend: createConvexBackend(parsed.deploymentUrl, parsed.authToken),
+				transferStore: authorityTransferStore,
+				placementStore: folderAuthorityStore,
+				inspectDestination: inspectGitDestination,
+			});
+			return coordinator.cancel(parsed.operationId);
+		},
+	);
+	ipcMain.handle(
+		"desktop:cloud-authority:undo-eligibility",
+		(_event, input: unknown) => {
+			const { operationId } = z
+				.object({ operationId: z.string().min(1) })
+				.parse(input);
+			return isCloudToGitUndoEligible(authorityTransferStore, operationId);
+		},
+	);
+	ipcMain.handle(
+		"desktop:cloud-authority:undo-move-to-git",
+		async (_event, input: UndoCloudToGitAuthorityMoveInput) => {
+			const parsed = undoCloudToGitAuthorityMoveSchema.parse(input);
+			const coordinator = new CloudToGitAuthorityMoveCoordinator({
+				backend: createConvexBackend(parsed.deploymentUrl, parsed.authToken),
+				transferStore: authorityTransferStore,
+				placementStore: folderAuthorityStore,
+				inspectDestination: inspectGitDestination,
+			});
+			const result = await coordinator.undo(parsed.operationId);
+			if (result.status === "restored") {
+				sendToRenderer("desktop:folder-authority:changed");
+			}
+			return result;
+		},
+	);
 	ipcMain.handle(
 		"desktop:list-directory",
 		async (_event, { path: dirPath }) => {
@@ -1192,13 +2464,22 @@ function registerIpc() {
 			return await fs.readFile(resolved, "utf8");
 		},
 	);
+	ipcMain.handle(
+		"desktop:path-for-dropped-file",
+		(_event, filePath: unknown) => {
+			if (typeof filePath !== "string" || !filePath) {
+				throw new Error("Dropped file path is required");
+			}
+			return grantFileWithParent(filePath);
+		},
+	);
 
 	ipcMain.handle(
 		"desktop:write-file-text",
-		async (_event, { path: filePath, content }) => {
+		async (_event, { path: filePath, bytes }) => {
 			const resolved = assertGranted(filePath);
 			await fs.mkdir(path.dirname(resolved), { recursive: true });
-			await fs.writeFile(resolved, String(content));
+			await fs.writeFile(resolved, requireEncodedTextBytes(bytes));
 		},
 	);
 
@@ -1321,19 +2602,28 @@ function registerIpc() {
 		return selected;
 	});
 
-	ipcMain.handle("desktop:create-folder-picker", async () => {
-		const result = await dialog.showSaveDialog(mainWindow ?? undefined, {
-			title: "New Folder",
-			nameFieldLabel: "Folder name:",
-			buttonLabel: "Create",
-			properties: ["createDirectory"],
-		});
-		if (result.canceled || !result.filePath) return null;
-		const folderPath = result.filePath;
-		await fs.mkdir(folderPath, { recursive: true });
-		grantRoot(folderPath);
-		return folderPath;
-	});
+	ipcMain.handle(
+		"desktop:create-folder-picker",
+		async (_event, options = {}) => {
+			const result = await dialog.showSaveDialog(mainWindow ?? undefined, {
+				title: typeof options.title === "string" ? options.title : "New Folder",
+				defaultPath:
+					typeof options.defaultPath === "string"
+						? options.defaultPath
+						: undefined,
+				nameFieldLabel: "Folder name:",
+				buttonLabel: "Create",
+				properties: ["createDirectory"],
+			});
+			if (result.canceled || !result.filePath) return null;
+			const folderPath = result.filePath;
+			if (options.create !== false) {
+				await fs.mkdir(folderPath, { recursive: true });
+			}
+			grantRoot(folderPath);
+			return folderPath;
+		},
+	);
 
 	ipcMain.handle(
 		"desktop:save-markdown-file-picker",
@@ -1452,6 +2742,18 @@ function registerIpc() {
 		buildMenu();
 	});
 
+	ipcMain.handle("desktop:auth-state", (_event, state: unknown) => {
+		cachedAuthState = desktopAuthStateSchema.parse(state);
+	});
+
+	ipcMain.handle("desktop:auth-handoff-ready", () => {
+		authHandoffRendererReady = true;
+		if (pendingAuthHandoff) {
+			sendToRenderer("desktop:auth-handoff", pendingAuthHandoff);
+			pendingAuthHandoff = null;
+		}
+	});
+
 	ipcMain.handle("desktop:set-background-active", (_event, active: boolean) => {
 		setBackgroundActive(active === true);
 	});
@@ -1500,7 +2802,13 @@ function registerIpc() {
 		async (_event, input: SyncedFolderConnectInput) => {
 			const parsed = syncedFolderConnectSchema.parse(input);
 			const syncRoot = assertGrantedRoot(parsed.syncRoot);
-			const status = await syncedFolder.connect({
+			const configuredMounts = await localAvailabilityStore.list();
+			if (configuredMounts.length > 0) {
+				throw new Error(
+					"Disconnect folder projections before connecting the whole-workspace projection. Hubble manages one local copy per document on this computer.",
+				);
+			}
+			const status = await projectionManager.connectWholeWorkspace({
 				syncRoot,
 				deploymentUrl: parsed.deploymentUrl,
 				authToken: parsed.authToken,
@@ -1539,19 +2847,154 @@ function registerIpc() {
 			return importLiveDocuments(backend, createNodeFileSystem(), {
 				workspaceId: parsed.workspaceId,
 				workspacePath: syncRoot,
+				idempotencyKey: `desktop-folder:${parsed.workspaceId}:${syncRoot}`,
 				actor: "synced-folder-first-run-import",
 			});
 		},
 	);
 
 	ipcMain.handle("desktop:live-sync:disconnect-folder", async () => {
-		const status = await syncedFolder.disconnect();
+		const status = await projectionManager.disconnectWholeWorkspace();
 		setBackgroundActive(false);
 		return status;
 	});
 
 	ipcMain.handle("desktop:live-sync:status-folder", () =>
-		syncedFolder.getStatus(),
+		projectionManager.getWholeWorkspaceStatus(),
+	);
+	ipcMain.handle("desktop:live-sync:list-pending-operations", () =>
+		projectionManager.listPendingOperations(),
+	);
+	ipcMain.handle(
+		"desktop:live-sync:approve-pending-move",
+		(_event, input: unknown) => {
+			const { operationId } = z
+				.object({ operationId: z.string().min(1) })
+				.parse(input);
+			return projectionManager.approvePendingMove(operationId);
+		},
+	);
+	ipcMain.handle(
+		"desktop:live-sync:cancel-pending-move",
+		(_event, input: unknown) => {
+			const { operationId } = z
+				.object({ operationId: z.string().min(1) })
+				.parse(input);
+			return projectionManager.cancelPendingMove(operationId);
+		},
+	);
+	for (const [channel, handler] of [
+		[
+			"desktop:live-sync:approve-pending-deletion",
+			(operationId: string) =>
+				projectionManager.approvePendingDeletion(operationId),
+		],
+		[
+			"desktop:live-sync:cancel-pending-deletion",
+			(operationId: string) =>
+				projectionManager.cancelPendingDeletion(operationId),
+		],
+		[
+			"desktop:live-sync:undo-trash",
+			(operationId: string) =>
+				projectionManager.undoTrashedDocument(operationId),
+		],
+		[
+			"desktop:live-sync:dismiss-trash-undo",
+			(operationId: string) => projectionManager.dismissTrashUndo(operationId),
+		],
+	] as const) {
+		ipcMain.handle(channel, (_event, input: unknown) => {
+			const { operationId } = z
+				.object({ operationId: z.string().min(1) })
+				.parse(input);
+			return handler(operationId);
+		});
+	}
+
+	ipcMain.handle(
+		"desktop:repo-link:link",
+		async (_event, input: RepoLinkInput): Promise<RepoLinkResult> => {
+			return performRepoLink(input);
+		},
+	);
+
+	ipcMain.handle(
+		"desktop:repo-link:resolve-root",
+		async (_event, selectedDir: string): Promise<string | null> => {
+			const repo = await resolveGitRepo(resolvePath(selectedDir));
+			return repo?.repoDir ?? null;
+		},
+	);
+
+	ipcMain.handle(
+		"desktop:repo-link:unlink",
+		async (_event, folderId: string) => {
+			await unlinkRepoMount(folderId);
+		},
+	);
+
+	ipcMain.handle("desktop:repo-link:inspect", (_event, folderId: string) =>
+		inspectRepoMountCleanliness(z.string().min(1).parse(folderId)),
+	);
+	ipcMain.handle("desktop:repo-link:stop", (_event, input: unknown) =>
+		stopRepoMount(input),
+	);
+	ipcMain.handle(
+		"desktop:repo-link:relocate",
+		(_event, input: RepoMountRelocateInput) => relocateRepoMount(input),
+	);
+
+	ipcMain.handle("desktop:repo-link:undo", async (_event, input: unknown) => {
+		const parsed = repoLinkUndoSchema.parse(input);
+		return undoRepoMount(parsed.folderId);
+	});
+
+	ipcMain.handle("desktop:repo-link:list", async (): Promise<RepoMount[]> => {
+		const mounts = (await localAvailabilityStore.list()).filter(
+			(record) => record.association === "repo",
+		);
+		return Promise.all(mounts.map(repoMountStatus));
+	});
+
+	ipcMain.handle(
+		"desktop:repo-link:reconnect",
+		async (_event, input: RepoMountReconnectInput): Promise<RepoMount[]> => {
+			const parsed = repoMountReconnectSchema.parse(input);
+			await reconnectLocalAvailability(parsed);
+			const mounts = (await localAvailabilityStore.list()).filter(
+				(record) => record.association === "repo",
+			);
+			return Promise.all(mounts.map(repoMountStatus));
+		},
+	);
+
+	ipcMain.handle("desktop:local-availability:list", () =>
+		listLocalAvailability(),
+	);
+	ipcMain.handle(
+		"desktop:local-availability:create",
+		(_event, input: LocalAvailabilityCreateInput) =>
+			createLocalAvailability(input),
+	);
+	ipcMain.handle(
+		"desktop:local-availability:inspect",
+		(_event, scopeKey: string) =>
+			inspectLocalAvailabilityCleanliness(z.string().min(1).parse(scopeKey)),
+	);
+	ipcMain.handle(
+		"desktop:local-availability:relocate",
+		(_event, input: LocalAvailabilityRelocateInput) =>
+			relocateLocalAvailability(input),
+	);
+	ipcMain.handle(
+		"desktop:local-availability:stop",
+		(_event, input: LocalAvailabilityStopInput) => stopLocalAvailability(input),
+	);
+	ipcMain.handle(
+		"desktop:local-availability:reconnect",
+		(_event, input: LocalAvailabilityReconnectInput) =>
+			reconnectLocalAvailability(input),
 	);
 
 	ipcMain.handle(
@@ -1564,7 +3007,7 @@ function registerIpc() {
 				// An ungranted path is, by definition, not a synced Live Document.
 				return false;
 			}
-			return syncedFolder.isLiveDocument(resolved);
+			return projectionManager.isLiveDocument(resolved);
 		},
 	);
 }
@@ -1586,6 +3029,11 @@ if (!singleInstanceLock) {
 	app.quit();
 } else {
 	app.on("second-instance", (_event, argv) => {
+		const protocolUrl = firstProtocolUrlArg(argv.slice(1));
+		if (protocolUrl) {
+			handleProtocolUrl(protocolUrl);
+			return;
+		}
 		const openPath = firstExistingFileArg(argv.slice(1));
 		// Reuse the reopen path so a re-launch surfaces the window even when it
 		// was hidden to the tray in background mode.
@@ -1605,6 +3053,11 @@ if (!singleInstanceLock) {
 		sendToRenderer("desktop:open-file", resolved);
 	});
 
+	app.on("open-url", (event, url) => {
+		event.preventDefault();
+		handleProtocolUrl(url);
+	});
+
 	app.whenReady().then(async () => {
 		await loadGrants();
 		if (launchWorkspacePath) grantRoot(launchWorkspacePath);
@@ -1620,11 +3073,18 @@ if (!singleInstanceLock) {
 		registerIpc();
 		buildMenu();
 		configureAutoUpdates();
+		await startCliCommandServer();
 		await createWindow();
 	});
 
 	app.on("before-quit", () => {
 		isQuitting = true;
+		if (cliServer) {
+			void cliServer.close().catch((error) => {
+				console.error("Failed to close CLI socket:", error);
+			});
+			cliServer = null;
+		}
 	});
 
 	app.on("window-all-closed", () => {

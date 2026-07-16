@@ -10,10 +10,13 @@
 
 import type * as auth from "../auth.js";
 import type * as authIdentity from "../authIdentity.js";
+import type * as authorityTransfers from "../authorityTransfers.js";
 import type * as crons from "../crons.js";
+import type * as deviceAuth from "../deviceAuth.js";
 import type * as documents from "../documents.js";
 import type * as folders from "../folders.js";
 import type * as http from "../http.js";
+import type * as members from "../members.js";
 import type * as orphanAssets from "../orphanAssets.js";
 import type * as permissions from "../permissions.js";
 import type * as pocIdentity from "../pocIdentity.js";
@@ -30,10 +33,13 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   authIdentity: typeof authIdentity;
+  authorityTransfers: typeof authorityTransfers;
   crons: typeof crons;
+  deviceAuth: typeof deviceAuth;
   documents: typeof documents;
   folders: typeof folders;
   http: typeof http;
+  members: typeof members;
   orphanAssets: typeof orphanAssets;
   permissions: typeof permissions;
   pocIdentity: typeof pocIdentity;

@@ -28,6 +28,7 @@ import {
 } from "react";
 import MingcuteAzSortAscendingLettersLine from "~icons/mingcute/az-sort-ascending-letters-line";
 import MingcuteCheckLine from "~icons/mingcute/check-line";
+import MingcuteCloudLine from "~icons/mingcute/cloud-line";
 import MingcuteCopy2Line from "~icons/mingcute/copy-2-line";
 import MingcuteDeleteLine from "~icons/mingcute/delete-line";
 import MingcuteEditLine from "~icons/mingcute/edit-line";
@@ -36,6 +37,7 @@ import MingcuteMore2Line from "~icons/mingcute/more-2-line";
 import MingcutePinFill from "~icons/mingcute/pin-fill";
 import MingcutePinLine from "~icons/mingcute/pin-line";
 import MingcuteRightLine from "~icons/mingcute/right-line";
+import MingcuteShareForwardLine from "~icons/mingcute/share-forward-line";
 import MingcuteSortDescendingLine from "~icons/mingcute/sort-descending-line";
 import {
 	dirname,
@@ -120,6 +122,7 @@ export function Sidebar({
 	sortMode,
 	storageScope,
 	header,
+	topSlot,
 	footer,
 	emptyState,
 	getDisplayPath = (path) => path,
@@ -136,7 +139,12 @@ export function Sidebar({
 	onTogglePinnedFile,
 	onCreateFile,
 	onDeleteFolder,
+	onMoveFolderToCloud,
+	onShareFolder,
 	onMoveItem,
+	cloudFolderIds,
+	cloudFilePaths,
+	cloudBoundaryFolderIds,
 }: {
 	files: SidebarFile[];
 	folders?: SidebarFolder[];
@@ -146,6 +154,7 @@ export function Sidebar({
 	/** Stable key used to persist folder expansion for one workspace/open folder. */
 	storageScope?: string | null;
 	header?: ReactNode;
+	topSlot?: ReactNode;
 	footer?: ReactNode;
 	emptyState?: ReactNode;
 	getDisplayPath?: (path: string) => string;
@@ -162,7 +171,15 @@ export function Sidebar({
 	onTogglePinnedFile?: (path: string) => void;
 	onCreateFile?: (folderId: string | null) => Promise<string | null>;
 	onDeleteFolder?: (folderId: string) => void;
+	onMoveFolderToCloud?: (folderId: string) => void;
+	onShareFolder?: (folderId: string) => void;
 	onMoveItem?: (input: SidebarMoveItemInput) => Promise<void> | void;
+	/** Display folder IDs backed by cloud authority; local mutation actions are disabled. */
+	cloudFolderIds?: ReadonlySet<string>;
+	/** Absolute file paths backed by cloud authority; local mutation actions are disabled. */
+	cloudFilePaths?: ReadonlySet<string>;
+	/** Direct authority roots that receive the single Cloud marker. */
+	cloudBoundaryFolderIds?: ReadonlySet<string>;
 }) {
 	const navRef = useRef<HTMLDivElement>(null);
 	const renameInputRef = useRef<HTMLInputElement | null>(null);
@@ -451,6 +468,15 @@ export function Sidebar({
 			>
 				{rows.length === 0 && emptyState}
 				{rows.map((row, index) => {
+					const isCloudAuthority =
+						row.kind === "folder"
+							? cloudFolderIds?.has(row.id) === true
+							: row.kind === "file"
+								? cloudFilePaths?.has(row.file.path) === true
+								: false;
+					const isCloudBoundary =
+						row.kind === "folder" &&
+						cloudBoundaryFolderIds?.has(row.id) === true;
 					const isActive =
 						row.kind === "file" && row.file.path === highlightPath;
 					const isFocused = focusedIndex === index;
@@ -499,7 +525,7 @@ export function Sidebar({
 					return (
 						<DraggableSidebarRow
 							key={row.kind === "folder" ? row.id : row.file.path}
-							enabled={Boolean(onMoveItem) && !isRenaming}
+							enabled={Boolean(onMoveItem) && !isRenaming && !isCloudAuthority}
 							row={row}
 							getDisplayPath={getDisplayPath}
 						>
@@ -535,6 +561,7 @@ export function Sidebar({
 									onPointerEnter={() => setFocusedIndex(index)}
 									onPointerLeave={() => setFocusedIndex(null)}
 									onContextMenu={(event) => {
+										if (isCloudAuthority) return;
 										if (
 											row.kind === "file" &&
 											!onRevealFile &&
@@ -583,7 +610,7 @@ export function Sidebar({
 										<DroppableRowButton
 											row={row}
 											getDisplayPath={getDisplayPath}
-											enabled={Boolean(onMoveItem)}
+											enabled={Boolean(onMoveItem) && !isCloudAuthority}
 											className={cn(
 												sidebarRowContentClass,
 												"truncate border-none bg-transparent",
@@ -595,7 +622,12 @@ export function Sidebar({
 												requestAnimationFrame(() => navRef.current?.focus());
 											}}
 											onDoubleClick={(event) => {
-												if (row.kind !== "file" || !onRenameFile) return;
+												if (
+													row.kind !== "file" ||
+													!onRenameFile ||
+													isCloudAuthority
+												)
+													return;
 												event.preventDefault();
 												beginRename(row.file, row.label);
 											}}
@@ -603,6 +635,12 @@ export function Sidebar({
 											dragListeners={listeners}
 										>
 											{chevron}
+											{isCloudBoundary ? (
+												<MingcuteCloudLine
+													className="size-3 shrink-0 text-muted-foreground"
+													aria-label="Cloud authority"
+												/>
+											) : null}
 											{row.kind === "folder" ? (
 												<FolderSegmentLabel
 													dropTarget={dropTarget}
@@ -632,8 +670,13 @@ export function Sidebar({
 										/>
 									)}
 									<div className="absolute inset-y-0 end-0.5 flex items-center gap-0.5">
-										{row.kind === "folder" &&
-											(onRevealFolder || onCreateFile || onDeleteFolder) && (
+										{!isCloudAuthority &&
+											row.kind === "folder" &&
+											(onRevealFolder ||
+												onCreateFile ||
+												onDeleteFolder ||
+												onMoveFolderToCloud ||
+												onShareFolder) && (
 												<FolderActionsMenu
 													id={row.id}
 													label={row.label}
@@ -645,6 +688,8 @@ export function Sidebar({
 													revealLabel={revealLabel}
 													onCreateFile={(id) => void createFile(id)}
 													onDeleteFolder={onDeleteFolder}
+													onMoveFolderToCloud={onMoveFolderToCloud}
+													onShareFolder={onShareFolder}
 												/>
 											)}
 										{canTogglePinnedFile && (
@@ -661,7 +706,8 @@ export function Sidebar({
 												<MingcutePinFill className="size-3.5" />
 											</button>
 										)}
-										{row.kind === "file" &&
+										{!isCloudAuthority &&
+											row.kind === "file" &&
 											(onRevealFile ||
 												onCopyFilePath ||
 												onRenameFile ||
@@ -705,6 +751,7 @@ export function Sidebar({
 
 	return (
 		<SidebarFrame onCollapse={onCollapse} storageScope={storageScope}>
+			{topSlot}
 			<div className="flex items-center justify-between border-b border-sidebar-border px-2.5 py-1.5">
 				{header ?? (
 					<span className="text-[11px] font-medium uppercase text-muted-foreground">
@@ -1236,6 +1283,8 @@ function FolderActionsMenu({
 	revealLabel,
 	onCreateFile,
 	onDeleteFolder,
+	onMoveFolderToCloud,
+	onShareFolder,
 }: {
 	id: string;
 	label: string;
@@ -1245,6 +1294,8 @@ function FolderActionsMenu({
 	revealLabel?: string;
 	onCreateFile?: (id: string) => void;
 	onDeleteFolder?: (id: string) => void;
+	onMoveFolderToCloud?: (id: string) => void;
+	onShareFolder?: (id: string) => void;
 }) {
 	return (
 		<ActionsMenu label={label} open={open} onOpenChange={onOpenChange}>
@@ -1263,6 +1314,22 @@ function FolderActionsMenu({
 					onClick={() => onCreateFile(id)}
 				>
 					New file
+				</ActionItem>
+			)}
+			{onMoveFolderToCloud && (
+				<ActionItem
+					icon={<MingcuteCloudLine />}
+					onClick={() => onMoveFolderToCloud(id)}
+				>
+					Move to Hubble Cloud…
+				</ActionItem>
+			)}
+			{onShareFolder && (
+				<ActionItem
+					icon={<MingcuteShareForwardLine />}
+					onClick={() => onShareFolder(id)}
+				>
+					Share…
 				</ActionItem>
 			)}
 			{onDeleteFolder && (

@@ -1,6 +1,6 @@
-# Contributing to Hubble
+# Contributing to Tubble
 
-Thanks for your interest in Hubble. Contributions of any size are welcome. If you want help shaping an idea, scoping a change, or getting a PR over the finish line, open an issue and we'll work through it with you.
+Thanks for your interest in Tubble. Contributions of any size are welcome. If you want help shaping an idea, scoping a change, or getting a PR over the finish line, open an issue and we'll work through it with you.
 
 ## TL;DR
 
@@ -12,7 +12,7 @@ Thanks for your interest in Hubble. Contributions of any size are welcome. If yo
 
 ## Feature requests
 
-We're open to feature requests of all kinds. If you have an idea for Hubble, we ask that you:
+We're open to feature requests of all kinds. If you have an idea for Tubble, we ask that you:
 
 - **First open a GitHub issue** describing the problem you want to solve. If you already have a solution in mind, feel free to outline it too.
 - For smaller fixes and documentation updates, you may open a PR to pair with your issue. We ask that discussion on the "why" be kept to the issue, so the PR stays focused on reviewing implementation.

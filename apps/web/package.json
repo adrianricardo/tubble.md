@@ -3,21 +3,22 @@
 	"private": true,
 	"type": "module",
 	"version": "0.0.1",
-	"description": "Landing page for Hubble.md",
+	"description": "Landing page for Tubble.md",
 	"license": "MIT",
 	"author": "Ben Holmes <hey@bholmes.dev>",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/bholmesdev/hubble.md.git",
+		"url": "git+https://github.com/adrianricardo/tubble.md.git",
 		"directory": "apps/web"
 	},
-	"homepage": "https://hubble.md",
-	"bugs": "https://github.com/bholmesdev/hubble.md/issues",
+	"homepage": "https://tubble.nopalstudio.com",
+	"bugs": "https://github.com/adrianricardo/tubble.md/issues",
 	"packageManager": "pnpm@10.9.0",
 	"engines": {
 		"node": "22.x"
 	},
 	"scripts": {
+		"upstream:audit": "pnpm -w upstream:audit",
 		"dev": "astro dev",
 		"build": "astro build",
 		"preview": "astro preview",

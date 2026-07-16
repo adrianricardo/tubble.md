@@ -5,25 +5,47 @@ import type {
 	RootContent,
 } from "hast";
 import { fromHtml } from "hast-util-from-html";
-import type { Content, Image, List, ListItem, Paragraph, Root } from "mdast";
+import type {
+	AlignType,
+	Content,
+	Image,
+	Link,
+	List,
+	ListItem,
+	Paragraph,
+	Root,
+	Table,
+	TableCell,
+	TableRow,
+} from "mdast";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { type Plugin, unified } from "unified";
 import { visit } from "unist-util-visit";
+import { splitVerbatimFrontMatterBlock } from "./frontMatter";
 import { wikiDisplayNameForTarget } from "./markdownPath";
 
 // Convert Markdown (string) -> TipTap JSONContent (ProseMirror document)
 export function markdownToTiptapDoc(markdown: string): JSONContent {
-	const input = rawMarkdownAddEmptyMarkers(markdown);
+	const split = splitVerbatimFrontMatterBlock(markdown);
+	const frontMatter = split?.frontMatter ?? null;
+	const body = split?.body ?? markdown;
+	const input = rawMarkdownAddEmptyMarkers(body);
 	const processor = unified()
 		.use(remarkParse)
-		.use(remarkGfm)
+		.use(remarkGfm, { singleTilde: false })
 		.use(remarkRemoveEmptyMarkers);
 	const parsed = processor.parse(input);
 	const tree = processor.runSync(parsed) as Root;
+	const content = normalizeBlockContent(tree.children).flatMap((node) =>
+		blockToPM(node, input),
+	);
+	if (frontMatter !== null) {
+		content.unshift({ type: "frontMatter", attrs: { raw: frontMatter } });
+	}
 	return {
 		type: "doc",
-		content: normalizeBlockContent(tree.children).flatMap(blockToPM),
+		content,
 	} satisfies JSONContent;
 }
 
@@ -32,12 +54,11 @@ function normalizeBlockContent(children: Content[]): Content[] {
 	return children;
 }
 
-function blockToPM(node: Content): JSONContent[] {
+function blockToPM(node: Content, markdown: string): JSONContent[] {
 	switch (node.type) {
 		case "paragraph": {
-			const [maybeImage] = node.children;
-			if (maybeImage?.type === "image") {
-				return imageToPM(maybeImage);
+			if (node.children.some((child) => child.type === "image")) {
+				return splitParagraphAroundImages(node.children, markdown);
 			}
 			const paragraphHtml = node.children.every(
 				(child) => child.type === "html",
@@ -52,7 +73,7 @@ function blockToPM(node: Content): JSONContent[] {
 			return [
 				{
 					type: "paragraph",
-					content: inlineToPM(node.children ?? []),
+					content: inlineToPM(node.children ?? [], markdown),
 				},
 			];
 		}
@@ -61,7 +82,7 @@ function blockToPM(node: Content): JSONContent[] {
 				{
 					type: "heading",
 					attrs: { level: node.depth ?? 1 },
-					content: inlineToPM(node.children ?? []),
+					content: inlineToPM(node.children ?? [], markdown),
 				},
 			];
 		case "blockquote":
@@ -69,7 +90,7 @@ function blockToPM(node: Content): JSONContent[] {
 				{
 					type: "blockquote",
 					content: (node.children ?? []).flatMap((n) =>
-						blockToPM(n as Content),
+						blockToPM(n as Content, markdown),
 					),
 				},
 			];
@@ -92,7 +113,7 @@ function blockToPM(node: Content): JSONContent[] {
 						type: "orderedList",
 						attrs: { start: list.start ?? 1 },
 						content: list.children.flatMap((li) =>
-							listItemToPM(li as ListItem, /* allowChecked */ false),
+							listItemToPM(li as ListItem, /* allowChecked */ false, markdown),
 						),
 					},
 				];
@@ -103,7 +124,7 @@ function blockToPM(node: Content): JSONContent[] {
 				{
 					type: "bulletList",
 					content: list.children.flatMap((li) =>
-						listItemToPM(li as ListItem, /* allowChecked */ true),
+						listItemToPM(li as ListItem, /* allowChecked */ true, markdown),
 					),
 				},
 			];
@@ -136,8 +157,10 @@ function blockToPM(node: Content): JSONContent[] {
 			];
 		}
 		case "table":
+			return tableToPM(node as Table, markdown);
 		case "tableRow":
 		case "tableCell":
+			return [];
 		case "image": {
 			return imageToPM(node as Image);
 		}
@@ -147,6 +170,94 @@ function blockToPM(node: Content): JSONContent[] {
 			return [];
 		}
 	}
+}
+
+// Images are block nodes in the editor schema, so mixed Markdown paragraphs
+// become image blocks with schema-valid paragraphs for the surrounding inline runs.
+function splitParagraphAroundImages(
+	children: Content[],
+	markdown: string,
+): JSONContent[] {
+	const blocks: JSONContent[] = [];
+	let run: Content[] = [];
+	const flushRun = () => {
+		const content = inlineToPM(trimInlineRun(run), markdown);
+		run = [];
+		if (content.length > 0) blocks.push({ type: "paragraph", content });
+	};
+
+	for (const child of children) {
+		if (child.type === "image") {
+			flushRun();
+			blocks.push(...imageToPM(child));
+		} else {
+			run.push(child);
+		}
+	}
+	flushRun();
+	return blocks;
+}
+
+function trimInlineRun(run: Content[]): Content[] {
+	const trimmed = [...run];
+	const first = trimmed[0];
+	if (first?.type === "text") {
+		const value = first.value.trimStart();
+		if (value) trimmed[0] = { ...first, value };
+		else trimmed.shift();
+	}
+	const last = trimmed[trimmed.length - 1];
+	if (last?.type === "text") {
+		const value = last.value.trimEnd();
+		if (value) trimmed[trimmed.length - 1] = { ...last, value };
+		else trimmed.pop();
+	}
+	return trimmed;
+}
+
+function tableToPM(tableNode: Table, markdown: string): JSONContent[] {
+	if (!tableNode.children.length) return [];
+	const rows = tableNode.children.map((row, rowIndex) =>
+		tableRowToPM(row, rowIndex === 0, tableNode.align ?? [], markdown),
+	);
+	return [
+		{
+			type: "table",
+			content: rows,
+		},
+	];
+}
+
+function tableRowToPM(
+	row: TableRow,
+	isHeaderRow: boolean,
+	align: AlignType[],
+	markdown: string,
+): JSONContent {
+	return {
+		type: "tableRow",
+		content: row.children.map((cell, columnIndex) =>
+			tableCellToPM(cell, isHeaderRow, align[columnIndex] ?? null, markdown),
+		),
+	};
+}
+
+function tableCellToPM(
+	cell: TableCell,
+	isHeaderCell: boolean,
+	align: AlignType,
+	markdown: string,
+): JSONContent {
+	const inlineContent = inlineToPM(cell.children ?? [], markdown);
+	const paragraph: JSONContent = { type: "paragraph" };
+	if (inlineContent.length > 0) {
+		paragraph.content = inlineContent;
+	}
+	return {
+		type: isHeaderCell ? "tableHeader" : "tableCell",
+		attrs: { align },
+		content: [paragraph],
+	};
 }
 
 function hastToEmbed(root: HastRoot): JSONContent | null {
@@ -201,15 +312,21 @@ function hasMeaningfulHtml(node: RootContent): boolean {
 	return node.type !== "text" || node.value.trim() !== "";
 }
 
-function listItemToPM(li: ListItem, allowChecked: boolean): JSONContent[] {
+function listItemToPM(
+	li: ListItem,
+	allowChecked: boolean,
+	markdown: string,
+): JSONContent[] {
 	// mdast listItem children may be paragraphs and nested lists.
 	const blocks = (li.children ?? []) as Content[];
 	const first = blocks[0];
 	const paragraphContent =
-		first && first.type === "paragraph" ? inlineToPM(first.children ?? []) : [];
+		first && first.type === "paragraph"
+			? inlineToPM(first.children ?? [], markdown)
+			: [];
 	const restBlocks = (
 		first && first.type === "paragraph" ? blocks.slice(1) : blocks
-	).flatMap(blockToPM);
+	).flatMap((node) => blockToPM(node, markdown));
 	const content: JSONContent[] = [];
 	content.push({ type: "paragraph", content: paragraphContent });
 	content.push(...restBlocks);
@@ -247,7 +364,7 @@ function htmlToEmbed(raw: string | undefined): JSONContent | null {
 	}
 }
 
-function inlineToPM(children: Content[]): JSONContent[] {
+function inlineToPM(children: Content[], markdown: string): JSONContent[] {
 	const out: JSONContent[] = [];
 	for (const child of children ?? []) {
 		switch (child.type) {
@@ -257,13 +374,19 @@ function inlineToPM(children: Content[]): JSONContent[] {
 				}
 				break;
 			case "strong":
-				out.push(...applyMark(inlineToPM(child.children ?? []), "bold"));
+				out.push(
+					...applyMark(inlineToPM(child.children ?? [], markdown), "bold"),
+				);
 				break;
 			case "emphasis":
-				out.push(...applyMark(inlineToPM(child.children ?? []), "italic"));
+				out.push(
+					...applyMark(inlineToPM(child.children ?? [], markdown), "italic"),
+				);
 				break;
 			case "delete":
-				out.push(...applyMark(inlineToPM(child.children ?? []), "strike"));
+				out.push(
+					...applyMark(inlineToPM(child.children ?? [], markdown), "strike"),
+				);
 				break;
 			case "inlineCode":
 				if (child.value) {
@@ -280,10 +403,15 @@ function inlineToPM(children: Content[]): JSONContent[] {
 			case "link":
 				out.push(
 					...applyMark(
-						inlineToPM(child.children ?? []),
+						inlineToPM(child.children ?? [], markdown),
 						"link",
 						typeof child.url === "string"
-							? { href: child.url, kind: "url", target: null }
+							? {
+									href: child.url,
+									kind: "url",
+									target: null,
+									...linkMarkdownStyleAttrs(child, markdown),
+								}
 							: undefined,
 					),
 				);
@@ -341,6 +469,36 @@ function textToPM(text: string): JSONContent[] {
 		out.push({ type: "text", text: text.slice(lastIndex) });
 	}
 	return out;
+}
+
+function linkMarkdownStyleAttrs(node: Link, markdown: string) {
+	const raw = sourceForNode(node, markdown);
+	if (raw.startsWith("<") && raw.endsWith(">")) {
+		return { markdownStyle: "autolink" };
+	}
+	const text = node.children
+		.map((child) => (child.type === "text" ? child.value : ""))
+		.join("");
+	if (raw === text && urlMatchesAutolinkText(node.url, text)) {
+		return { markdownStyle: "bare" };
+	}
+	return {};
+}
+
+function sourceForNode(
+	node: {
+		position?: { start?: { offset?: number }; end?: { offset?: number } };
+	},
+	markdown: string,
+) {
+	const start = node.position?.start?.offset;
+	const end = node.position?.end?.offset;
+	if (typeof start !== "number" || typeof end !== "number") return "";
+	return markdown.slice(start, end);
+}
+
+function urlMatchesAutolinkText(url: string, text: string) {
+	return url === text || url === `mailto:${text}`;
 }
 
 function applyMark(

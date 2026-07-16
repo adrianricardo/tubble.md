@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-	readonly VITE_HUBBLE_REALTIME_COLLAB?: string;
+	readonly VITE_CONVEX_URL?: string;
 	readonly VITE_TEST_CONVEX_URL?: string;
 	readonly VITE_TEST_WORKSPACE_ID?: string;
 }

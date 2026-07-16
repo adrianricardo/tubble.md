@@ -9,11 +9,13 @@ import {
 
 function backendRecorder() {
 	const imported: string[] = [];
+	const calls: Parameters<SyncBackend["importLiveDocument"]>[0][] = [];
 	const backend = {
 		async importLiveDocument(
 			args: Parameters<SyncBackend["importLiveDocument"]>[0],
 		) {
 			imported.push(args.path);
+			calls.push(args);
 			return {
 				documentId: args.path,
 				path: args.path,
@@ -22,7 +24,7 @@ function backendRecorder() {
 			};
 		},
 	} as Pick<SyncBackend, "importLiveDocument"> as SyncBackend;
-	return { backend, imported };
+	return { backend, calls, imported };
 }
 
 function fsWithFiles(files: LocalFile[]) {
@@ -65,8 +67,37 @@ describe("Live Document markdown cap", () => {
 			importLiveDocuments(backend, fs, {
 				workspaceId: "workspace",
 				workspacePath: "/workspace",
+				idempotencyKey: "test-import",
 			}),
 		).rejects.toThrow('Live Document import "large.md" is too large');
 		expect(imported).toEqual([]);
+	});
+
+	it("routes folder imports with a stable per-file idempotency key", async () => {
+		const { backend, calls } = backendRecorder();
+		await importLiveDocuments(
+			backend,
+			fsWithFiles([
+				{ relativePath: "one.md", content: "One", hash: "one" },
+				{ relativePath: "nested/two.md", content: "Two", hash: "two" },
+			]),
+			{
+				workspaceId: "workspace",
+				workspacePath: "/source",
+				folderId: "folder",
+				idempotencyKey: "operation",
+			},
+		);
+
+		expect(calls).toMatchObject([
+			{
+				folderId: "folder",
+				idempotencyKey: "operation:one.md",
+			},
+			{
+				folderId: "folder",
+				idempotencyKey: "operation:nested/two.md",
+			},
+		]);
 	});
 });

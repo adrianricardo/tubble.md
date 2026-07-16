@@ -25,16 +25,20 @@ type Ctx = {
 
 let ctx: Ctx | null = null;
 
-function createCtx(url: string, workspaceId: string): Ctx {
+function createCtx(url: string, workspaceId: string, authToken?: string): Ctx {
 	return {
-		backend: createConvexBackend(url),
+		backend: createConvexBackend(url, authToken),
 		workspaceId,
 		deviceId: ensureDeviceId(),
 	};
 }
 
-export function initActions(url: string, workspaceId: string): void {
-	ctx = createCtx(url, workspaceId);
+export function initActions(
+	url: string,
+	workspaceId: string,
+	authToken?: string,
+): void {
+	ctx = createCtx(url, workspaceId, authToken);
 }
 
 export function teardownActions(): void {
@@ -62,10 +66,12 @@ async function fetchWorkspaceSnapshot(
 	url: string,
 	workspaceId: string,
 	selectedPath: string | null,
+	authToken?: string,
 ): Promise<WorkspaceSnapshot> {
 	const client = new ConvexHttpClient(url);
+	if (authToken) client.setAuth(authToken);
 	const workspacesPromise = client.query(api.sync.listWorkspaces, {});
-	const backend = createConvexBackend(url);
+	const backend = createConvexBackend(url, authToken);
 	const filesPromise = backend.getFiles(workspaceId);
 	const assetsPromise = backend.getAssets(workspaceId);
 	const [files, assets] = await Promise.all([filesPromise, assetsPromise]);
@@ -106,9 +112,32 @@ export const loadWorkspaceSnapshot = latest(
 		url: string,
 		workspaceId: string,
 		selectedPath: string | null = null,
+		authToken?: string,
 	): Promise<boolean> => {
 		const previousSnapshot = workspaceStore.get().snapshot;
-		if (!previousSnapshot) {
+		if (previousSnapshot?.id !== workspaceId) {
+			appStore.set((state) => ({
+				workspace: {
+					...state.workspace,
+					snapshot: null,
+					files: [],
+					assets: [],
+					filesLoaded: false,
+					status: "loading",
+					error: null,
+				},
+				viewer: {
+					currentPath: null,
+					pendingPath: null,
+					content: "",
+					savedContent: "",
+					basedOnHash: null,
+					externalChange: { kind: "none" },
+					status: "idle",
+					error: null,
+				},
+			}));
+		} else {
 			workspaceStore.set((state) => ({
 				...state,
 				status: "loading",
@@ -120,9 +149,10 @@ export const loadWorkspaceSnapshot = latest(
 				url,
 				workspaceId,
 				selectedPath,
+				authToken,
 			);
 			if (isStale()) return false;
-			ctx = createCtx(url, workspaceId);
+			ctx = createCtx(url, workspaceId, authToken);
 			appStore.set((state) => ({
 				workspace: {
 					...state.workspace,

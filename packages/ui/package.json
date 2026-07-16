@@ -2,16 +2,16 @@
 	"name": "@hubble.md/ui",
 	"version": "0.0.1",
 	"private": true,
-	"description": "Shared React editor UI for Hubble.md",
+	"description": "Shared React editor UI for Tubble.md",
 	"license": "MIT",
 	"author": "Ben Holmes <hey@bholmes.dev>",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/bholmesdev/hubble.md.git",
+		"url": "git+https://github.com/adrianricardo/tubble.md.git",
 		"directory": "packages/ui"
 	},
-	"homepage": "https://hubble.md",
-	"bugs": "https://github.com/bholmesdev/hubble.md/issues",
+	"homepage": "https://tubble.nopalstudio.com",
+	"bugs": "https://github.com/adrianricardo/tubble.md/issues",
 	"type": "module",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
@@ -29,6 +29,7 @@
 		"dist"
 	],
 	"scripts": {
+		"upstream:audit": "pnpm -w upstream:audit",
 		"build": "vite build && tsc -p tsconfig.json --emitDeclarationOnly",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"dev": "vite build --watch",
@@ -61,6 +62,7 @@
 	"devDependencies": {
 		"@iconify-json/mingcute": "^1.2.7",
 		"@types/react": "^19.1.8",
+		"@types/react-dom": "^19.1.6",
 		"happy-dom": "^20.10.3",
 		"typescript": "~5.8.3",
 		"unplugin-icons": "^23.0.1",

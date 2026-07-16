@@ -9,6 +9,7 @@ export {
 	type SidebarSortMode,
 } from "./components/Sidebar";
 export { NewNoteButton, Toolbar } from "./components/Toolbar";
+export { UserBadge } from "./components/UserBadge";
 export { WorkspaceSwitcherMenu } from "./components/WorkspaceSwitcherMenu";
 export {
 	EditorView,

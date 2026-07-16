@@ -11,13 +11,13 @@ describe("code block markdown conversion", () => {
 			attrs: { language: "ts" },
 			content: [{ type: "text", text: "const x: number = 1;" }],
 		});
-		expect(tiptapDocToMarkdown(doc)).toBe("```ts\nconst x: number = 1;\n```");
+		expect(tiptapDocToMarkdown(doc)).toBe("```ts\nconst x: number = 1;\n```\n");
 	});
 
 	it("keeps bare fenced code blocks bare", () => {
 		const doc = markdownToTiptapDoc("```\nplain\n```");
 
 		expect(doc.content?.[0]?.attrs).toEqual({ language: null });
-		expect(tiptapDocToMarkdown(doc)).toBe("```\nplain\n```");
+		expect(tiptapDocToMarkdown(doc)).toBe("```\nplain\n```\n");
 	});
 });

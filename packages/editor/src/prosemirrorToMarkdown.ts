@@ -11,8 +11,20 @@ export function tiptapDocToMarkdown(doc: JSONContent): string {
 		return "";
 	}
 
-	const blocks = doc.content.map(blockToMarkdown);
-	return blocks.join("\n\n");
+	let frontMatter = "";
+	const blocks: string[] = [];
+	for (const node of doc.content) {
+		if (node.type === "frontMatter") {
+			if (!frontMatter && typeof node.attrs?.raw === "string") {
+				frontMatter = node.attrs.raw;
+			}
+			continue;
+		}
+		blocks.push(blockToMarkdown(node));
+	}
+	const markdown = `${frontMatter}${blocks.join("\n\n")}`;
+	if (markdown === "" || markdown.endsWith("\n")) return markdown;
+	return `${markdown}\n`;
 }
 
 function blockToMarkdown(node: JSONContent): string {
@@ -87,6 +99,10 @@ function blockToMarkdown(node: JSONContent): string {
 			return `<iframe src="${escapeHtmlAttr(src)}"></iframe>`;
 		}
 
+		case "table": {
+			return tableToMarkdown(node);
+		}
+
 		default:
 			return "";
 	}
@@ -121,19 +137,28 @@ function getLinkAttrs(node: JSONContent | undefined): LinkAttrs | null {
 	const linkMark = node.marks.find((mark) => mark.type === "link");
 	if (!linkMark) return null;
 	const attrs = linkMark.attrs as
-		| { href?: unknown; kind?: unknown; target?: unknown }
+		| {
+				href?: unknown;
+				kind?: unknown;
+				target?: unknown;
+				markdownStyle?: unknown;
+		  }
 		| undefined;
 	if (typeof attrs?.href !== "string") return null;
 	return {
 		href: attrs.href,
 		kind: attrs.kind === "wiki" ? "wiki" : "url",
 		target: typeof attrs.target === "string" ? attrs.target : null,
+		markdownStyle:
+			attrs.markdownStyle === "bare" || attrs.markdownStyle === "autolink"
+				? attrs.markdownStyle
+				: null,
 	};
 }
 
 function linkKey(attrs: LinkAttrs | null) {
 	if (!attrs) return null;
-	return `${attrs.kind}\u0000${attrs.href}\u0000${attrs.target ?? ""}`;
+	return `${attrs.kind}\u0000${attrs.href}\u0000${attrs.target ?? ""}\u0000${attrs.markdownStyle ?? ""}`;
 }
 
 function removeLinkMark(node: JSONContent): JSONContent {
@@ -176,13 +201,106 @@ function listItemToMarkdown(item: JSONContent, number?: number): string {
 	return `${prefix} ${content}`;
 }
 
-function inlineToMarkdown(nodes: JSONContent[]): string {
+function tableToMarkdown(table: JSONContent): string {
+	const rows = (table.content ?? []).filter((row) => row.type === "tableRow");
+	if (rows.length === 0) return "";
+
+	const columnCount = rows.reduce(
+		(max, row) => Math.max(max, row.content?.length ?? 0),
+		0,
+	);
+	if (columnCount === 0) return "";
+
+	const headerCells = rows[0].content ?? [];
+	const header = serializeTableRow(headerCells, columnCount);
+	const separator = Array.from({ length: columnCount }, (_, index) =>
+		tableAlignSeparator(headerCells[index]?.attrs?.align),
+	);
+	const body = rows
+		.slice(1)
+		.map((row) => serializeTableRow(row.content ?? [], columnCount));
+
+	return [header, separator, ...body]
+		.map((cells) => `| ${cells.join(" | ")} |`)
+		.join("\n");
+}
+
+function serializeTableRow(
+	cells: JSONContent[],
+	columnCount: number,
+): string[] {
+	return Array.from({ length: columnCount }, (_, index) =>
+		tableCellToMarkdown(cells[index]),
+	);
+}
+
+function tableCellToMarkdown(cell: JSONContent | undefined): string {
+	if (!cell) return "";
+	const blocks = cell.content ?? [];
+	return blocks.map(tableCellBlockToMarkdown).filter(Boolean).join(" ");
+}
+
+function tableCellBlockToMarkdown(node: JSONContent): string {
+	if (node.type === "paragraph") {
+		return escapeTableCellPipes(
+			inlineToMarkdown(node.content ?? [], { hardBreak: "space" }),
+		);
+	}
+	return escapeTableCellPipes(blockToMarkdown(node).replace(/\s*\n+\s*/g, " "));
+}
+
+function tableAlignSeparator(align: unknown) {
+	switch (align) {
+		case "left":
+			return ":---";
+		case "center":
+			return ":---:";
+		case "right":
+			return "---:";
+		default:
+			return "---";
+	}
+}
+
+function escapeTableCellPipes(value: string) {
+	return value.replace(/(?<!\\)\|/g, "\\|");
+}
+
+function inlineToMarkdown(
+	nodes: JSONContent[],
+	options: { hardBreak?: "markdown" | "space" } = {},
+): string {
+	return inlineNodesToMarkdown(normalizeInlineMarkWhitespace(nodes), options);
+}
+
+function inlineNodesToMarkdown(
+	nodes: JSONContent[],
+	options: { hardBreak?: "markdown" | "space" } = {},
+): string {
 	let result = "";
 	for (let i = 0; i < nodes.length; ) {
-		const attrs = getLinkAttrs(nodes[i]);
+		const node = nodes[i];
+		const delimitedMark = getDelimitedMark(node, nodes[i + 1]);
+		if (delimitedMark) {
+			let j = i;
+			const grouped: JSONContent[] = [];
+			while (
+				j < nodes.length &&
+				hasMark(nodes[j]?.marks ?? [], delimitedMark)
+			) {
+				grouped.push(removeMark(nodes[j] as JSONContent, delimitedMark));
+				j += 1;
+			}
+			const delimiter = delimiterForMark(delimitedMark);
+			result += `${delimiter}${inlineNodesToMarkdown(grouped, options)}${delimiter}`;
+			i = j;
+			continue;
+		}
+
+		const attrs = getLinkAttrs(node);
 		const key = linkKey(attrs);
 		if (!attrs || !key) {
-			result += nodeToMarkdown(nodes[i]);
+			result += nodeToMarkdown(node, options);
 			i += 1;
 			continue;
 		}
@@ -193,7 +311,7 @@ function inlineToMarkdown(nodes: JSONContent[]): string {
 			grouped.push(removeLinkMark(nodes[j]));
 			j += 1;
 		}
-		const text = grouped.map(nodeToMarkdown).join("");
+		const text = inlineNodesToMarkdown(grouped, options);
 		if (attrs.kind === "wiki") {
 			const target = attrs.target || attrs.href;
 			const defaultText = wikiDisplayNameForTarget(target);
@@ -201,6 +319,16 @@ function inlineToMarkdown(nodes: JSONContent[]): string {
 				text === defaultText
 					? `[[${target}]]`
 					: `[[${target}|${escapeWikiAlias(text)}]]`;
+		} else if (
+			attrs.markdownStyle === "bare" &&
+			text === autolinkDisplayText(attrs)
+		) {
+			result += text;
+		} else if (
+			attrs.markdownStyle === "autolink" &&
+			text === autolinkDisplayText(attrs)
+		) {
+			result += `<${text}>`;
 		} else {
 			result += `[${text}](${attrs.href})`;
 		}
@@ -209,47 +337,151 @@ function inlineToMarkdown(nodes: JSONContent[]): string {
 	return result;
 }
 
-function escapeWikiAlias(alias: string) {
-	return alias.split("|").join("\\|");
+const BOUNDARY_SENSITIVE_MARKS = new Set(["bold", "italic", "strike", "link"]);
+const DELIMITED_MARK_ORDER = ["bold", "italic", "strike"] as const;
+type DelimitedMarkType = (typeof DELIMITED_MARK_ORDER)[number];
+type Mark = NonNullable<JSONContent["marks"]>[number];
+
+function getDelimitedMark(
+	node: JSONContent | undefined,
+	nextNode: JSONContent | undefined,
+) {
+	const marks = node?.marks ?? [];
+	const nextMarks = nextNode?.marks ?? [];
+	const continuingType = DELIMITED_MARK_ORDER.find(
+		(markType) =>
+			marks.some((mark) => mark.type === markType) &&
+			nextMarks.some((mark) => mark.type === markType),
+	);
+	const type =
+		continuingType ??
+		DELIMITED_MARK_ORDER.find((markType) =>
+			marks.some((mark) => mark.type === markType),
+		);
+	return type ? marks.find((mark) => mark.type === type) : null;
 }
 
-function nodeToMarkdown(node: JSONContent): string {
-	if (!node.type) return "";
-
-	switch (node.type) {
-		case "text": {
-			let text = node.text ?? "";
-
-			// Apply marks in the correct order for Markdown
-			const marks = node.marks ?? [];
-
-			for (const mark of marks) {
-				switch (mark.type) {
-					case "code":
-						text = `\`${text}\``;
-						break;
-					case "bold":
-						text = `**${text}**`;
-						break;
-					case "italic":
-						text = `*${text}*`;
-						break;
-					case "strike":
-						text = `~~${text}~~`;
-						break;
-					case "link":
-						break;
-				}
-			}
-
-			return text;
-		}
-
-		case "hardBreak": {
-			return "  \n"; // Two spaces + newline creates a line break in Markdown
-		}
-
-		default:
-			return "";
+function delimiterForMark(mark: Mark) {
+	switch (mark.type as DelimitedMarkType) {
+		case "bold":
+			return "**";
+		case "italic":
+			return "*";
+		case "strike":
+			return "~~";
 	}
+}
+
+function removeMark(node: JSONContent, mark: Mark): JSONContent {
+	if (!node.marks) return node;
+	return {
+		...node,
+		marks: node.marks.filter((candidate) => !isSameMark(candidate, mark)),
+	};
+}
+
+// Markdown emphasis delimiters cannot touch whitespace on their inner edge.
+// Split boundary whitespace away from sensitive marks while retaining marks on
+// whitespace between two nodes in the same run.
+function normalizeInlineMarkWhitespace(nodes: JSONContent[]) {
+	return nodes.flatMap((node, index) => {
+		if (node.type !== "text" || !node.text || !node.marks?.length) {
+			return [node];
+		}
+		if (node.marks.some((mark) => mark.type === "code")) return [node];
+
+		const previousMarks = nodes[index - 1]?.marks ?? [];
+		const nextMarks = nodes[index + 1]?.marks ?? [];
+		if (/^[ \t]+$/.test(node.text)) {
+			return [
+				{
+					...node,
+					marks: boundaryMarks(
+						boundaryMarks(node.marks, previousMarks),
+						nextMarks,
+					),
+				},
+			];
+		}
+
+		const leadingWhitespace = node.text.match(/^[ \t]+/)?.[0] ?? "";
+		const trailingWhitespace = node.text.match(/[ \t]+$/)?.[0] ?? "";
+		let remaining = node.text;
+		const parts: JSONContent[] = [];
+		if (leadingWhitespace && leadingWhitespace.length < remaining.length) {
+			parts.push({
+				...node,
+				text: leadingWhitespace,
+				marks: boundaryMarks(node.marks, previousMarks),
+			});
+			remaining = remaining.slice(leadingWhitespace.length);
+		}
+
+		const trailingLength =
+			trailingWhitespace && trailingWhitespace.length < remaining.length
+				? trailingWhitespace.length
+				: 0;
+		const content = trailingLength
+			? remaining.slice(0, -trailingLength)
+			: remaining;
+		if (content) parts.push({ ...node, text: content });
+		if (trailingLength) {
+			parts.push({
+				...node,
+				text: remaining.slice(-trailingLength),
+				marks: boundaryMarks(node.marks, nextMarks),
+			});
+		}
+		return parts;
+	});
+}
+
+function boundaryMarks(
+	currentMarks: NonNullable<JSONContent["marks"]>,
+	neighborMarks: NonNullable<JSONContent["marks"]>,
+) {
+	return currentMarks.filter(
+		(mark) =>
+			!BOUNDARY_SENSITIVE_MARKS.has(mark.type ?? "") ||
+			hasMark(neighborMarks, mark),
+	);
+}
+
+function hasMark(marks: NonNullable<JSONContent["marks"]>, mark: Mark) {
+	return marks.some((candidate) => isSameMark(candidate, mark));
+}
+
+function isSameMark(left: Mark, right: Mark) {
+	return (
+		left.type === right.type &&
+		JSON.stringify(left.attrs ?? null) === JSON.stringify(right.attrs ?? null)
+	);
+}
+
+function autolinkDisplayText(attrs: LinkAttrs) {
+	return attrs.href.startsWith("mailto:") ? attrs.href.slice(7) : attrs.href;
+}
+
+function nodeToMarkdown(
+	node: JSONContent,
+	options: { hardBreak?: "markdown" | "space" } = {},
+): string {
+	if (node.type === "text") {
+		const text = node.text ?? "";
+		return node.marks?.some((mark) => mark.type === "code")
+			? `\`${text}\``
+			: escapeMarkdownText(text);
+	}
+	if (node.type === "hardBreak") {
+		return options.hardBreak === "space" ? " " : "  \n";
+	}
+	return "";
+}
+
+function escapeMarkdownText(text: string) {
+	return text.replace(/\\/g, "\\\\").replace(/\*/g, "\\*");
+}
+
+function escapeWikiAlias(alias: string) {
+	return alias.split("|").join("\\|");
 }

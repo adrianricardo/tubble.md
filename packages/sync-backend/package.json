@@ -2,16 +2,16 @@
 	"name": "@hubble.md/sync-backend",
 	"version": "0.0.1",
 	"private": true,
-	"description": "Convex backend powering Hubble.md Cloud Sync",
+	"description": "Convex backend powering Tubble.md Cloud Sync",
 	"license": "MIT",
 	"author": "Ben Holmes <hey@bholmes.dev>",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/bholmesdev/hubble.md.git",
+		"url": "git+https://github.com/adrianricardo/tubble.md.git",
 		"directory": "packages/sync-backend"
 	},
-	"homepage": "https://hubble.md",
-	"bugs": "https://github.com/bholmesdev/hubble.md/issues",
+	"homepage": "https://tubble.nopalstudio.com",
+	"bugs": "https://github.com/adrianricardo/tubble.md/issues",
 	"type": "module",
 	"exports": {
 		".": {
@@ -23,7 +23,9 @@
 		}
 	},
 	"scripts": {
-		"dev": "convex dev"
+		"upstream:audit": "pnpm -w upstream:audit",
+		"dev": "convex dev",
+		"test": "vitest run"
 	},
 	"dependencies": {
 		"@auth/core": "0.41.1",
@@ -38,6 +40,9 @@
 		"unist-util-visit": "^5.1.0"
 	},
 	"devDependencies": {
-		"typescript": "~5.8.3"
+		"@edge-runtime/vm": "^5.0.0",
+		"convex-test": "^0.0.54",
+		"typescript": "~5.8.3",
+		"vitest": "^3.2.4"
 	}
 }

@@ -1,9 +1,43 @@
 import type {
+	AuthorityManifest,
+	AuthorityManifestSummary,
+	AuthorityRequestedShare,
 	LiveDocumentImportResult,
+	PendingProjectionOperation,
+	ProjectionScope,
 	ReconcileOutcome,
 } from "@hubble.md/sync";
 
 export type { ReconcileOutcome };
+export type ConsequentialMoveOperation = Extract<
+	PendingProjectionOperation,
+	{ kind: "consequential-move" }
+>;
+export type DeletionReviewOperation = Extract<
+	PendingProjectionOperation,
+	{ kind: "deletion-review" }
+>;
+export type TrashUndoOperation = Extract<
+	PendingProjectionOperation,
+	{ kind: "trash-undo" }
+> & { phase: "undo-available" };
+
+export type PendingMoveApprovalResult =
+	| { status: "completed" }
+	| { status: "refreshed" };
+
+export type PendingMoveCancellationResult = {
+	status: "cancelled" | "collision";
+};
+
+export type PendingDeletionResult = {
+	processed: number;
+	remaining: number;
+};
+
+export type TrashUndoResult = {
+	status: "restored" | "collision";
+};
 
 export type FileEntry = {
 	path: string;
@@ -16,6 +50,180 @@ export type DirectoryListing = {
 	files: FileEntry[];
 	folders: FolderEntry[];
 };
+
+export type FolderAuthorityPlacement = {
+	id: string;
+	repoRoot: string;
+	relativePath: string;
+	workspaceId: string;
+	cloudFolderId: string;
+	formerGitFingerprint: string;
+	projection: { scopeKey: string; localPath: string } | null;
+	createdAt: number;
+	updatedAt: number;
+};
+
+export type AuthorityTransferPhase =
+	| "draft"
+	| "validating"
+	| "staging"
+	| "verifying"
+	| "cutting-over"
+	| "needs-attention"
+	| "completed"
+	| "cancelled";
+
+export type AuthorityTransferOperation = {
+	id: string;
+	direction: "git-to-cloud" | "cloud-to-git";
+	intent: "move" | "share" | "export-copy";
+	phase: AuthorityTransferPhase;
+	source:
+		| { kind: "git"; repoRoot: string; relativePath: string }
+		| { kind: "cloud"; workspaceId: string; folderId: string };
+	destination:
+		| { kind: "git"; repoRoot: string; relativePath: string }
+		| {
+				kind: "cloud";
+				workspaceId: string;
+				parentFolderId: string | null;
+		  }
+		| null;
+	manifestSummary: AuthorityManifestSummary | null;
+	manifestHash: string | null;
+	previewFingerprint: string | null;
+	destinationPreviewFingerprint?: string | null;
+	cloudTransferId?: string | null;
+	cloudRootFolderId?: string | null;
+	cutoverToken?: string | null;
+	recoveryPath?: string | null;
+	temporaryPath?: string | null;
+	archiveFingerprint?: string | null;
+	destinationWasEmpty?: boolean;
+	completionFingerprint?: string | null;
+	sourcePlacement?: FolderAuthorityPlacement | null;
+	requestedShares?: AuthorityRequestedShare[];
+	audienceFingerprint?: string | null;
+	lastError: string | null;
+	createdAt: number;
+	updatedAt: number;
+};
+
+export type GitWorkingTreeChange = {
+	path: string;
+	status: string;
+};
+
+export type GitFolderInspection = {
+	sourcePath: string;
+	repoRoot: string;
+	repoName: string;
+	repoRemoteUrl: string | null;
+	relativePath: string;
+	manifest: AuthorityManifest;
+	trackedFileCount: number;
+	workingTreeChanges: GitWorkingTreeChange[];
+	workingTreeChangesTruncated: boolean;
+	previewFingerprint: string;
+	confirmationBlocked: boolean;
+};
+
+export type GitDestinationInspection = {
+	repoRoot: string;
+	repoName: string;
+	repoRemoteUrl: string | null;
+	destinationPath: string;
+	relativePath: string;
+	collision: "empty" | "occupied";
+	destinationExists: boolean;
+	workingTreeChanges: GitWorkingTreeChange[];
+	workingTreeChangesTruncated: boolean;
+	previewFingerprint: string;
+};
+
+export type GitDestinationInspectionInput = {
+	repositoryPath: string;
+	relativePath: string;
+};
+
+export type GitToCloudAuthorityMoveInput = {
+	operationId: string;
+	folderPath: string;
+	workspaceId: string;
+	parentFolderId: string | null;
+	deploymentUrl: string;
+	authToken: string;
+	expectedPreviewFingerprint: string;
+	expectedAudienceFingerprint: string;
+	intent: "move" | "share";
+	requestedShares?: AuthorityRequestedShare[];
+};
+
+export type GitToCloudAuthorityMoveResult =
+	| {
+			status: "completed";
+			cloudFolderId: string;
+			recoveryPath: string;
+	  }
+	| { status: "stale"; inspection: GitFolderInspection }
+	| { status: "needs-attention"; message: string; recoveryPath: string | null };
+
+export type CancelGitToCloudAuthorityMoveInput = {
+	operationId: string;
+	deploymentUrl: string;
+	authToken: string;
+};
+
+export type CloudToGitAuthorityMoveInput = {
+	operationId: string;
+	cloudFolderId: string;
+	repositoryPath: string;
+	relativePath: string;
+	placementId: string | null;
+	deploymentUrl: string;
+	authToken: string;
+	expectedCloudPreviewFingerprint: string;
+	expectedDestinationFingerprint: string;
+	intent: "move" | "export-copy";
+};
+
+export type CloudToGitAuthorityMoveResult =
+	| {
+			status: "completed";
+			repoRoot: string;
+			destinationPath: string;
+			archiveFingerprint: string | null;
+			undoEligible: boolean;
+			cloudArchived: boolean;
+			workingTreeChanges: GitWorkingTreeChange[];
+	  }
+	| {
+			status: "stale";
+			cloudPreviewFingerprint: string;
+			destination: GitDestinationInspection;
+	  }
+	| {
+			status: "needs-attention";
+			message: string;
+			temporaryPath: string | null;
+	  };
+
+export type CancelCloudToGitAuthorityMoveInput = {
+	operationId: string;
+	deploymentUrl: string;
+	authToken: string;
+};
+
+export type UndoCloudToGitAuthorityMoveInput = {
+	operationId: string;
+	deploymentUrl: string;
+	authToken: string;
+};
+
+export type CloudToGitUndoResult =
+	| { status: "restored"; cloudFolderId: string; recoveryPath: string }
+	| { status: "changed" }
+	| { status: "unavailable"; message: string };
 
 export type HtmlAppFileEntry = {
 	name: string;
@@ -65,7 +273,14 @@ export type DesktopUpdateState = {
 
 export type DesktopPlatform = NodeJS.Platform;
 
-export type LiveSyncStatusState = "idle" | "connected" | "syncing" | "error";
+export type LiveSyncStatusState =
+	| "idle"
+	| "verifying"
+	| "connected"
+	| "syncing"
+	| "offline"
+	| "pending-review"
+	| "error";
 
 export type LiveSyncStatus = {
 	state: LiveSyncStatusState;
@@ -87,7 +302,7 @@ export type LiveSyncConnectInput = {
 };
 
 export type SyncedFolderTelemetryEvent = {
-	kind: SyncedFolderEvent["kind"];
+	kind: SyncedFolderEventDetail["kind"];
 	at: number;
 	reason?: "missing-base" | "read-only";
 };
@@ -109,9 +324,192 @@ export type SyncedFolderStatus = {
 	syncRoot: string | null;
 	/** Number of indexed Live Documents in the mirror. */
 	documentCount: number;
+	/** Durable startup blockers awaiting review or recovery. */
+	pendingOperationCount: number;
+	/** Why startup cannot currently verify cloud state and access. */
+	verificationReason: "offline" | "access" | null;
+	/** Last successful cloud-to-disk materialize/reconcile pass. */
+	lastReconcileAt: number | null;
 	lastEventAt: number | null;
 	lastError: string | null;
 	telemetry: SyncedFolderTelemetry;
+};
+
+/** Link a cloud folder to a local git repo working directory (RB3 / D11). */
+export type RepoLinkInput = {
+	folderId: string;
+	folderName: string;
+	workspaceId: string;
+	/** The git repo working directory the user picked. */
+	repoDir: string;
+	/** Optional explicit mount path; defaults to `<repoDir>/<sanitized-name>/`. */
+	mountPath?: string;
+	deploymentUrl: string;
+	/** Convex Auth JWT from the renderer session. */
+	authToken: string;
+};
+
+export type RepoLinkResult = {
+	folderId: string;
+	repoDir: string;
+	mountPath: string;
+	isGitRepo: boolean;
+	/** True when the mount path was appended to `.git/info/exclude`. */
+	excluded: boolean;
+	/** When exclude could not be written, the manual `.gitignore` line to add. */
+	manualGitignoreLine: string | null;
+	repoName: string | null;
+	repoRemoteUrl: string | null;
+	/** True when a `BRAIN.md` was seeded (false when one already existed). */
+	brainSeeded: boolean;
+	documentCount: number;
+};
+
+/** A persisted per-machine repo-link mount (folderId → local root). */
+export type RepoMount = {
+	folderId: string;
+	folderName: string;
+	workspaceId: string;
+	mountPath: string;
+	repoDir: string;
+	repoName: string | null;
+	repoRemoteUrl: string | null;
+	/** Live engine state, present only while the app has reconnected the mount. */
+	status: LiveSyncStatusState | "disconnected";
+	lastReconcileAt: number | null;
+};
+
+export type BlockedRepoMountCleanliness = {
+	state: "blocked";
+	reason: LiveSyncStatusState | "disconnected" | "dirty";
+	message: string;
+};
+
+export type RepoMountCleanliness =
+	| { state: "clean" }
+	| BlockedRepoMountCleanliness;
+
+export type RepoMountStopResult =
+	| { status: "stopped"; mountPath: string; keptFiles: boolean }
+	| { status: "blocked"; cleanliness: BlockedRepoMountCleanliness };
+
+export type RepoMountRelocateInput = {
+	folderId: string;
+	mountPath: string;
+	deploymentUrl: string;
+	authToken: string;
+};
+
+export type RepoMountRelocateResult =
+	| { status: "relocated"; mount: RepoMount }
+	| { status: "blocked"; cleanliness: BlockedRepoMountCleanliness };
+
+export type DesktopAuthState = {
+	deploymentUrl: string;
+	email?: string;
+	name?: string;
+} | null;
+
+export type DesktopAuthHandoffEvent = {
+	deploymentUrl: string;
+	code: string;
+};
+
+export type RepoLinkLinkedEvent = {
+	folderId: string;
+	folderName: string;
+	mountPath: string;
+	repoDir: string;
+};
+
+export type RepoLinkUndoResult = {
+	folderId: string;
+	mountPath: string;
+	removedFiles: boolean;
+};
+
+/** Reconnect all persisted repo mounts after app launch / sign-in. */
+export type RepoMountReconnectInput = {
+	deploymentUrl: string;
+	authToken: string;
+};
+
+export type DirectProjectionScope = Exclude<
+	ProjectionScope,
+	{ kind: "all-accessible" }
+>;
+
+export type LocalAvailabilityRecord = {
+	scopeKey: string;
+	scope: ProjectionScope;
+	displayName: string;
+	localRoot: string;
+	association: "standalone" | "repo" | "legacy";
+	incompatible: boolean;
+	repoRoot: string | null;
+	repoName: string | null;
+	repoRemoteUrl: string | null;
+	gitExclusion:
+		| { status: "excluded"; pattern: string }
+		| { status: "manual"; pattern: string }
+		| { status: "not-applicable" };
+	state: LiveSyncStatusState | "disconnected";
+	lastSyncAt: number | null;
+	pendingOperationCount: number;
+	recoveryCount: number;
+	createdAt: number | null;
+	updatedAt: number | null;
+	lastConnectedAt: number | null;
+};
+
+type LocalAvailabilityCreateBase = {
+	displayName: string;
+	localRoot: string;
+	deploymentUrl: string;
+	authToken: string;
+};
+
+export type LocalAvailabilityCreateInput =
+	| (LocalAvailabilityCreateBase & {
+			scope: DirectProjectionScope;
+			association: "standalone";
+	  })
+	| (LocalAvailabilityCreateBase & {
+			scope: Extract<DirectProjectionScope, { kind: "folder" }>;
+			association: "repo";
+			repoRoot: string;
+	  });
+
+export type LocalAvailabilityRelocateInput = {
+	scopeKey: string;
+	localRoot: string;
+	deploymentUrl: string;
+	authToken: string;
+};
+
+export type LocalAvailabilityRelocateResult =
+	| { status: "relocated"; availability: LocalAvailabilityRecord }
+	| { status: "blocked"; cleanliness: BlockedRepoMountCleanliness };
+
+export type LocalAvailabilityStopInput = {
+	scopeKey: string;
+	keepFiles: boolean;
+	deploymentUrl: string;
+	authToken: string;
+};
+
+export type LocalAvailabilityStopResult =
+	| { status: "stopped"; localRoot: string; keptFiles: boolean }
+	| { status: "blocked"; cleanliness: BlockedRepoMountCleanliness };
+
+export type LocalAvailabilityReconnectInput = {
+	deploymentUrl: string;
+	authToken: string;
+};
+
+export type LocalAvailabilityProgressEvent = {
+	scopeKey: string;
+	phase: "verifying" | "materializing";
 };
 
 export type SyncedFolderConnectInput = {
@@ -137,17 +535,27 @@ export type SyncedFolderImportInput = {
 };
 
 /** Pushed to the renderer over `desktop:live-sync:event` as the mirror changes. */
-export type SyncedFolderEvent =
+export type ProjectionRootScope = {
+	scopeKey: string;
+	kind: "all-accessible" | "workspace" | "folder";
+	workspaceId: string | null;
+	folderId: string | null;
+	localRoot: string | null;
+};
+
+export type SyncedFolderEventDetail =
 	| { kind: "reconciled" }
 	| { kind: "renamed" }
 	| { kind: "moved" }
+	| { kind: "move-review-required"; operationId: string }
+	| { kind: "deletion-review-required" }
+	| { kind: "trashed-local"; operationId: string }
+	| { kind: "removed-remote-trash" }
 	| { kind: "created" }
-	/** A local `unlink` (watcher-origin) soft-deleted the cloud document (§6 case 1). */
-	| { kind: "removed-local" }
 	/**
 	 * The user lost access to a doc that still exists in the cloud (materialize-
 	 * origin); the local file was moved to `.hubble/trash/`, the cloud doc was
-	 * left untouched (§6 case 1). Direction-aware counterpart of `removed-local`.
+	 * left untouched (§6 case 1).
 	 */
 	| { kind: "removed-access" }
 	/** Reconcile could not be safely scoped; the on-disk edit was backstopped (§6 case 3). */
@@ -155,6 +563,10 @@ export type SyncedFolderEvent =
 	/** A change to a read-only doc was rejected; the local edit was backstopped (§3). */
 	| { kind: "read-only-rejected" }
 	| { kind: "error" };
+
+export type SyncedFolderEvent = SyncedFolderEventDetail & {
+	scope: ProjectionRootScope;
+};
 
 export type LiveSyncReconcileInput = {
 	documentId: string;
@@ -174,6 +586,35 @@ export type DesktopApi = {
 	platform: DesktopPlatform;
 	homeDir: string;
 	listDirectory(path: string): Promise<DirectoryListing>;
+	listFolderAuthorityPlacements(): Promise<FolderAuthorityPlacement[]>;
+	listAuthorityTransferOperations(): Promise<AuthorityTransferOperation[]>;
+	saveAuthorityTransferOperation(
+		operation: AuthorityTransferOperation,
+	): Promise<void>;
+	cancelAuthorityTransferOperation(
+		operationId: string,
+	): Promise<AuthorityTransferOperation>;
+	inspectGitAuthorityFolder(path: string): Promise<GitFolderInspection>;
+	inspectGitAuthorityDestination(
+		input: GitDestinationInspectionInput,
+	): Promise<GitDestinationInspection>;
+	moveGitFolderToCloud(
+		input: GitToCloudAuthorityMoveInput,
+	): Promise<GitToCloudAuthorityMoveResult>;
+	cancelGitToCloudAuthorityMove(
+		input: CancelGitToCloudAuthorityMoveInput,
+	): Promise<AuthorityTransferOperation>;
+	moveCloudFolderToGit(
+		input: CloudToGitAuthorityMoveInput,
+	): Promise<CloudToGitAuthorityMoveResult>;
+	cancelCloudToGitAuthorityMove(
+		input: CancelCloudToGitAuthorityMoveInput,
+	): Promise<AuthorityTransferOperation>;
+	getCloudToGitUndoEligibility(operationId: string): Promise<boolean>;
+	undoCloudToGitAuthorityMove(
+		input: UndoCloudToGitAuthorityMoveInput,
+	): Promise<CloudToGitUndoResult>;
+	onFolderAuthorityChanged(callback: () => void): Unsubscribe;
 	listHtmlAppFiles(
 		workspacePath: string,
 		glob: string,
@@ -184,6 +625,7 @@ export type DesktopApi = {
 		config: WorkspaceConfig,
 	): Promise<void>;
 	readFileText(path: string): Promise<string>;
+	pathForDroppedFile(file: File): Promise<string>;
 	writeFileText(path: string, content: string): Promise<void>;
 	renameFile(fromPath: string, toPath: string): Promise<void>;
 	pathExists(path: string): Promise<boolean>;
@@ -195,7 +637,11 @@ export type DesktopApi = {
 	writeBinaryFile(path: string, bytes: number[]): Promise<void>;
 	openFilePicker(options: { defaultPath?: string }): Promise<string | null>;
 	openFolderPicker(): Promise<string | null>;
-	createFolderPicker(): Promise<string | null>;
+	createFolderPicker(options?: {
+		defaultPath?: string;
+		title?: string;
+		create?: boolean;
+	}): Promise<string | null>;
 	saveMarkdownFilePicker(options: {
 		defaultPath?: string;
 	}): Promise<string | null>;
@@ -249,6 +695,66 @@ export type DesktopApi = {
 	): Promise<LiveDocumentImportResult>;
 	disconnectSyncedFolder(): Promise<SyncedFolderStatus>;
 	getSyncedFolderStatus(): Promise<SyncedFolderStatus>;
+	listPendingProjectionOperations(): Promise<PendingProjectionOperation[]>;
+	approvePendingProjectionMove(
+		operationId: string,
+	): Promise<PendingMoveApprovalResult>;
+	cancelPendingProjectionMove(
+		operationId: string,
+	): Promise<PendingMoveCancellationResult>;
+	approvePendingProjectionDeletion(
+		operationId: string,
+	): Promise<PendingDeletionResult>;
+	cancelPendingProjectionDeletion(
+		operationId: string,
+	): Promise<PendingDeletionResult>;
+	undoTrashedProjectionDocument(operationId: string): Promise<TrashUndoResult>;
+	dismissProjectionTrashUndo(
+		operationId: string,
+	): Promise<{ status: "dismissed" }>;
+	listLocalAvailability(): Promise<LocalAvailabilityRecord[]>;
+	createLocalAvailability(
+		input: LocalAvailabilityCreateInput,
+	): Promise<LocalAvailabilityRecord>;
+	inspectLocalAvailability(scopeKey: string): Promise<RepoMountCleanliness>;
+	relocateLocalAvailability(
+		input: LocalAvailabilityRelocateInput,
+	): Promise<LocalAvailabilityRelocateResult>;
+	stopLocalAvailability(
+		input: LocalAvailabilityStopInput,
+	): Promise<LocalAvailabilityStopResult>;
+	reconnectLocalAvailability(
+		input: LocalAvailabilityReconnectInput,
+	): Promise<LocalAvailabilityRecord[]>;
+	onLocalAvailabilityProgress(
+		callback: (event: LocalAvailabilityProgressEvent) => void,
+	): Unsubscribe;
+	/**
+	 * Link a cloud folder to a local git repo (RB3 / D11): materialize the
+	 * folder's subtree at the mount path, register a per-mount sync engine, append
+	 * the mount to `.git/info/exclude`, persist the per-machine mapping, publish
+	 * repo display metadata to the cloud, and seed `BRAIN.md` (RB5).
+	 */
+	linkRepoFolder(input: RepoLinkInput): Promise<RepoLinkResult>;
+	resolveGitRepoRoot(selectedDir: string): Promise<string | null>;
+	/** Undo a socket-created mount: unlink, then remove files only if clean. */
+	undoRepoLink(input: { folderId: string }): Promise<RepoLinkUndoResult>;
+	/** Deregister a repo mount and leave the materialized files on disk. */
+	unlinkRepoFolder(folderId: string): Promise<void>;
+	inspectRepoMount(folderId: string): Promise<RepoMountCleanliness>;
+	stopRepoMount(input: {
+		folderId: string;
+		keepFiles: boolean;
+		deploymentUrl: string;
+		authToken: string;
+	}): Promise<RepoMountStopResult>;
+	relocateRepoMount(
+		input: RepoMountRelocateInput,
+	): Promise<RepoMountRelocateResult>;
+	/** All persisted repo mounts on this machine, with live engine status. */
+	listRepoMounts(): Promise<RepoMount[]>;
+	/** Reconnect persisted mounts (post sign-in) so their engines resume syncing. */
+	reconnectRepoMounts(input: RepoMountReconnectInput): Promise<RepoMount[]>;
 	/**
 	 * True when `absPath` is a synced Live Document (present in the main-process
 	 * synced-folder reverse index). The renderer consults this to defer entirely
@@ -260,6 +766,11 @@ export type DesktopApi = {
 	onSyncedFolderEvent(
 		callback: (event: SyncedFolderEvent) => void,
 	): Unsubscribe;
+	setAuthState(state: DesktopAuthState): Promise<void>;
+	onAuthHandoff(
+		callback: (event: DesktopAuthHandoffEvent) => void,
+	): Unsubscribe;
+	onRepoLinkLinked(callback: (event: RepoLinkLinkedEvent) => void): Unsubscribe;
 	getUpdateState(): Promise<DesktopUpdateState>;
 	getFullScreen(): Promise<boolean>;
 	checkForUpdates(): Promise<void>;

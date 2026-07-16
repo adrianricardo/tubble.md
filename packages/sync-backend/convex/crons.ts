@@ -12,4 +12,11 @@ crons.cron(
 	{ gracePeriodMs: ORPHAN_ASSET_GRACE_PERIOD_MS },
 );
 
+crons.interval(
+	"cleanup expired device auth requests",
+	{ minutes: 10 },
+	internal.deviceAuth.cleanupExpired,
+	{},
+);
+
 export default crons;

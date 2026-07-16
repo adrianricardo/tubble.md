@@ -27,10 +27,12 @@ import {
 	isSyncedLiveDocument,
 	resolveExternalFileChange,
 } from "../syncedDocumentGuard";
+import type { CloudContext } from "./persistence";
 import {
 	applyFileAction,
 	appStore,
 	cleanFileState,
+	contentContextStore,
 	emptyDoc,
 	type FileEntry,
 	type FolderEntry,
@@ -47,8 +49,12 @@ import {
 } from "./state";
 
 const REFRESH_FILES_DEBOUNCE_MS = 250;
+const SELF_SAVE_TTL_MS = 5000;
 const missingPathErrorPattern = /\bENOENT\b|\bENOTDIR\b/;
 let refreshFilesTimer: ReturnType<typeof setTimeout> | null = null;
+// The watcher can report save A after the editor has advanced to draft B. Keep
+// those known disk bytes from being mistaken for someone else's edit.
+const selfSaves = new Map<string, Map<string, number>>();
 
 type SidebarMoveItem =
 	| { kind: "file"; path: string }
@@ -101,6 +107,38 @@ function handleFileError(err: unknown) {
 	const message = errorMessage(err);
 	refreshFilesAfterMissingPath(message);
 	return message;
+}
+
+function pruneSelfSaves(path: string, now = Date.now()) {
+	const contents = selfSaves.get(path);
+	if (!contents) return;
+	for (const [content, expiresAt] of contents) {
+		if (expiresAt <= now) contents.delete(content);
+	}
+	if (contents.size === 0) selfSaves.delete(path);
+}
+
+function rememberSelfSave(path: string, content: string) {
+	pruneSelfSaves(path);
+	const contents = selfSaves.get(path) ?? new Map<string, number>();
+	contents.set(content, Date.now() + SELF_SAVE_TTL_MS);
+	selfSaves.set(path, contents);
+}
+
+function isSelfSave(path: string, content: string) {
+	pruneSelfSaves(path);
+	return selfSaves.get(path)?.has(content) ?? false;
+}
+
+function selfSaveState(editorContent: string, diskContent: string) {
+	return editorContent === diskContent
+		? cleanFileState(diskContent)
+		: {
+				diskContent,
+				externalChange: { kind: "none" as const },
+				status: "ready" as const,
+				error: null,
+			};
 }
 
 function pathStartsWithFolder(filePath: string, folderPath: string): boolean {
@@ -295,6 +333,32 @@ export function setWorkspaceSwitcherOpen(isOpen: boolean) {
 	switcherOpenStore.set(isOpen);
 }
 
+export function setSelectedSpace(spaceId: string) {
+	setCloudContext({ kind: "workspace", workspaceId: spaceId });
+}
+
+export function setCloudContext(context: CloudContext) {
+	appStore.set((state) => ({
+		...state,
+		cloud: { context },
+		content: { context: { kind: "cloud" } },
+	}));
+}
+
+export function activateCloudContent() {
+	appStore.set((state) => ({
+		...state,
+		content: { context: { kind: "cloud" } },
+		document: emptyDoc(state.document.lastOpenedPath),
+	}));
+	switcherOpenStore.set(false);
+}
+
+export function activateGitContent() {
+	contentContextStore.set({ kind: "git" });
+	switcherOpenStore.set(false);
+}
+
 export function setSidebarOpen(isOpen: boolean) {
 	sidebarOpenStore.set(isOpen);
 }
@@ -334,14 +398,20 @@ export async function openWorkspace(path?: string) {
 		nextPath = selected;
 	}
 
-	workspaceStore.set((state) => {
-		const filtered = state.recentWorkspaces.filter((p) => p !== nextPath);
+	appStore.set((state) => {
+		const filtered = state.workspace.recentWorkspaces.filter(
+			(candidate) => candidate !== nextPath,
+		);
 		return {
 			...state,
-			workspacePath: nextPath,
-			recentWorkspaces: [nextPath, ...filtered].slice(0, MAX_RECENT),
-			files: [],
-			pinnedNotes: [],
+			workspace: {
+				...state.workspace,
+				workspacePath: nextPath,
+				recentWorkspaces: [nextPath, ...filtered].slice(0, MAX_RECENT),
+				files: [],
+				pinnedNotes: [],
+			},
+			content: { context: { kind: "git" } },
 		};
 	});
 	switcherOpenStore.set(false);
@@ -397,6 +467,16 @@ export async function savePathContent(
 			const currentDiskContent = await desktopApi.readFileText(path);
 			const nextCurrent = viewerStore.get();
 			if (nextCurrent.currentPath !== path) return;
+			if (isSelfSave(path, currentDiskContent)) {
+				viewerStore.set((state) => {
+					if (state.currentPath !== path) return state;
+					return {
+						...state,
+						...selfSaveState(state.content, currentDiskContent),
+					};
+				});
+				return;
+			}
 			const action = classifyFileChange({
 				editorContent: nextCurrent.content,
 				baseline: getBaseline(nextCurrent),
@@ -424,7 +504,9 @@ export async function savePathContent(
 	}
 
 	try {
+		rememberSelfSave(path, content);
 		await desktopApi.writeFileText(path, content);
+		rememberSelfSave(path, content);
 		touchFile(path);
 		viewerStore.set((state) => {
 			if (state.currentPath !== path) return state;
@@ -772,6 +854,12 @@ export async function handleExternalFileChange(
 	const synced = await isSyncedLiveDocument(path, desktopApi);
 	viewerStore.set((state) => {
 		if (state.currentPath !== path) return state;
+		if (isSelfSave(path, nextDiskContent)) {
+			return {
+				...state,
+				...selfSaveState(state.content, nextDiskContent),
+			};
+		}
 		const action = resolveExternalFileChange({
 			isSyncedLiveDocument: synced,
 			editorContent: state.content,

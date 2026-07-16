@@ -1,17 +1,33 @@
 # Changelog
 
-All notable user-facing changes to Hubble. Entries are written as work lands
+All notable user-facing changes to Tubble. Entries are written as work lands
 (see the `changelog` skill), then harvested into the desktop release notes.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
+### Fixed
+- Signed-in dashboard and deployment errors now use the Tubble name
+- Local availability setup rejects occupied folders before writing Hubble files
+- Documents created from a folder row now receive keyboard focus in the cloud tree
+- Share-dialog role and link-access menus now open above the dialog
+
 ### Added
+- Account creation explains the best-effort hosted-trial limits before signup
+- Signup shows when daily capacity is reached, and operators can pause new accounts without blocking sign-in
+- `hubble ensure-desktop` can install, open, and sign in the verified macOS development app for live mounts
+- `hubble status --json` reports per-root projection health, queued edits, pending review, and recovery counts for agents and local tooling
+- Synced cloud folders now review consequential moves and provide durable recovery or Undo when local files are deleted
+- Cloud sidebar rows now offer permission-aware rename, safe move, sharing, Trash/Undo, and local availability actions
 
 ### Changed
+- Public download links now label existing macOS builds as unsigned development builds until the signed launch release is available
+- Hubble now rejects overlapping local or cloud folder projections before changing files, repository settings, or cloud metadata
 
 ### Fixed
+- Choosing a folder inside a Git repository now resolves to the repository root, and repo-link mount suggestions refresh when the repository or cloud folder changes
+- Move, deletion, and Trash reviews now open for repo-linked folder projections as well as the whole-workspace mirror
 
 ## [0.1.13] - 2026-06-24
 

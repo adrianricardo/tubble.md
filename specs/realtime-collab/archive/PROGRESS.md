@@ -196,7 +196,60 @@ landed locally 2026-06-29**: `OPERATIONS.md` now records the vendor-neutral
 support workflow, escalation thresholds, safe user actions, and future alert
 wiring points for the local synced-folder telemetry.
 
-**Current pickup state:** RD1-RD12 are landed locally. There is no unchecked
+**Current pickup state:** V1 release execution is continuing from
+`V1-EXECUTION.plan.md`. **P7 local launch gate landed locally 2026-06-30**:
+signup is capped at 100 new accounts/day through a Convex-backed UTC-day counter,
+`VITE_HUBBLE_REALTIME_COLLAB` and the web/desktop flag modules are deleted, and
+Live Documents plus desktop Cloud Sync are now default product surfaces when
+`VITE_CONVEX_URL` is configured. Local checks are green. Remaining P7 gates are
+operator/manual: C1/C2 cross-surface QA, D3 production Convex deploy, D4 web
+deploy, D5 external monitoring sink, and release operations.
+
+**Demo follow-up noted 2026-06-30:** share dialog still needs a Google-Docs-style
+"visible to anyone with the link" state plus one-click copy link. A same-day
+frontend fix also changed unauthorized Live Document opens from a Convex exception
+page into an access-denied screen with guidance to share by account or enable link
+access.
+
+**Desktop IA follow-up planned 2026-07-01:** `DESKTOP-CLOUD-FIRST-IA.plan.md`
+captures the phased route for making desktop cloud-first: Live Documents as the
+primary object, with local folders optional for manual file editing, backup, and
+agent/tool access. **Implemented locally 2026-07-01:** desktop now shows a
+cloud-first Live Documents home/sidebar section when Convex is configured, keeps
+local folders as optional synced/local Markdown support, and makes the toolbar
+plus Cmd/Ctrl+N create Live Documents for signed-in cloud users while preserving
+local Markdown creation elsewhere. Verified focused Biome and `pnpm
+build:desktop`; Electron CDP smoke confirmed the primary create action and sidebar
+hierarchy in the running desktop renderer.
+
+**Desktop native Live Documents follow-up planned 2026-07-01:**
+`DESKTOP-NATIVE-LIVE-DOCUMENTS.plan.md` captures the next phased route: desktop
+should open and edit Live Documents directly without requiring a synced folder,
+while synced folders remain optional projection infrastructure for external
+editors, backup, grep, and agents. The plan explicitly requires desktop to join
+the same `document:<id>` presence channel as web so cross-surface collaborators see
+shared live presence and remote cursors.
+
+**Implemented locally 2026-07-01:** desktop now has a native Live Document editor
+route that opens from sidebar rows, home recents, toolbar create, sidebar create,
+and Cmd/Ctrl+N without requiring a synced folder. The desktop editor uses
+`useTiptapSync(api.prosemirror, "document:<id>")`, publishes selection heartbeats
+through `api.pocIdentity.heartbeat`, subscribes to `api.pocIdentity.listActive`,
+and renders shared remote cursors through the existing shared editor. Synced
+folders remain optional local projection infrastructure. Verified focused Biome,
+`pnpm --filter @hubble.md/desktop build`, and `pnpm build:desktop`; manual
+cross-surface cursor smoke remains to run with signed-in web + desktop sessions.
+
+**User/session + data reset follow-up landed locally 2026-07-01:** web and desktop
+now show the signed-in account in the main toolbar with a compact avatar/name/email
+badge. The web dashboard no longer auto-creates a "Welcome to Hubble" document so
+an empty cloud workspace can stay empty. Hosted dev deployment `strong-setter-709`
+was exported to `/tmp/hubble-convex-reset/strong-setter-709-before-reset.zip`,
+then reset: Live Documents, legacy files/assets, shares, folders, comments,
+revisions, notifications, presence, and ProseMirror component state were cleared;
+empty personal spaces were recreated for existing users.
+
+Prior RD pickup state: RD1-RD12 are landed locally. There is no unchecked
 ready-to-deploy slice left in this plan. The remaining named follow-ups are
 operator/product-choice gated: external monitoring sink selection, packaged MCP
 integration publication, production notarization/release tag, production backfill
@@ -926,6 +979,94 @@ presence cursors. **Resolves the `prosemirror-sync` decision gate (TECH.md).**
 
 Newest first. One line per meaningful change: `YYYY-MM-DD — who — what`.
 
+- 2026-07-01 — Codex — Added a shared toolbar user badge and wired it into web
+  and desktop so the active account is visible from both surfaces. Removed the
+  web dashboard's automatic "Welcome to Hubble" document creation so fresh
+  workspaces can remain empty. Reset hosted dev deployment `strong-setter-709`
+  after exporting a snapshot backup: cleared Live Documents, connected workspace
+  content, shares, comments, revisions, presence, legacy sync rows, and
+  ProseMirror component state; recreated empty personal spaces for existing users.
+- 2026-07-01 — Codex — Implemented the desktop cloud-first IA plan: added
+  Live Documents home/sidebar hierarchy in Convex-enabled desktop builds, kept
+  local folders as optional synced/local Markdown support, made toolbar/Cmd+N
+  create Live Documents for signed-in cloud users, and updated desktop copy. Verified
+  focused Biome, `pnpm build:desktop`, and an Electron CDP smoke of the primary
+  create action/sidebar hierarchy.
+- 2026-07-01 — Codex — Added `DESKTOP-CLOUD-FIRST-IA.plan.md`, a phased
+  desktop IA plan that makes Live Documents the primary desktop object and treats
+  local folders as optional support for external editors and agents.
+- 2026-07-01 — Adrian/Codex — Completed a v1 demo UX pass on
+  `strong-setter-709`: signed-in two-profile web flow, workspace-member copied URL
+  access, desktop Cloud Sync reconnect to
+  `/Users/adriantavares/Hubble-A-test/jul1test/Untitled`, disk -> cloud ->
+  disk round trip on `Desktop Test/UX Smoke 2026-07-01.md`, clean synced-folder
+  telemetry, no conflict/backstop files, and duplicate backend check still at
+  `activeMatches: 0` / `deletedMatches: 188`. Detailed log recorded in
+  `TEST-RUNBOOK.md`.
+- 2026-06-30 — Codex — Investigated v1 demo duplicate Live Documents and
+  member-link access failures on `strong-setter-709`. Found real backend rows
+  created by the desktop synced-folder import path, not a sidebar render duplicate:
+  materialization ignored stable document paths while watcher-created imports
+  stored sync-root-relative paths. Fixed synced-folder materialization to prefer
+  stable workspace-relative document paths, normalize legacy duplicated workspace
+  prefixes, and import new local files without the top-level workspace directory.
+  Also fixed document permissions so regular workspace members can open documents
+  in that workspace from a copied URL. Added regression coverage in sync,
+  desktop, and sync-backend tests.
+- 2026-06-30 — Codex — Added the v1 demo TODO for explicit "visible to anyone
+  with the link" plus copy-link sharing UI, and guarded Live Document routes with
+  an access-error boundary so unresolved/unauthorized shared links show product
+  copy instead of crashing on `documents.getWithMarkdown`.
+- 2026-06-30 — Codex — Continued V1 release P7 local launch gate: added a
+  Convex-backed UTC-day signup counter capped at 100 new accounts/day with focused
+  backend tests and web/desktop signup copy; deleted `VITE_HUBBLE_REALTIME_COLLAB`
+  plus the web/desktop flag modules so the dashboard, Live Document route/sidebar,
+  member management, and desktop Cloud Sync settings are default product surfaces
+  when `VITE_CONVEX_URL` is configured. Verified codegen, sync-backend tests (27),
+  web typecheck/build, repo typecheck, desktop build, touched-file Biome, and Vite
+  HTTP 200 for `?test=1`; browser visual smoke remains blocked by the in-app
+  Browser setup error. Remaining P7 gates are operator/manual: C1/C2 QA, D3/D4
+  deploy, D5 external ops sink, and release ops.
+- 2026-06-30 — Codex — Continued V1 release P6 hardening: added permission
+  regression coverage for viewer/commenter write denial, comment boundaries,
+  public viewer links, deleted-document trash visibility, and oversized Live
+  Document import copy; changed trash listing to filter by deleted-document roles
+  without first requiring workspace membership; normalized auth/session and 256 KiB
+  cap errors into user-facing web copy; reset signed-out stale workspace routes to
+  `/` before the next login to avoid multi-account route bleed. Verified codegen,
+  sync-backend tests (25), web typecheck/build, repo typecheck, desktop build,
+  touched-file Biome, and Vite HTTP 200 for `?test=1`; browser visual smoke remains
+  blocked by the in-app browser setup error.
+- 2026-06-30 — Codex — Continued V1 release P5 completeness: normal in-app
+  editing now autosaves materialized History revisions through `markEdited` with a
+  stale guard; comment composers/replies now have a document-scoped @mention
+  picker backed by accessible workspace members and direct doc shares; workspace
+  member management is available from the workspace toolbar for invite, role
+  changes, removal, and invite revocation; empty first-run private workspaces now
+  auto-create and open a "Welcome to Hubble" Live Document. Added focused backend
+  tests for autosave throttling and mention candidates. Verified codegen,
+  sync-backend tests, web typecheck/build, repo typecheck, desktop build,
+  touched-file Biome, and Vite HTTP 200 for `?test=1`; browser visual smoke remains
+  blocked by the in-app browser tool initialization error.
+- 2026-06-30 — Codex — Continued V1 release P4 production presence: authenticated
+  presence heartbeats now derive the viewer identity server-side, authorize Live
+  Document presence through document roles and POC presence through workspace
+  membership, return stable collaborator colors, and reject anonymous spoofing for
+  owned documents. The web editor now publishes signed-in cursor heartbeats,
+  filters the local viewer through `viewer.me`, and shows live collaborators in
+  the Live Document header while preserving `?test=1` identity bootstrap. Added
+  focused presence regression tests. Verified codegen, sync-backend tests, web
+  typecheck/build, repo typecheck, desktop build, and touched-file Biome; browser
+  visual smoke remains blocked by the in-app browser tool initialization error.
+- 2026-06-30 — Codex — Continued V1 release P3 dashboard: added
+  `documents.dashboard` and `documents.searchAll` aggregate queries spanning
+  accessible personal/team workspaces plus direct document shares; added the
+  authenticated Home dashboard with Recents, Private, Teams, Shared with me,
+  global search, and primary Live Document creation. Added a backend dashboard
+  aggregation regression test and removed an unused `members.ts` validator that
+  blocked `pnpm build:desktop`. Verified codegen, backend tests, web
+  typecheck/build, repo typecheck, desktop build, and touched-file Biome; browser
+  visual smoke remains owed because the in-app browser tool failed to initialize.
 - 2026-06-29 — Codex — Fixed a desktop Cloud Sync connection blocker found during
   the two-machine smoke setup: authenticated `sync.listWorkspaces` results now
   exclude legacy anonymous workspaces that downstream workspace-member checks

@@ -16,6 +16,7 @@ import MingcuteListCheckLine from "~icons/mingcute/list-check-line";
 import MingcuteListOrderedLine from "~icons/mingcute/list-ordered-line";
 import MingcuteQuoteLeftLine from "~icons/mingcute/quote-left-line";
 import MingcuteStrikethroughLine from "~icons/mingcute/strikethrough-line";
+import MingcuteTableLine from "~icons/mingcute/table-line";
 import MingcuteTextLine from "~icons/mingcute/text-line";
 import { cn } from "../lib/utils";
 import { useCommandMenuPosition } from "./commandMenuPosition";
@@ -102,6 +103,13 @@ const SLASH_COMMANDS: SlashCommand[] = [
 		description: "Separate sections",
 		aliases: ["hr", "horizontal", "rule", "separator", "---"],
 		icon: MingcuteBorderHorizontalLine,
+	},
+	{
+		kind: "table",
+		title: "Table",
+		description: "Insert a table",
+		aliases: ["grid", "columns", "rows"],
+		icon: MingcuteTableLine,
 	},
 	{
 		kind: "strike",

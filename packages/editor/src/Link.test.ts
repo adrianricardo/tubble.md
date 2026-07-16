@@ -15,8 +15,17 @@ const schema = new Schema({
 		text: { group: "inline" },
 	},
 	marks: {
+		strong: {
+			parseDOM: [{ tag: "strong" }],
+			toDOM: () => ["strong", 0],
+		},
 		link: {
-			attrs: { href: {} },
+			attrs: {
+				href: {},
+				kind: { default: "url" },
+				target: { default: null },
+				markdownStyle: { default: null },
+			},
 			inclusive: true,
 			parseDOM: [{ tag: "a[href]" }],
 			toDOM: () => ["a", 0],
@@ -45,5 +54,66 @@ describe("getActiveLinkRange", () => {
 			kind: "url",
 			target: null,
 		});
+	});
+
+	it("does not merge adjacent links with different identities", () => {
+		const doc = schema.node("doc", null, [
+			schema.node("paragraph", null, [
+				schema.text("bare", [
+					schema.marks.link.create({
+						href: "https://example.com",
+						markdownStyle: "bare",
+					}),
+				]),
+				schema.text("autolink", [
+					schema.marks.link.create({
+						href: "https://example.com",
+						markdownStyle: "autolink",
+					}),
+				]),
+				schema.text("other", [
+					schema.marks.link.create({ href: "https://other.example" }),
+				]),
+			]),
+		]);
+		const state = EditorState.create({
+			schema,
+			doc,
+			selection: TextSelection.create(doc, 1),
+		});
+
+		expect(getActiveLinkRange(state)).toEqual({
+			from: 1,
+			to: 5,
+			href: "https://example.com",
+			kind: "url",
+			target: null,
+			markdownStyle: "bare",
+		});
+	});
+
+	it("merges adjacent text nodes with the same complete link identity", () => {
+		const attrs = {
+			href: "Notes/Project.md",
+			kind: "wiki",
+			target: "Notes/Project.md",
+			markdownStyle: null,
+		};
+		const doc = schema.node("doc", null, [
+			schema.node("paragraph", null, [
+				schema.text("Project", [schema.marks.link.create(attrs)]),
+				schema.text(" note", [
+					schema.marks.link.create(attrs),
+					schema.marks.strong.create(),
+				]),
+			]),
+		]);
+		const state = EditorState.create({
+			schema,
+			doc,
+			selection: TextSelection.create(doc, 1),
+		});
+
+		expect(getActiveLinkRange(state)).toMatchObject({ from: 1, to: 13 });
 	});
 });

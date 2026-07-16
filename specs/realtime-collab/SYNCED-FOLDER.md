@@ -1,5 +1,13 @@
 # Synced Folder — On-Disk Mirror Design (Stage 6, Decision B / Track C)
 
+> **Historical implementation foundation (2026-07-11):** The target desktop behavior
+> is now `/specs/desktop-cloud-workspace/PRODUCT.md`, with a commit-pinned migration plan
+> in its sibling `TECH.md`. Do not treat this document's single global sync root,
+> app-running assumptions, immediate delete behavior, or parallel local-authority modes
+> as current product intent. Reuse its reconcile primitives only after the new plan's
+> startup-drift and operation-safety gates are satisfied. ADR-0010 records the
+> superseding authority model.
+
 Implementation-ready design for the **designated synced folder** model: a single
 user-chosen sync root (e.g. `~/Hubble`) that is a managed, Drive-for-Desktop-style
 mirror of the user's cloud Live-Document membership. **Design only — no production
@@ -345,13 +353,17 @@ by the guardrails above.
    two signals are kept strictly separate.
 
 2. **Deletion / trash mapping.** Cloud trash (`documents.listTrash`,
-   `folders.listTrash`) docs are **not** materialized (they're already filtered out
-   of `listWithMarkdown` by `deletedAt`), so trashing in the cloud simply makes the
-   local file leave the desired set → removed to `.hubble/trash/`. **Restore**
-   (`documents.restoreRemoved` L1403 / `folders.restoreRemoved`) re-adds it to the
-   set → next materialize recreates the file. A **local delete** maps to
-   `documents.remove`; a v1 simplification is to keep local deletes one-way
-   (cloud-soft-delete) and rely on cloud trash UI for restore.
+   `folders.listTrash`) docs are **not** materialized (they're filtered out by
+   `deletedAt`). The materializer distinguishes cloud Trash from access loss:
+   cloud Trash removes a clean managed copy, while access loss keeps a backstop in
+   `.hubble/trash/`. **Restore** (`documents.restoreRemoved` /
+   `folders.restoreRemoved`) re-adds the document to the desired set; the next
+   materialize recreates it after a no-write collision preflight. A **local
+   delete** persists a stable device-local operation before calling
+   `documents.remove`, then exposes durable Undo through the desktop and cloud
+   Trash. Offline, bulk, read-only, or unavailable-root deletions remain review
+   operations without cloud mutation. Approved batches are capped at 25 documents
+   per coordinator call.
 
 3. **`*.local-edit-<ts>` backstop placement.** `reconcileProjectionFile` returns
    `{ status: "backstop", reason }` for `missing-base` / `read-only`; the

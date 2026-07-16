@@ -1,5 +1,11 @@
 # Desktop sidebar index is ephemeral navigation state
 
+> **Legacy-surface note (2026-07-11):** This ADR still explains the current local
+> filesystem sidebar. The target desktop IA replaces that surface with a cloud-ID-based
+> folder/document tree; see `/specs/desktop-cloud-workspace/PRODUCT.md`. Retain the
+> discovery constraints only where they remain useful for import or unmanaged-file
+> selection, and re-evaluate this ADR when the migration lands.
+
 Opening a large repo root in Hubble Desktop can make the app unresponsive if the app recursively watches every directory in the open folder. The sidebar file tree is useful navigation state, but it is not the source of truth for which files can be viewed.
 
 We choose to treat the desktop sidebar file list as an ephemeral, refreshable snapshot. Electron main owns one-shot markdown discovery for the current workspace. It respects `.gitignore` and `.ignore`, and always prunes known high-cost folders such as `.git/`, `dist/`, and `node_modules/`.

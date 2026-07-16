@@ -90,6 +90,57 @@ describe("desktop savePathContent", () => {
 		expect(viewerStore.get().externalChange).toEqual({ kind: "none" });
 	});
 
+	it("does not treat an in-flight self-save watcher event as an external conflict", async () => {
+		const api = createDesktopApi();
+		let finishWrite: () => void = () => {};
+		api.writeFileText.mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					finishWrite = resolve;
+				}),
+		);
+		const {
+			appStore,
+			handleExternalFileChange,
+			savePathContent,
+			updateEditorContent,
+			viewerStore,
+		} = await loadStoreActions(api);
+		const path = "/workspace/note.md";
+
+		appStore.set((current) => ({
+			...current,
+			document: {
+				...current.document,
+				currentPath: path,
+				lastOpenedPath: path,
+				content: "draft 1",
+				diskContent: "before",
+				externalChange: { kind: "none" },
+				status: "ready",
+				error: null,
+			},
+		}));
+
+		const save = savePathContent(path, "draft 1");
+		await Promise.resolve();
+		expect(api.writeFileText).toHaveBeenCalledWith(path, "draft 1");
+
+		updateEditorContent(path, "draft 2");
+		await handleExternalFileChange(path, "draft 1");
+
+		expect(viewerStore.get().content).toBe("draft 2");
+		expect(viewerStore.get().diskContent).toBe("draft 1");
+		expect(viewerStore.get().externalChange).toEqual({ kind: "none" });
+
+		finishWrite();
+		await save;
+
+		expect(viewerStore.get().content).toBe("draft 2");
+		expect(viewerStore.get().diskContent).toBe("draft 1");
+		expect(viewerStore.get().externalChange).toEqual({ kind: "none" });
+	});
+
 	it("uses latest editor content when classifying disk changes", async () => {
 		const api = createDesktopApi();
 		// The file now matches what the user just typed, even though the save
@@ -826,5 +877,61 @@ describe("desktop pinned notes", () => {
 			version: 1,
 			pinnedNotes: [],
 		});
+	});
+});
+
+describe("desktop content authority", () => {
+	beforeEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it("activates Git when a folder opens and keeps the cloud selection", async () => {
+		const api = createDesktopApi();
+		const { appStore, openWorkspace } = await loadStoreActions(api);
+		appStore.set((state) => ({
+			...state,
+			cloud: {
+				context: { kind: "workspace", workspaceId: "workspace-1" },
+			},
+			content: { context: { kind: "cloud" } },
+		}));
+
+		await openWorkspace("/repo");
+
+		expect(appStore.get().content.context).toEqual({ kind: "git" });
+		expect(appStore.get().workspace.workspacePath).toBe("/repo");
+		expect(appStore.get().cloud.context).toEqual({
+			kind: "workspace",
+			workspaceId: "workspace-1",
+		});
+	});
+
+	it("activates Cloud without deleting the Git root or its last document", async () => {
+		const api = createDesktopApi();
+		const { activateCloudContent, appStore } = await loadStoreActions(api);
+		appStore.set((state) => ({
+			...state,
+			workspace: {
+				...state.workspace,
+				workspacePath: "/repo",
+				lastOpenedPaths: { "/repo": "/repo/note.md" },
+			},
+			document: {
+				...state.document,
+				currentPath: "/repo/note.md",
+				lastOpenedPath: "/repo/note.md",
+			},
+			content: { context: { kind: "git" } },
+		}));
+
+		activateCloudContent();
+
+		expect(appStore.get().content.context).toEqual({ kind: "cloud" });
+		expect(appStore.get().workspace.workspacePath).toBe("/repo");
+		expect(appStore.get().workspace.lastOpenedPaths["/repo"]).toBe(
+			"/repo/note.md",
+		);
+		expect(appStore.get().document.currentPath).toBeNull();
+		expect(appStore.get().document.lastOpenedPath).toBe("/repo/note.md");
 	});
 });

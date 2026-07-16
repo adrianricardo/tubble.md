@@ -29,7 +29,7 @@ export function CloudSyncSection({ deploymentUrl }: { deploymentUrl: string }) {
 	return (
 		<SettingsSection
 			title="Cloud sync"
-			description="Sign in to the fork deployment before connecting a synced folder."
+			description="Sign in, then connect a folder to get your Live Documents — including anything shared with you — as real files on this computer."
 		>
 			<AuthLoading>
 				<p className="text-xs text-muted-foreground">Checking session…</p>
@@ -72,7 +72,7 @@ function CloudSignInForm() {
 		try {
 			await signIn("password", formData);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Sign in failed");
+			setError(describeCloudAuthError(err));
 		} finally {
 			setPending(false);
 		}
@@ -140,6 +140,14 @@ function CloudSignInForm() {
 			</div>
 		</form>
 	);
+}
+
+function describeCloudAuthError(err: unknown): string {
+	const message = err instanceof Error ? err.message : String(err);
+	if (message.toLowerCase().includes("daily signup limit")) {
+		return "Daily signup limit reached. Signups reopen tomorrow.";
+	}
+	return err instanceof Error ? err.message : "Sign in failed";
 }
 
 function SignedInCloudSync({ deploymentUrl }: { deploymentUrl: string }) {
@@ -220,10 +228,10 @@ function SignedInCloudSync({ deploymentUrl }: { deploymentUrl: string }) {
 	}, [authToken, deploymentUrl, status?.connected, status?.syncRoot]);
 
 	const workspaceSummary = useMemo(() => {
-		if (workspaces === undefined) return "Loading workspaces...";
-		if (workspaces.length === 0) return "No cloud workspaces yet";
-		if (workspaces.length === 1) return `Workspace: ${workspaces[0].name}`;
-		return `Workspaces: ${workspaces.map((workspace) => workspace.name).join(", ")}`;
+		if (workspaces === undefined) return "Loading spaces...";
+		if (workspaces.length === 0) return "No spaces yet";
+		if (workspaces.length === 1) return `Space: ${workspaces[0].name}`;
+		return `Spaces: ${workspaces.map((workspace) => workspace.name).join(", ")}`;
 	}, [workspaces]);
 
 	const connectInspectedRoot = async (
@@ -280,7 +288,7 @@ function SignedInCloudSync({ deploymentUrl }: { deploymentUrl: string }) {
 			return;
 		}
 		if (!selectedWorkspaceId) {
-			toast.error("Choose a target workspace first");
+			toast.error("Choose a target space first");
 			return;
 		}
 		setPendingAction("import");
@@ -431,7 +439,8 @@ function SignedInCloudSync({ deploymentUrl }: { deploymentUrl: string }) {
 			<div className="grid gap-2">
 				<p className="text-muted-foreground">
 					Connect an empty folder, or reconnect a folder that already has
-					Hubble's sync index.
+					Hubble's sync index. Once connected, point your agent (Cowork, Claude
+					Code, or any local tool) at it — files sync live, no git involved.
 				</p>
 				<div className="flex flex-wrap gap-2">
 					<Button
@@ -498,7 +507,7 @@ function SignedInCloudSync({ deploymentUrl }: { deploymentUrl: string }) {
 							htmlFor="desktop-sync-import-workspace"
 							className="text-xs font-medium"
 						>
-							Import target workspace
+							Import target space
 						</label>
 						<select
 							id="desktop-sync-import-workspace"
@@ -508,9 +517,9 @@ function SignedInCloudSync({ deploymentUrl }: { deploymentUrl: string }) {
 							className="w-full rounded-sm border border-border bg-background text-sm outline-none focus:border-ring [padding-block:0.5rem] [padding-inline:0.625rem]"
 						>
 							{workspaces === undefined ? (
-								<option value="">Loading workspaces...</option>
+								<option value="">Loading spaces...</option>
 							) : workspaces.length === 0 ? (
-								<option value="">No workspaces available</option>
+								<option value="">No spaces available</option>
 							) : (
 								workspaces.map((workspace) => (
 									<option key={workspace._id} value={workspace._id}>
@@ -580,6 +589,11 @@ function getSyncedFolderStatusView(status: SyncedFolderStatus | null): {
 		};
 	}
 	switch (status.state) {
+		case "verifying":
+			return {
+				label: "Verifying",
+				dotClassName: `${dotBase} bg-sky-500`,
+			};
 		case "connected":
 			return {
 				label: "Connected",
@@ -591,9 +605,15 @@ function getSyncedFolderStatusView(status: SyncedFolderStatus | null): {
 				dotClassName: `${dotBase} bg-sky-500`,
 			};
 		case "error":
+		case "pending-review":
 			return {
 				label: "Needs attention",
 				dotClassName: `${dotBase} bg-destructive`,
+			};
+		case "offline":
+			return {
+				label: "Offline",
+				dotClassName: `${dotBase} bg-amber-500`,
 			};
 		case "idle":
 			return {
@@ -613,10 +633,16 @@ function formatSyncedFolderEvent(event: SyncedFolderTelemetryEvent) {
 			return "Move synced";
 		case "created":
 			return "Document added";
-		case "removed-local":
-			return "Document removed";
+		case "trashed-local":
+			return "Document moved to Trash";
+		case "removed-remote-trash":
+			return "Cloud Trash synced";
 		case "removed-access":
 			return "Access removed";
+		case "move-review-required":
+			return "Move review required";
+		case "deletion-review-required":
+			return "Deletion review required";
 		case "read-only-rejected":
 			return "Read-only edit preserved";
 		case "backstop":
@@ -642,9 +668,15 @@ function showSyncedFolderToast(event: SyncedFolderEvent) {
 		case "created":
 			toast.success("Document added to the cloud");
 			return;
-		case "removed-local":
-			toast("Removed from the cloud", {
-				description: "You can restore it from Trash.",
+		case "trashed-local":
+		case "move-review-required":
+		case "deletion-review-required":
+			// Durable review UI owns these outcomes; duplicating it with a toast
+			// would split the user's attention between two actions.
+			return;
+		case "removed-remote-trash":
+			toast("Cloud Trash synced", {
+				description: "The clean managed copy was removed from this computer.",
 			});
 			return;
 		case "removed-access":

@@ -11,6 +11,7 @@ import { contentHash, type FileSystem, type InitFileSystem } from "./fs.js";
 import { writeReconcileBase } from "./reconcile.js";
 import {
 	type SyncedFolderIndex,
+	type SyncedFolderTopologyEntry,
 	saveSyncedFolderIndex,
 } from "./syncedFolderIndex.js";
 import type {
@@ -18,9 +19,11 @@ import type {
 	FileState,
 	LiveDocumentExportResult,
 	LiveDocumentImportResult,
+	LiveDocumentProjection,
 	LiveDocumentProjectionWriteResult,
 	RemoteAsset,
-	SharedLiveDocumentProjection,
+	SharedSubtreeDocument,
+	SharedWithMe,
 	SyncResult,
 	WorkspaceConfig,
 } from "./types.js";
@@ -89,6 +92,7 @@ export async function sync(
 		assetsPushed: 0,
 		assetsPulled: 0,
 		assetsDeleted: 0,
+		assetsFailed: [],
 	};
 	const nextFiles: Record<string, FileState> = { ...state.files };
 	const now = Date.now();
@@ -224,6 +228,9 @@ export async function sync(
 			headers: { "Content-Type": "application/octet-stream" },
 			body: data,
 		});
+		if (!res.ok) {
+			throw new Error(`Asset upload failed for ${path}: ${res.status}`);
+		}
 		const { storageId } = (await res.json()) as { storageId: string };
 		await backend.pushAsset({
 			workspaceId,
@@ -240,6 +247,11 @@ export async function sync(
 		const url = await backend.getAssetDownloadUrl(remote.storageId);
 		if (!url) return;
 		const res = await fetch(url);
+		if (!res.ok) {
+			throw new Error(
+				`Asset download failed for ${remote.path}: ${res.status}`,
+			);
+		}
 		const buf = new Uint8Array(await res.arrayBuffer());
 		await ensureParentDir(remote.path);
 		await fs.writeBinaryFile(`${workspacePath}/${remote.path}`, buf);
@@ -250,6 +262,22 @@ export async function sync(
 		result.assetsPulled++;
 	}
 
+	async function tryPushAsset(path: string, hash: string) {
+		try {
+			await pushAsset(path, hash);
+		} catch {
+			result.assetsFailed.push(path);
+		}
+	}
+
+	async function tryPullAsset(remote: RemoteAsset) {
+		try {
+			await pullAsset(remote);
+		} catch {
+			result.assetsFailed.push(remote.path);
+		}
+	}
+
 	// Process locally present assets
 	for (const local of localAssets) {
 		const prev = prevAssets[local.relativePath];
@@ -258,7 +286,7 @@ export async function sync(
 
 		if (remote?.deleted) {
 			if (prev && prev.hash !== local.hash) {
-				await pushAsset(local.relativePath, local.hash);
+				await tryPushAsset(local.relativePath, local.hash);
 			} else {
 				await fs.deleteFile(`${workspacePath}/${local.relativePath}`);
 				delete nextAssets[local.relativePath];
@@ -268,7 +296,7 @@ export async function sync(
 		}
 
 		if (!remote) {
-			await pushAsset(local.relativePath, local.hash);
+			await tryPushAsset(local.relativePath, local.hash);
 			continue;
 		}
 
@@ -277,9 +305,9 @@ export async function sync(
 
 		if (diverged) {
 			// Last-write-wins for binary assets — pull remote
-			await pullAsset(remote);
+			await tryPullAsset(remote);
 		} else if (localChanged) {
-			await pushAsset(local.relativePath, local.hash);
+			await tryPushAsset(local.relativePath, local.hash);
 		}
 	}
 
@@ -305,7 +333,7 @@ export async function sync(
 		if (remote.deleted) continue;
 		if (localAssetByPath.has(remote.path)) continue;
 		if (prevAssets[remote.path]) continue;
-		await pullAsset(remote);
+		await tryPullAsset(remote);
 	}
 
 	await writeSyncState(fs, workspacePath, {
@@ -407,7 +435,61 @@ export type MaterializeSyncedFolderResult = {
 	written: string[];
 	/** The reverse index written to `.hubble/index/synced-folder.json`. */
 	index: SyncedFolderIndex;
+	topology: SyncedFolderTopologyEntry[];
 };
+
+function createReadOnlyPlanningFileSystem(): ProjectionFsSubset {
+	return {
+		async ensureDir() {},
+		async writeFile() {},
+		async readFileOrNull() {
+			return null;
+		},
+		async setReadOnly() {},
+	};
+}
+
+/** Compute the whole-workspace cloud projection without touching the real disk. */
+export async function planSyncedFolder(
+	backend: Pick<
+		SyncBackend,
+		"listWorkspaces" | "getFolders" | "getLiveDocuments" | "getSharedWithMe"
+	>,
+	opts: { syncRoot: string },
+): Promise<SyncedFolderIndex> {
+	const result = await materializeSyncedFolder(
+		backend,
+		createReadOnlyPlanningFileSystem(),
+		opts,
+	);
+	return result.index;
+}
+
+/** Compute a repo-link mount projection without touching the real disk. */
+export async function planMountFolder(
+	backend: Pick<SyncBackend, "getFolderSubtreeDocuments">,
+	opts: { syncRoot: string; folderId: string },
+): Promise<SyncedFolderIndex> {
+	const result = await materializeMountFolder(
+		backend,
+		createReadOnlyPlanningFileSystem(),
+		opts,
+	);
+	return result.index;
+}
+
+/** Compute one Workspace's root projection without touching the real disk. */
+export async function planWorkspaceRoot(
+	backend: Pick<SyncBackend, "getFolders" | "getLiveDocuments">,
+	opts: { syncRoot: string; workspaceId: string },
+): Promise<SyncedFolderIndex> {
+	const result = await materializeWorkspaceRoot(
+		backend,
+		createReadOnlyPlanningFileSystem(),
+		opts,
+	);
+	return result.index;
+}
 
 /**
  * Materialize the user's cloud Live-Document membership into the on-disk synced
@@ -417,8 +499,8 @@ export type MaterializeSyncedFolderResult = {
  * Sibling of {@link writeLiveDocumentProjections} (the legacy flat agent tree),
  * kept separate so the user-facing mirror and the agent projection stay
  * independent (SYNCED-FOLDER §3). It:
- *  - computes the nested on-disk path from `(workspace, folder tree, title)` —
- *    **not** `document.path`, which stays mutable metadata;
+ *  - computes the nested on-disk path from stable document paths when available,
+ *    falling back to `(workspace, folder tree, title)`;
  *  - writes the markdown file and applies the read-only chmod by role;
  *  - refreshes the reconcile **base cache** via {@link writeReconcileBase} with
  *    `syncRoot` as the workspace path, so it lands exactly where
@@ -440,6 +522,7 @@ export async function materializeSyncedFolder(
 	const { syncRoot } = opts;
 	const written: string[] = [];
 	const index: SyncedFolderIndex = {};
+	const topology: SyncedFolderTopologyEntry[] = [];
 
 	const workspaces = await backend.listWorkspaces();
 	const sharedDirName = "Shared with me";
@@ -451,136 +534,352 @@ export async function materializeSyncedFolder(
 			usedWorkspaceNames,
 			sanitizeSegment(workspace.name),
 		);
-
 		const folders = await backend.getFolders(workspace._id);
-		const folderRelPaths = buildFolderRelPaths(folders);
-
 		const documents = await backend.getLiveDocuments(workspace._id);
-		// Track sibling-title collisions per directory → ` (2)` suffix.
-		const usedNamesByDir = new Map<string, Set<string>>();
-
-		for (const document of documents) {
-			const folderRel =
-				document.folderId !== null
-					? (folderRelPaths.get(document.folderId) ?? "")
-					: "";
-			const dirRel = joinRel(workspaceName, folderRel);
-			const dirAbs = `${syncRoot}/${dirRel}`;
-
-			const used = usedNamesByDir.get(dirRel) ?? new Set<string>();
-			usedNamesByDir.set(dirRel, used);
-			const fileName = uniqueName(
-				used,
-				`${sanitizeSegment(document.title)}.md`,
-			);
-
-			const relPath = `${dirRel}/${fileName}`;
-			const absPath = `${syncRoot}/${relPath}`;
-
-			await fs.ensureDir(dirAbs);
-			const existingMarkdown = await fs.readFileOrNull(absPath);
-			if (existingMarkdown !== document.markdown) {
-				// Clear any prior read-only flag so the write succeeds, then re-apply.
-				if (fs.setReadOnly)
-					await fs.setReadOnly(absPath, false).catch(() => {});
-				await fs.writeFile(absPath, document.markdown);
-			}
-			if (fs.setReadOnly)
-				await fs.setReadOnly(absPath, document.canWrite === false);
-
-			// Reconcile base cache, rooted at the sync root so it sits exactly where
-			// reconcileProjectionFile(workspacePath: syncRoot) reads it.
-			await writeReconcileBase(fs, syncRoot, document._id, {
-				markdown: document.markdown,
-				revision: document.version ?? 0,
-				path: relPath,
-			});
-
-			index[absPath] = {
-				documentId: document._id,
-				workspaceId: workspace._id,
-				folderId: document.folderId,
-				inode: null,
-				hash: await contentHash(document.markdown),
-				role: document.role ?? null,
-			};
-			written.push(absPath);
-			materializedDocumentIds.add(document._id);
-		}
+		await materializeWorkspaceProjection(fs, {
+			syncRoot,
+			workspaceId: workspace._id,
+			workspaceDir: workspaceName,
+			folders,
+			documents,
+			written,
+			index,
+			topology,
+			materializedDocumentIds,
+		});
 	}
 
-	const sharedDocuments = (await backend.getSharedWithMe()).filter(
-		(document) => !materializedDocumentIds.has(document._id),
-	);
+	const shared = await backend.getSharedWithMe();
 	await materializeSharedWithMe(
 		fs,
 		syncRoot,
 		sharedDirName,
-		sharedDocuments,
+		shared,
+		materializedDocumentIds,
 		written,
 		index,
 	);
 
 	await saveSyncedFolderIndex(fs, syncRoot, index);
 
-	return { syncRoot, written, index };
+	return { syncRoot, written, index, topology };
 }
 
+/**
+ * Materialize exactly one Workspace at the selected root. Root documents land
+ * directly under `syncRoot`; no Workspace-name wrapper or shared content is
+ * introduced.
+ */
+export async function materializeWorkspaceRoot(
+	backend: Pick<SyncBackend, "getFolders" | "getLiveDocuments">,
+	fs: ProjectionFsSubset,
+	opts: { syncRoot: string; workspaceId: string },
+): Promise<MaterializeSyncedFolderResult> {
+	const { syncRoot, workspaceId } = opts;
+	const folders = await backend.getFolders(workspaceId);
+	const documents = await backend.getLiveDocuments(workspaceId);
+	const written: string[] = [];
+	const index: SyncedFolderIndex = {};
+	const topology: SyncedFolderTopologyEntry[] = [];
+	await materializeWorkspaceProjection(fs, {
+		syncRoot,
+		workspaceId,
+		workspaceDir: "",
+		folders,
+		documents,
+		written,
+		index,
+		topology,
+		materializedDocumentIds: new Set(),
+	});
+	await saveSyncedFolderIndex(fs, syncRoot, index);
+	return { syncRoot, written, index, topology };
+}
+
+type ProjectionFsSubset = Pick<
+	FileSystem,
+	"ensureDir" | "writeFile" | "readFileOrNull" | "setReadOnly"
+>;
+
+async function materializeWorkspaceProjection(
+	fs: ProjectionFsSubset,
+	args: {
+		syncRoot: string;
+		workspaceId: string;
+		workspaceDir: string;
+		folders: Awaited<ReturnType<SyncBackend["getFolders"]>>;
+		documents: Awaited<ReturnType<SyncBackend["getLiveDocuments"]>>;
+		written: string[];
+		index: SyncedFolderIndex;
+		topology: SyncedFolderTopologyEntry[];
+		materializedDocumentIds: Set<string>;
+	},
+) {
+	const folderRelPaths = buildFolderRelPaths(args.folders);
+	for (const folder of args.folders) {
+		const relativePath = joinRel(
+			args.workspaceDir,
+			folderRelPaths.get(folder._id) ?? "",
+		);
+		args.topology.push({
+			folderId: folder._id,
+			workspaceId: args.workspaceId,
+			parentFolderId: folder.parentId,
+			relativePath,
+		});
+		if (!args.workspaceDir && relativePath) {
+			await fs.ensureDir(`${args.syncRoot}/${relativePath}`);
+		}
+	}
+
+	const usedNamesByDir = new Map<string, Set<string>>();
+	for (const document of args.documents) {
+		const workspacePath = workspaceRelativeDocumentPath(
+			document,
+			args.workspaceDir,
+			folderRelPaths,
+		);
+		const desiredRelPath = joinRel(args.workspaceDir, workspacePath);
+		const slash = desiredRelPath.lastIndexOf("/");
+		const dirRel = slash === -1 ? "" : desiredRelPath.slice(0, slash);
+		const bareName =
+			slash === -1 ? desiredRelPath : desiredRelPath.slice(slash + 1);
+		const used = usedNamesByDir.get(dirRel) ?? new Set<string>();
+		usedNamesByDir.set(dirRel, used);
+		const relPath = joinRel(dirRel, uniqueName(used, bareName));
+		await writeProjectionDocument(
+			fs,
+			args.syncRoot,
+			relPath,
+			{
+				...document,
+				workspaceId: args.workspaceId,
+				workspaceName: args.workspaceDir,
+				relativePath: dirRel,
+			},
+			args.written,
+			args.index,
+		);
+		args.materializedDocumentIds.add(document._id);
+	}
+}
+
+/**
+ * Materialize the RB4 "Shared with me" subtree: each top-most shared folder as
+ * `Shared with me/<Workspace> - <Folder>/…` with real nested structure, plus the
+ * legacy per-document shares as flat `<Workspace> - <Title>.md` files. Docs are
+ * indexed by `documentId` so a cloud rename/move re-keys rather than trashing the
+ * local path; revocation of a subtree is handled by the service's access-loss
+ * path (index diff → `.hubble/trash`).
+ */
 async function materializeSharedWithMe(
-	fs: Pick<
-		FileSystem,
-		"ensureDir" | "writeFile" | "readFileOrNull" | "setReadOnly"
-	>,
+	fs: ProjectionFsSubset,
 	syncRoot: string,
 	sharedDirName: string,
-	documents: SharedLiveDocumentProjection[],
+	shared: SharedWithMe,
+	alreadyMaterialized: Set<string>,
 	written: string[],
 	index: SyncedFolderIndex,
 ) {
-	if (documents.length === 0) return;
+	const flatDocs = shared.documents.filter(
+		(document) => !alreadyMaterialized.has(document._id),
+	);
+	if (shared.folders.length === 0 && flatDocs.length === 0) return;
 
-	const sharedDirAbs = `${syncRoot}/${sharedDirName}`;
-	const usedNames = new Set<string>();
-	await fs.ensureDir(sharedDirAbs);
+	await fs.ensureDir(`${syncRoot}/${sharedDirName}`);
+	const usedTopNames = new Set<string>();
 
-	for (const document of documents) {
+	// Nested folder subtrees.
+	for (const node of shared.folders) {
+		const topName = uniqueName(
+			usedTopNames,
+			`${sanitizeSegment(node.workspaceName)} - ${sanitizeSegment(node.name)}`,
+		);
+		const nodeRel = `${sharedDirName}/${topName}`;
+		await fs.ensureDir(`${syncRoot}/${nodeRel}`);
+		const usedByDir = new Map<string, Set<string>>();
+		for (const document of node.documents) {
+			if (alreadyMaterialized.has(document._id)) continue;
+			await writeSubtreeDocument(
+				fs,
+				syncRoot,
+				nodeRel,
+				document,
+				usedByDir,
+				written,
+				index,
+			);
+			alreadyMaterialized.add(document._id);
+		}
+	}
+
+	// Legacy flat per-document shares.
+	const usedFlat = new Set<string>();
+	for (const document of flatDocs) {
 		const fileName = uniqueName(
-			usedNames,
+			usedFlat,
 			`${sanitizeSegment(document.workspaceName)} - ${sanitizeSegment(document.title)}.md`,
 		);
 		const relPath = `${sharedDirName}/${fileName}`;
-		const absPath = `${syncRoot}/${relPath}`;
-		const existingMarkdown = await fs.readFileOrNull(absPath);
-		if (existingMarkdown !== document.markdown) {
-			if (fs.setReadOnly) await fs.setReadOnly(absPath, false).catch(() => {});
-			await fs.writeFile(absPath, document.markdown);
-		}
-		if (fs.setReadOnly)
-			await fs.setReadOnly(absPath, document.canWrite === false);
-
-		await writeReconcileBase(fs, syncRoot, document._id, {
-			markdown: document.markdown,
-			revision: document.version ?? 0,
-			path: relPath,
-		});
-
-		index[absPath] = {
-			documentId: document._id,
-			workspaceId: document.workspaceId,
-			folderId: null,
-			inode: null,
-			hash: await contentHash(document.markdown),
-			role: document.role ?? null,
-		};
-		written.push(absPath);
+		await writeProjectionDocument(
+			fs,
+			syncRoot,
+			relPath,
+			document,
+			written,
+			index,
+		);
+		alreadyMaterialized.add(document._id);
 	}
+}
+
+/**
+ * Materialize a single folder's subtree at `syncRoot` for the desktop repo-link
+ * mount (RB3). The mount root IS the shared folder — its documents land at their
+ * subtree-relative paths directly under `syncRoot` (no `<Workspace> - <Folder>`
+ * wrapper). Reuses the same base-cache + reverse-index machinery as the whole-
+ * workspace mirror, so the watcher/reconcile engine drives the mount unchanged.
+ */
+export async function materializeMountFolder(
+	backend: Pick<SyncBackend, "getFolderSubtreeDocuments">,
+	fs: ProjectionFsSubset,
+	opts: { syncRoot: string; folderId: string },
+): Promise<MaterializeSyncedFolderResult> {
+	const { syncRoot } = opts;
+	const written: string[] = [];
+	const index: SyncedFolderIndex = {};
+	const documents = await backend.getFolderSubtreeDocuments(opts.folderId);
+	const usedByDir = new Map<string, Set<string>>();
+	for (const document of documents) {
+		await writeSubtreeDocument(
+			fs,
+			syncRoot,
+			"",
+			document,
+			usedByDir,
+			written,
+			index,
+		);
+	}
+	await saveSyncedFolderIndex(fs, syncRoot, index);
+	return { syncRoot, written, index, topology: [] };
+}
+
+/**
+ * Place a subtree document at `<baseRel>/<sanitized relativePath>/<title>.md`,
+ * disambiguating sibling collisions per directory.
+ */
+async function writeSubtreeDocument(
+	fs: ProjectionFsSubset,
+	syncRoot: string,
+	baseRel: string,
+	document: SharedSubtreeDocument,
+	usedByDir: Map<string, Set<string>>,
+	written: string[],
+	index: SyncedFolderIndex,
+) {
+	const inner = joinRel(
+		sanitizeRelPath(document.relativePath),
+		projectionFileName(document.path, document.title),
+	);
+	const relPath0 = joinRel(baseRel, inner);
+	const slash = relPath0.lastIndexOf("/");
+	const dirRel = slash === -1 ? "" : relPath0.slice(0, slash);
+	const bareName = slash === -1 ? relPath0 : relPath0.slice(slash + 1);
+	const used = usedByDir.get(dirRel) ?? new Set<string>();
+	usedByDir.set(dirRel, used);
+	const fileName = uniqueName(used, bareName);
+	const relPath = dirRel ? `${dirRel}/${fileName}` : fileName;
+	await writeProjectionDocument(
+		fs,
+		syncRoot,
+		relPath,
+		document,
+		written,
+		index,
+	);
+}
+
+/**
+ * Canonical filename for every folder projection. A document path is the
+ * stable filesystem identity chosen at creation/import time; the title remains
+ * independently editable display text. Legacy documents without a path fall
+ * back to their title.
+ */
+export function projectionFileName(
+	documentPath: string | null | undefined,
+	title: string,
+): string {
+	const normalizedPath = documentPath?.split("\\").join("/");
+	const pathTail = normalizedPath
+		?.split("/")
+		.filter((segment) => segment.length > 0)
+		.pop();
+	return sanitizeSegment(pathTail ?? `${title}.md`);
+}
+
+/** Write one document's file + read-only chmod + base cache + reverse index. */
+async function writeProjectionDocument(
+	fs: ProjectionFsSubset,
+	syncRoot: string,
+	relPath: string,
+	document: SharedSubtreeDocument,
+	written: string[],
+	index: SyncedFolderIndex,
+) {
+	const absPath = `${syncRoot}/${relPath}`;
+	const slash = relPath.lastIndexOf("/");
+	if (slash > 0) await fs.ensureDir(`${syncRoot}/${relPath.slice(0, slash)}`);
+	const existingMarkdown = await fs.readFileOrNull(absPath);
+	if (existingMarkdown !== document.markdown) {
+		if (fs.setReadOnly) await fs.setReadOnly(absPath, false).catch(() => {});
+		await fs.writeFile(absPath, document.markdown);
+	}
+	if (fs.setReadOnly)
+		await fs.setReadOnly(absPath, document.canWrite === false);
+
+	await writeReconcileBase(fs, syncRoot, document._id, {
+		markdown: document.markdown,
+		revision: document.version ?? 0,
+		path: relPath,
+	});
+
+	index[absPath] = {
+		documentId: document._id,
+		workspaceId: document.workspaceId,
+		folderId: document.folderId,
+		inode: null,
+		hash: await contentHash(document.markdown),
+		role: document.role ?? null,
+	};
+	written.push(absPath);
+}
+
+/**
+ * Sanitize each segment of a `/`-joined relative path. Empty, `.` and `..`
+ * segments are dropped so cloud-controlled paths can never escape the root.
+ */
+function sanitizeRelPath(relativePath: string): string {
+	return relativePath
+		.split("/")
+		.filter(
+			(segment) => segment.length > 0 && segment !== "." && segment !== "..",
+		)
+		.map((segment) => sanitizeSegment(segment))
+		.join("/");
 }
 
 /** Import local markdown files into cloud-authoritative Live Documents. */
 export async function importLiveDocuments(
 	backend: SyncBackend,
 	fs: Pick<FileSystem, "listMarkdownFiles">,
-	opts: { workspaceId: string; workspacePath: string; actor?: string },
+	opts: {
+		workspaceId: string;
+		workspacePath: string;
+		folderId?: string;
+		idempotencyKey: string;
+		actor?: string;
+	},
 ): Promise<LiveDocumentImportResult> {
 	const localFiles = await fs.listMarkdownFiles(opts.workspacePath);
 	for (const local of localFiles) {
@@ -592,22 +891,24 @@ export async function importLiveDocuments(
 	const result: LiveDocumentImportResult = {
 		imported: [],
 		created: [],
-		updated: [],
+		reused: [],
 	};
 
 	for (const local of localFiles) {
 		const imported = await backend.importLiveDocument({
 			workspaceId: opts.workspaceId,
+			folderId: opts.folderId,
 			path: normalizeRelativePath(local.relativePath),
 			title: titleFromPath(local.relativePath),
 			markdown: local.content,
+			idempotencyKey: `${opts.idempotencyKey}:${normalizeRelativePath(local.relativePath)}`,
 			actor: opts.actor,
 		});
 		result.imported.push(imported.path);
 		if (imported.created) {
 			result.created.push(imported.path);
 		} else {
-			result.updated.push(imported.path);
+			result.reused.push(imported.path);
 		}
 	}
 
@@ -677,6 +978,33 @@ function titleFromPath(path: string): string {
 	return fileName.replace(/\.(md|markdown|mdown)$/i, "") || "Untitled";
 }
 
+function workspaceRelativeDocumentPath(
+	document: LiveDocumentProjection,
+	workspaceName: string,
+	folderRelPaths: Map<string, string>,
+): string {
+	const storedPath = normalizeRelativePath(document.path ?? "").replace(
+		/^\/+/,
+		"",
+	);
+	if (storedPath) {
+		const duplicatedWorkspacePrefix = `${workspaceName}/`;
+		if (storedPath.startsWith(duplicatedWorkspacePrefix)) {
+			return (
+				storedPath.slice(duplicatedWorkspacePrefix.length) ||
+				`${sanitizeSegment(document.title)}.md`
+			);
+		}
+		return storedPath;
+	}
+
+	const folderRel =
+		document.folderId !== null
+			? (folderRelPaths.get(document.folderId) ?? "")
+			: "";
+	return joinRel(folderRel, `${sanitizeSegment(document.title)}.md`);
+}
+
 function normalizeRelativePath(path: string): string {
 	return path.split("\\").join("/");
 }
@@ -726,6 +1054,7 @@ function buildFolderRelPaths(
 
 /** Join two relative path fragments, dropping an empty tail. */
 function joinRel(head: string, tail: string): string {
+	if (!head) return tail;
 	return tail ? `${head}/${tail}` : head;
 }
 

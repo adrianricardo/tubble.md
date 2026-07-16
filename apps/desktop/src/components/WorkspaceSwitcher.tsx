@@ -1,7 +1,12 @@
 import { WorkspaceSwitcherMenu } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
 import MingcuteAddLine from "~icons/mingcute/add-line";
-import { openWorkspace, setWorkspaceSwitcherOpen } from "../store/actions";
+import MingcuteCloudLine from "~icons/mingcute/cloud-line";
+import {
+	activateCloudContent,
+	openWorkspace,
+	setWorkspaceSwitcherOpen,
+} from "../store/actions";
 import {
 	recentWorkspacesStore,
 	switcherOpenStore,
@@ -12,7 +17,11 @@ function folderName(path: string): string {
 	return path.split("/").pop() ?? path.split("\\").pop() ?? path;
 }
 
-export function WorkspaceSwitcher() {
+export function WorkspaceSwitcher({
+	cloudAvailable,
+}: {
+	cloudAvailable: boolean;
+}) {
 	const workspacePath = useStoreValue(workspacePathStore);
 	const recentWorkspaces = useStoreValue(recentWorkspacesStore);
 	const open = useStoreValue(switcherOpenStore);
@@ -45,6 +54,17 @@ export function WorkspaceSwitcher() {
 			>
 				Add folder...
 			</WorkspaceSwitcherMenu.Item>
+			{cloudAvailable ? (
+				<>
+					<WorkspaceSwitcherMenu.Separator />
+					<WorkspaceSwitcherMenu.Item
+						icon={<MingcuteCloudLine className="size-3 shrink-0" />}
+						onClick={activateCloudContent}
+					>
+						Hubble Cloud
+					</WorkspaceSwitcherMenu.Item>
+				</>
+			) : null}
 		</WorkspaceSwitcherMenu>
 	);
 }

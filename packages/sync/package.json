@@ -1,16 +1,16 @@
 {
 	"name": "@hubble.md/sync",
 	"version": "0.0.1",
-	"description": "Filesystem sync engine for Hubble.md",
+	"description": "Filesystem sync engine for Tubble.md",
 	"license": "MIT",
 	"author": "Ben Holmes <hey@bholmes.dev>",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/bholmesdev/hubble.md.git",
+		"url": "git+https://github.com/adrianricardo/tubble.md.git",
 		"directory": "packages/sync"
 	},
-	"homepage": "https://hubble.md",
-	"bugs": "https://github.com/bholmesdev/hubble.md/issues",
+	"homepage": "https://tubble.nopalstudio.com",
+	"bugs": "https://github.com/adrianricardo/tubble.md/issues",
 	"type": "module",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
@@ -28,6 +28,7 @@
 		"dist"
 	],
 	"scripts": {
+		"upstream:audit": "pnpm -w upstream:audit",
 		"build": "tsc -p tsconfig.json",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",

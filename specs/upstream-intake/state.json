@@ -1,0 +1,108 @@
+{
+	"schemaVersion": 1,
+	"strategy": "selective-downstream",
+	"remote": "upstream",
+	"branch": "main",
+	"targetBranch": "v1-release",
+	"screenedThrough": "72c9e808cb32bb9c451b6694ced4a8ea6775906f",
+	"screenedAt": "2026-07-14",
+	"candidateQueue": [
+		{
+			"id": "utf8-desktop-save-safety",
+			"title": "UTF-8 desktop save safety",
+			"commits": ["c99e80df037868514270ca8a7286b0569c125d61"],
+			"reviewMode": "auto-evaluate",
+			"strategyDisposition": "blocked",
+			"likelyFinalDisposition": "reimplement"
+		},
+		{
+			"id": "editor-sync-edge-hardening",
+			"title": "Editor and sync edge hardening",
+			"commits": ["60905b68dd3f0a144ad4f7cbf6f8649b1e1024ae"],
+			"reviewMode": "auto-evaluate",
+			"strategyDisposition": "blocked"
+		},
+		{
+			"id": "mixed-image-text-markdown",
+			"title": "Mixed image/text Markdown preservation",
+			"commits": ["fed659c5bc93828b7ce2b90ff92cd558e72b86da"],
+			"reviewMode": "auto-evaluate",
+			"strategyDisposition": "blocked"
+		},
+		{
+			"id": "rich-text-link-clipboard",
+			"title": "Rich-text link clipboard serialization",
+			"commits": ["66a1787424e754531541a72cf15d7da1cd320c8a"],
+			"reviewMode": "auto-evaluate",
+			"strategyDisposition": "blocked"
+		},
+		{
+			"id": "macos-native-text-editing",
+			"title": "macOS native text context menu and caret spellcheck",
+			"commits": [
+				"9732d4b30e04a81db3bfaea40bc090e8d0faa248",
+				"7fa5dffe04fa08b5fa9ea27e91a10bc6bdcc81c2"
+			],
+			"reviewMode": "auto-evaluate",
+			"strategyDisposition": "blocked"
+		},
+		{
+			"id": "cloud-sync-asset-failures",
+			"title": "Cloud-sync asset failure handling",
+			"commits": ["df7560f85f3497045c47dfded4e37c6203a85e46"],
+			"reviewMode": "auto-evaluate",
+			"strategyDisposition": "blocked",
+			"likelyFinalDisposition": "reimplement-or-superseded"
+		},
+		{
+			"id": "editor-block-spacing",
+			"title": "Editor block spacing",
+			"commits": ["f6c44a2436df6e3eeed55636cca85bec885d1da0"],
+			"reviewMode": "auto-evaluate",
+			"strategyDisposition": "blocked"
+		},
+		{
+			"id": "emphasis-serializer-consolidation",
+			"title": "Emphasis/Markdown serializer consolidation",
+			"commits": ["7d290971ad08634448ebfaa6bd71c16dd1925ddd"],
+			"reviewMode": "auto-evaluate",
+			"strategyDisposition": "blocked",
+			"likelyFinalDisposition": "superseded"
+		},
+		{
+			"id": "global-search",
+			"title": "Global search",
+			"commits": ["f445c32e69476539019a4a37e142f4c655193917"],
+			"reviewMode": "report-only",
+			"strategyDisposition": "defer-product"
+		},
+		{
+			"id": "back-forward-navigation",
+			"title": "Back/forward navigation",
+			"commits": ["51447b7371a56af9a158f5a517a93c271784ac3a"],
+			"reviewMode": "report-only",
+			"strategyDisposition": "defer-product"
+		},
+		{
+			"id": "source-mode",
+			"title": "Source mode",
+			"commits": ["e361781bf4c5772a60763c5573090079621f058f"],
+			"reviewMode": "report-only",
+			"strategyDisposition": "defer-product"
+		},
+		{
+			"id": "system-follow-dark-mode",
+			"title": "System-follow dark mode",
+			"commits": ["2a812ae93529100affdd94855b99a12c99f9fbde"],
+			"reviewMode": "report-only",
+			"strategyDisposition": "defer-product"
+		},
+		{
+			"id": "editor-find-bar",
+			"title": "Editor find bar",
+			"commits": ["03b7de86474bcba07c349fcec1f84e63dd852201"],
+			"reviewMode": "report-only",
+			"strategyDisposition": "defer-product"
+		}
+	]
+}

@@ -17,6 +17,9 @@ export const LinkExtension = Mark.create({
 			target: {
 				default: null,
 			},
+			markdownStyle: {
+				default: null,
+			},
 		};
 	},
 
@@ -32,14 +35,27 @@ export const LinkExtension = Mark.create({
 						href: href ?? "",
 						kind: kind === "wiki" ? "wiki" : "url",
 						target,
+						markdownStyle: null,
 					};
 				},
 			},
 			{
 				tag: "a[href]",
 				getAttrs: (element) => {
-					const href = (element as HTMLAnchorElement).getAttribute("href");
-					return { href: href ?? "", kind: "url", target: null };
+					const anchor = element as HTMLAnchorElement;
+					const href = anchor.getAttribute("href");
+					const kind = anchor.getAttribute("data-link-kind");
+					const target = anchor.getAttribute("data-target");
+					const markdownStyle = anchor.getAttribute("data-markdown-style");
+					return {
+						href: href ?? "",
+						kind: kind === "wiki" ? "wiki" : "url",
+						target,
+						markdownStyle:
+							markdownStyle === "bare" || markdownStyle === "autolink"
+								? markdownStyle
+								: null,
+					};
 				},
 			},
 		];
@@ -65,11 +81,22 @@ export const LinkExtension = Mark.create({
 });
 
 export type LinkKind = "url" | "wiki";
+export type LinkMarkdownStyle = "bare" | "autolink";
 export type LinkAttrs = {
 	href: string;
 	kind: LinkKind;
 	target: string | null;
+	markdownStyle?: LinkMarkdownStyle | null;
 };
+
+function sameLinkAttrs(left: LinkAttrs, right: LinkAttrs): boolean {
+	return (
+		left.href === right.href &&
+		left.kind === right.kind &&
+		left.target === right.target &&
+		(left.markdownStyle ?? null) === (right.markdownStyle ?? null)
+	);
+}
 
 export function createLinkMark(
 	href = "",
@@ -87,10 +114,16 @@ export function getLinkAttrs(attrs: unknown): LinkAttrs | null {
 	if (typeof href !== "string") return null;
 	const rawKind = (attrs as Record<string, unknown>).kind;
 	const rawTarget = (attrs as Record<string, unknown>).target;
+	const rawMarkdownStyle = (attrs as Record<string, unknown>).markdownStyle;
+	const markdownStyle =
+		rawMarkdownStyle === "bare" || rawMarkdownStyle === "autolink"
+			? rawMarkdownStyle
+			: null;
 	return {
 		href,
 		kind: rawKind === "wiki" ? "wiki" : "url",
 		target: typeof rawTarget === "string" ? rawTarget : null,
+		...(markdownStyle ? { markdownStyle } : {}),
 	};
 }
 
@@ -101,9 +134,10 @@ export function getLinkHrefFromAttrs(attrs: unknown): string | null {
 export function getActiveLinkRange(state: EditorState): {
 	from: number;
 	to: number;
-	href: string;
-	kind: LinkKind;
-	target: string | null;
+	href: LinkAttrs["href"];
+	kind: LinkAttrs["kind"];
+	target: LinkAttrs["target"];
+	markdownStyle?: LinkAttrs["markdownStyle"];
 } | null {
 	const { selection } = state;
 	if (!selection.empty) return null;
@@ -129,6 +163,10 @@ export function getActiveLinkRange(state: EditorState): {
 		return { from: selection.from, to: selection.from, ...attrs };
 	}
 
+	const mark = markType.isInSet(parent.child(index).marks);
+	const attrs = mark ? getLinkAttrs(mark.attrs) : null;
+	if (attrs === null) return null;
+
 	let startIndex = index;
 	let endIndex = index;
 
@@ -138,26 +176,23 @@ export function getActiveLinkRange(state: EditorState): {
 	}
 	let to = from + parent.child(index).nodeSize;
 
-	while (
-		startIndex > 0 &&
-		!!markType.isInSet(parent.child(startIndex - 1).marks)
-	) {
+	while (startIndex > 0) {
+		const previousMark = markType.isInSet(parent.child(startIndex - 1).marks);
+		const previousAttrs = previousMark
+			? getLinkAttrs(previousMark.attrs)
+			: null;
+		if (!previousAttrs || !sameLinkAttrs(previousAttrs, attrs)) break;
 		startIndex -= 1;
 		from -= parent.child(startIndex).nodeSize;
 	}
 
-	while (
-		endIndex + 1 < parent.childCount &&
-		!!markType.isInSet(parent.child(endIndex + 1).marks)
-	) {
+	while (endIndex + 1 < parent.childCount) {
+		const nextMark = markType.isInSet(parent.child(endIndex + 1).marks);
+		const nextAttrs = nextMark ? getLinkAttrs(nextMark.attrs) : null;
+		if (!nextAttrs || !sameLinkAttrs(nextAttrs, attrs)) break;
 		endIndex += 1;
 		to += parent.child(endIndex).nodeSize;
 	}
 
-	const mark =
-		markType.isInSet(parent.child(index).marks) ??
-		markType.create({ href: "" });
-	const attrs = getLinkAttrs(mark.attrs);
-	if (attrs === null) return null;
 	return { from, to, ...attrs };
 }

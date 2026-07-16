@@ -12,7 +12,11 @@ import {
 	orphanAssetCandidates,
 	referencedAssetPaths,
 } from "./orphanAssets";
-import { requireWorkspaceMember, workspaceRole } from "./permissions";
+import {
+	isFolderAuthorityActive,
+	requireWorkspaceMember,
+	workspaceRole,
+} from "./permissions";
 
 async function contentHash(content: string): Promise<string> {
 	const data = new TextEncoder().encode(content);
@@ -129,7 +133,12 @@ export const listWorkspaces = query({
 	handler: async (ctx) => {
 		const userId = await getAuthUserId(ctx);
 		const workspaces = await ctx.db.query("workspaces").collect();
-		if (!userId) return workspaces;
+		if (!userId) {
+			// Never leak real (owned) workspaces to unauthenticated callers. Legacy
+			// anonymous workspaces (ownerId === undefined) stay reachable for CLI/test
+			// flows, consistent with workspaceRole()'s anonymous "owner" semantics.
+			return workspaces.filter((workspace) => workspace.ownerId === undefined);
+		}
 
 		const memberships = await ctx.db
 			.query("members")
@@ -140,8 +149,7 @@ export const listWorkspaces = query({
 		);
 		return workspaces.filter(
 			(workspace) =>
-				workspace.ownerId === userId ||
-				memberWorkspaceIds.has(workspace._id),
+				workspace.ownerId === userId || memberWorkspaceIds.has(workspace._id),
 		);
 	},
 });
@@ -314,7 +322,17 @@ export const getAssetsByWorkspace = query({
 			const base = q.eq("workspaceId", workspaceId);
 			return since !== undefined ? base.gt("updatedAt", since) : base;
 		});
-		return q.collect();
+		const assets = await q.collect();
+		const visible = [];
+		for (const asset of assets) {
+			if (
+				!asset.authorityRootId ||
+				(await isFolderAuthorityActive(ctx, asset.authorityRootId))
+			) {
+				visible.push(asset);
+			}
+		}
+		return visible;
 	},
 });
 
@@ -325,7 +343,14 @@ export const getAssetDownloadUrl = query({
 			.query("assets")
 			.withIndex("by_storage", (q) => q.eq("storageId", storageId))
 			.unique();
-		if (!asset || asset.deleted) return null;
+		if (
+			!asset ||
+			asset.deleted ||
+			(asset.authorityRootId &&
+				!(await isFolderAuthorityActive(ctx, asset.authorityRootId)))
+		) {
+			return null;
+		}
 		await requireWorkspaceMember(ctx, asset.workspaceId);
 		return ctx.storage.getUrl(storageId);
 	},

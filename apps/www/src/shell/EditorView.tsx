@@ -49,6 +49,10 @@ type Props = {
 	initialMarkdown: string;
 	syncDocumentId?: string;
 	testIdentity: TestIdentity | null;
+	// Role-honest UI (RB2): viewers/commenters get a read-only ProseMirror view
+	// instead of a dead-looking editor that silently drops their edits.
+	// Defaults to true so existing owner/editor call sites are unaffected.
+	canWrite?: boolean;
 	onLiveDocumentEdit?: () => void;
 	onSelectionChange?: (selection: { anchor: number; head: number }) => void;
 };
@@ -127,6 +131,7 @@ function LiveEditorView({
 	initialMarkdown,
 	syncDocumentId,
 	testIdentity,
+	canWrite = true,
 	onLiveDocumentEdit,
 	onSelectionChange: onExternalSelectionChange,
 	docId,
@@ -141,10 +146,8 @@ function LiveEditorView({
 	const createdDocRef = useRef<string | null>(null);
 	const lastCursorHeartbeatRef = useRef(0);
 	const heartbeat = useMutation(api.pocIdentity.heartbeat);
-	const activeUsers = useQuery(
-		api.pocIdentity.listActive,
-		testIdentity ? { docId } : "skip",
-	);
+	const activeUsers = useQuery(api.pocIdentity.listActive, { docId });
+	const viewer = useQuery(api.viewer.me, testIdentity ? "skip" : {});
 	const sync = useTiptapSync(api.prosemirror, docId, {
 		warnOnUnsyncedClose: false,
 		onSyncError: (error) => {
@@ -157,9 +160,10 @@ function LiveEditorView({
 		title: wikiDisplayNameForTarget(file.path),
 	}));
 	const remotePresence = useMemo<RemotePresenceCursor[]>(() => {
-		if (!testIdentity || !activeUsers) return [];
+		if (!activeUsers) return [];
+		const currentUserId = testIdentity?.userId ?? viewer?._id;
 		return activeUsers.flatMap((user) => {
-			if (user.userId === testIdentity.userId) return [];
+			if (currentUserId && user.userId === currentUserId) return [];
 			if (user.anchor === undefined || user.head === undefined) return [];
 			return [
 				{
@@ -167,28 +171,37 @@ function LiveEditorView({
 					name: user.name,
 					anchor: user.anchor,
 					head: user.head,
-					color: colorForUser(user.userId),
+					color: user.color ?? colorForUser(user.userId),
 				},
 			];
 		});
-	}, [activeUsers, testIdentity]);
+	}, [activeUsers, testIdentity, viewer?._id]);
 
 	const publishSelection = useCallback(
 		(selection: { anchor: number; head: number }) => {
 			onExternalSelectionChange?.(selection);
-			if (!testIdentity) return;
 			const now = Date.now();
 			if (now - lastCursorHeartbeatRef.current < CURSOR_HEARTBEAT_MIN_MS) {
 				return;
 			}
 			lastCursorHeartbeatRef.current = now;
-			void heartbeat({
-				workspaceId: convexWorkspaceId,
-				docId,
-				userId: testIdentity.userId,
-				name: testIdentity.name,
-				anchor: selection.anchor,
-				head: selection.head,
+			const payload = testIdentity
+				? {
+						workspaceId: convexWorkspaceId,
+						docId,
+						userId: testIdentity.userId,
+						name: testIdentity.name,
+						anchor: selection.anchor,
+						head: selection.head,
+					}
+				: {
+						workspaceId: convexWorkspaceId,
+						docId,
+						anchor: selection.anchor,
+						head: selection.head,
+					};
+			void heartbeat(payload).catch((error) => {
+				console.error("Presence heartbeat failed:", error);
 			});
 		},
 		[
@@ -254,6 +267,7 @@ function LiveEditorView({
 			initialContent={sync.initialContent}
 			wikiTargets={wikiTargets}
 			remotePresence={remotePresence}
+			editorProps={{ editable: () => canWrite }}
 			extensions={[
 				sync.extension,
 				createWebImageExtension(),

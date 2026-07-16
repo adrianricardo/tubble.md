@@ -1,16 +1,16 @@
 {
 	"name": "@hubble.md/cli",
 	"version": "0.0.1",
-	"description": "CLI for syncing a Hubble.md workspace from the terminal",
+	"description": "CLI for syncing a Tubble.md workspace from the terminal",
 	"license": "MIT",
 	"author": "Ben Holmes <hey@bholmes.dev>",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/bholmesdev/hubble.md.git",
+		"url": "git+https://github.com/adrianricardo/tubble.md.git",
 		"directory": "packages/cli"
 	},
-	"homepage": "https://hubble.md",
-	"bugs": "https://github.com/bholmesdev/hubble.md/issues",
+	"homepage": "https://tubble.nopalstudio.com",
+	"bugs": "https://github.com/adrianricardo/tubble.md/issues",
 	"type": "module",
 	"bin": {
 		"hubble": "./dist/index.js"
@@ -19,8 +19,10 @@
 		"dist"
 	],
 	"scripts": {
+		"upstream:audit": "pnpm -w upstream:audit",
 		"build": "tsc -p tsconfig.json",
 		"postbuild": "chmod +x dist/index.js",
+		"test": "vitest run",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
 	},
@@ -33,6 +35,7 @@
 	},
 	"devDependencies": {
 		"@types/node": "^25.5.0",
-		"typescript": "~5.8.3"
+		"typescript": "~5.8.3",
+		"vitest": "^3.2.4"
 	}
 }

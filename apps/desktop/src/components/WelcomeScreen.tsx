@@ -1,11 +1,15 @@
 import { Button } from "@hubble.md/ui";
 
 export function WelcomeScreen({
+	cloudEnabled,
 	onCreateFolder,
 	onOpenFolder,
+	onOpenSettings,
 }: {
+	cloudEnabled?: boolean;
 	onCreateFolder: () => void;
 	onOpenFolder: () => void;
+	onOpenSettings?: () => void;
 }) {
 	return (
 		<div className="flex max-w-md flex-col items-center gap-3 text-center">
@@ -16,18 +20,28 @@ export function WelcomeScreen({
 				Welcome to <span className="font-semibold">hubble</span>
 			</h2>
 			<p
-				className="welcome-rise mb-2 text-sm text-muted-foreground"
+				className="welcome-rise [margin-block-end:0.5rem] text-sm text-muted-foreground"
 				style={{ animationDelay: "0.15s" }}
 			>
-				Let's pick a folder to start writing.
+				{cloudEnabled
+					? "Sign in to your space for Live Documents, or add a local folder for file-based editing."
+					: "Pick a local folder to start writing."}
 			</p>
 			<div
 				className="welcome-rise flex flex-wrap items-center justify-center gap-2"
 				style={{ animationDelay: "0.25s" }}
 			>
-				<Button onClick={onCreateFolder}>Create new folder</Button>
+				{cloudEnabled && onOpenSettings ? (
+					<Button onClick={onOpenSettings}>Open settings</Button>
+				) : null}
+				<Button
+					variant={cloudEnabled ? "outline" : "default"}
+					onClick={onCreateFolder}
+				>
+					Create local folder
+				</Button>
 				<Button variant="outline" onClick={onOpenFolder}>
-					Open existing folder
+					Open local folder
 				</Button>
 			</div>
 		</div>

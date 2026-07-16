@@ -1,4 +1,6 @@
+export { ContextMenuSpellcheckExtension } from "./ContextMenuSpellcheckExtension";
 export { FakeSelectionExtension } from "./FakeSelectionExtension";
+export { FrontMatterExtension } from "./FrontMatterNode";
 export {
 	combineMarkdownFrontMatter,
 	detectFilePropertyType,
@@ -11,6 +13,8 @@ export {
 	parseMarkdownFrontMatter,
 	serializeFrontMatter,
 	setMarkdownFrontMatter,
+	splitVerbatimFrontMatterBlock,
+	type VerbatimFrontMatterBlock,
 } from "./frontMatter";
 export { HeadingExtension } from "./Heading";
 export {
@@ -39,6 +43,10 @@ export {
 } from "./markdownPath";
 export { markdownToTiptapDoc } from "./markdownToProsemirror";
 export { tiptapDocToMarkdown } from "./prosemirrorToMarkdown";
+export {
+	createRichTextClipboardSerializer,
+	RichTextClipboardExtension,
+} from "./RichTextClipboardExtension";
 export { StoredMarksDecorationExtension } from "./StoredMarksDecorationExtension";
 export { StrikethroughShortcutExtension } from "./StrikethroughShortcutExtension";
 export {

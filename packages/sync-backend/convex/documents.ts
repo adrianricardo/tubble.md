@@ -8,7 +8,7 @@ import {
 import { Step, Transform } from "@tiptap/pm/transform";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
 	type MutationCtx,
 	mutation,
@@ -17,8 +17,17 @@ import {
 } from "./_generated/server";
 import { currentActorName } from "./authIdentity";
 import {
+	collectFolderSubtree,
+	folderRelativePath,
+	hasAncestorIn,
+} from "./folders";
+import { findUserIdByEmail, upsertDocumentInvite } from "./members";
+import {
 	canWriteRole,
 	documentRole,
+	type FolderRoleCache,
+	folderRole,
+	isFolderAuthorityActive,
 	requireDocumentComment,
 	requireDocumentOwner,
 	requireDocumentRead,
@@ -30,9 +39,11 @@ import {
 const prosemirrorSync = new ProsemirrorSync(components.prosemirrorSync);
 
 const LIVE_DOCUMENT_MARKDOWN_MAX_BYTES = 256 * 1024;
+const AUTO_REVISION_MIN_INTERVAL_MS = 60_000;
 const textEncoder = new TextEncoder();
 
 type DocumentRole = "owner" | "editor" | "commenter" | "viewer";
+type WorkspaceRole = "owner" | "admin" | "member";
 type LinkScope = "workspace" | "public";
 type PatchIntent =
 	| { kind: "replace-document"; markdown: string }
@@ -97,13 +108,18 @@ function markdownByteLength(markdown: string): number {
 	return textEncoder.encode(markdown).byteLength;
 }
 
-function assertLiveDocumentMarkdownWithinCap(markdown: string) {
+export function assertLiveDocumentMarkdownWithinCap(markdown: string) {
 	const bytes = markdownByteLength(markdown);
 	if (bytes > LIVE_DOCUMENT_MARKDOWN_MAX_BYTES) {
 		throw new Error(
-			`Live Document markdown is too large: ${bytes} bytes exceeds the 256 KiB limit`,
+			`Live Document size limit exceeded: this document is ${formatBytes(bytes)}, but Live Documents currently support up to 256 KiB of markdown. Keep this as a local markdown file or split it into smaller Live Documents.`,
 		);
 	}
+}
+
+function formatBytes(bytes: number): string {
+	if (bytes < 1024) return `${bytes} bytes`;
+	return `${Math.ceil(bytes / 1024)} KiB`;
 }
 
 async function ensureDocumentShare(
@@ -187,7 +203,7 @@ async function logActivity(
 	});
 }
 
-async function replaceLiveDocumentMarkdown(
+export async function replaceLiveDocumentMarkdown(
 	ctx: MutationCtx,
 	documentId: string,
 	markdown: string,
@@ -254,6 +270,14 @@ async function projectMarkdown(
 		version: latest.version,
 		pmDoc: transform.doc.toJSON(),
 	};
+}
+
+/** Current byte projection used by verified authority export snapshots. */
+export async function projectDocumentMarkdownForAuthority(
+	ctx: MutationCtx | QueryCtx,
+	documentId: Id<"documents">,
+) {
+	return projectMarkdown(ctx, documentId);
 }
 
 function appendMarkdown(currentMarkdown: string, markdown: string): string {
@@ -650,6 +674,38 @@ async function materializeRevisionForDocument(
 	});
 }
 
+async function materializeRevisionForDocumentIfStale(
+	ctx: MutationCtx,
+	args: {
+		documentId: Id<"documents">;
+		actor?: string;
+		label?: string;
+		minIntervalMs: number;
+	},
+) {
+	const revisions = await ctx.db
+		.query("revisions")
+		.withIndex("by_document", (q) => q.eq("documentId", args.documentId))
+		.collect();
+	const latest = revisions.sort((a, b) => b.createdAt - a.createdAt)[0];
+	const now = Date.now();
+	if (latest && now - latest.createdAt < args.minIntervalMs) return null;
+
+	const projection = await projectMarkdown(ctx, args.documentId);
+	if (latest && latest.revision === (projection.version ?? 0)) return null;
+
+	return ctx.db.insert("revisions", {
+		documentId: args.documentId,
+		createdAt: now,
+		actor: args.actor,
+		label: args.label,
+		pmDoc: projection.pmDoc,
+		markdown: projection.markdown,
+		revision: projection.version ?? 0,
+		crdtMeta: { prosemirrorVersion: projection.version ?? 0 },
+	});
+}
+
 function markdownOutline(markdown: string) {
 	return markdown
 		.split(/\r?\n/)
@@ -679,6 +735,105 @@ function searchSnippet(markdown: string, query: string): string {
 	const start = Math.max(0, index - 80);
 	const end = Math.min(markdown.length, index + query.length + 80);
 	return markdown.slice(start, end).trim();
+}
+
+async function accessibleWorkspaces(ctx: QueryCtx): Promise<
+	Array<{
+		_id: Id<"workspaces">;
+		name: string;
+		personal?: boolean;
+		createdAt: number;
+		role: WorkspaceRole;
+	}>
+> {
+	const userId = await getAuthUserId(ctx);
+	if (!userId) return [];
+
+	const workspaces = await ctx.db.query("workspaces").collect();
+	const memberships = await ctx.db
+		.query("members")
+		.withIndex("by_user", (q) => q.eq("userId", userId))
+		.collect();
+	const membershipByWorkspace = new Map(
+		memberships.map((member) => [member.workspaceId, member.role]),
+	);
+
+	return workspaces
+		.map((workspace) => {
+			const membershipRole = membershipByWorkspace.get(workspace._id);
+			const role =
+				workspace.ownerId === userId
+					? "owner"
+					: membershipRole !== undefined
+						? membershipRole
+						: null;
+			if (role === null) return null;
+			return {
+				_id: workspace._id,
+				name: workspace.name,
+				personal: workspace.personal,
+				createdAt: workspace.createdAt,
+				role,
+			};
+		})
+		.filter((workspace) => workspace !== null);
+}
+
+async function readableWorkspaceDocuments(
+	ctx: QueryCtx,
+	workspaces: Awaited<ReturnType<typeof accessibleWorkspaces>>,
+) {
+	const results = [];
+	for (const workspace of workspaces) {
+		const documents = await ctx.db
+			.query("documents")
+			.withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
+			.collect();
+		for (const document of documents) {
+			if (document.deletedAt !== undefined) continue;
+			const role = await documentRole(ctx, document._id);
+			if (role === null) continue;
+			results.push({
+				...document,
+				workspaceName: workspace.name,
+				workspacePersonal: workspace.personal === true,
+				role,
+				canWrite: canWriteRole(role),
+			});
+		}
+	}
+	return results;
+}
+
+async function directSharedDocuments(ctx: QueryCtx) {
+	const userId = await getAuthUserId(ctx);
+	if (!userId) return [];
+
+	const shares = await ctx.db
+		.query("docShares")
+		.withIndex("by_user", (q) => q.eq("userId", userId))
+		.collect();
+	const results = [];
+	for (const share of shares) {
+		const document = await ctx.db.get(share.documentId);
+		if (!document || document.deletedAt !== undefined) continue;
+
+		const wsRole = await workspaceRole(ctx, document.workspaceId);
+		if (wsRole !== null) continue;
+
+		const role = await documentRole(ctx, document._id);
+		if (role === null) continue;
+		const workspace = await ctx.db.get(document.workspaceId);
+		if (!workspace) continue;
+		results.push({
+			...document,
+			workspaceName: workspace.name,
+			workspacePersonal: workspace.personal === true,
+			role,
+			canWrite: canWriteRole(role),
+		});
+	}
+	return results;
 }
 
 function mentionTokens(body: string): string[] {
@@ -743,7 +898,8 @@ export const list = query({
 export const listTrash = query({
 	args: { workspaceId: v.id("workspaces") },
 	handler: async (ctx, { workspaceId }) => {
-		await requireWorkspaceMember(ctx, workspaceId);
+		// Direct document shares can outlive workspace membership; filter each
+		// deleted document by its saved role instead of gating on the workspace.
 		const documents = await ctx.db
 			.query("documents")
 			.withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
@@ -757,6 +913,19 @@ export const listTrash = query({
 			),
 		);
 		return trashed.filter((_, index) => roles[index] !== null);
+	},
+});
+
+export const getTrashState = query({
+	args: { documentId: v.id("documents") },
+	handler: async (ctx, { documentId }) => {
+		const document = await ctx.db.get(documentId);
+		if (!document) return "inaccessible" as const;
+		const role = await documentRole(ctx, documentId, { includeDeleted: true });
+		if (role === null) return "inaccessible" as const;
+		return document.deletedAt === undefined
+			? ("active" as const)
+			: ("trashed" as const);
 	},
 });
 
@@ -777,10 +946,15 @@ export const getWithMarkdown = query({
 		const document = await ctx.db.get(documentId);
 		if (!document || document.deletedAt !== undefined) return null;
 		const projection = await projectMarkdown(ctx, documentId);
+		// Additive (RB2): role/canWrite let guest-facing UI honor viewer/commenter
+		// read-only affordances instead of offering dead edit/accept buttons.
+		const role = await documentRole(ctx, documentId);
 		return {
 			...document,
 			markdown: projection.markdown,
 			version: projection.version,
+			role,
+			canWrite: canWriteRole(role),
 		};
 	},
 });
@@ -937,6 +1111,63 @@ export const listCommentThreads = query({
 	},
 });
 
+export const listMentionCandidates = query({
+	args: { documentId: v.id("documents") },
+	handler: async (ctx, { documentId }) => {
+		await requireDocumentComment(ctx, documentId);
+		const document = await ctx.db.get(documentId);
+		if (!document || document.deletedAt !== undefined) return [];
+
+		const userIds = new Set<Id<"users">>();
+		const workspace = await ctx.db.get(document.workspaceId);
+		if (workspace?.ownerId) userIds.add(workspace.ownerId);
+
+		const [members, shares] = await Promise.all([
+			ctx.db
+				.query("members")
+				.withIndex("by_workspace", (q) =>
+					q.eq("workspaceId", document.workspaceId),
+				)
+				.collect(),
+			ctx.db
+				.query("docShares")
+				.withIndex("by_document", (q) => q.eq("documentId", documentId))
+				.collect(),
+		]);
+
+		for (const member of members) userIds.add(member.userId);
+		for (const share of shares) {
+			if (share.userId) userIds.add(share.userId);
+		}
+
+		const users = await Promise.all(
+			[...userIds].map((userId) => ctx.db.get(userId)),
+		);
+		return users
+			.filter((user) => user !== null)
+			.map((user) => ({
+				userId: user._id,
+				name: user.name,
+				email: user.email,
+				token: mentionTokenForUser(user.name, user.email),
+			}))
+			.filter((user) => user.token !== null)
+			.sort((a, b) =>
+				(a.name ?? a.email ?? "").localeCompare(b.name ?? b.email ?? ""),
+			);
+	},
+});
+
+function mentionTokenForUser(
+	name: string | undefined,
+	email: string | undefined,
+): string | null {
+	const compactName = name?.trim().replace(/\s+/g, "");
+	if (compactName) return compactName;
+	const localPart = email?.split("@")[0]?.trim();
+	return localPart || null;
+}
+
 export const createCommentThread = mutation({
 	args: {
 		documentId: v.id("documents"),
@@ -1073,51 +1304,349 @@ export const listWithMarkdown = query({
 	},
 });
 
+// One markdown-bearing document projection inside a shared subtree (or a
+// directly-shared document at the top level). `relativePath` is the containing
+// folder path relative to the shared root ("" for the root itself or a per-doc
+// share). Serves both the web guest dashboard (RB2) and desktop subtree
+// materialization (RB4).
+type SharedSubtreeDocument = {
+	_id: Id<"documents">;
+	workspaceId: Id<"workspaces">;
+	workspaceName: string;
+	folderId: Id<"folders"> | null;
+	title: string;
+	path: string | null;
+	markdown: string;
+	version: number | null;
+	role: DocumentRole | null;
+	canWrite: boolean;
+	updatedAt: number;
+	deletedAt?: number;
+	relativePath: string;
+};
+
+type SharedFolderNode = {
+	folderId: Id<"folders">;
+	name: string;
+	workspaceId: Id<"workspaces">;
+	workspaceName: string;
+	parentId: Id<"folders"> | null;
+	role: DocumentRole;
+	repoName: string | null;
+	repoRemoteUrl: string | null;
+	// Descendant folders, each with a path relative to this shared root.
+	folders: Array<{
+		_id: Id<"folders">;
+		name: string;
+		parentId: Id<"folders"> | null;
+		relativePath: string;
+	}>;
+	documents: SharedSubtreeDocument[];
+};
+
+async function buildSharedSubtreeDocument(
+	ctx: QueryCtx,
+	document: Doc<"documents">,
+	workspaceName: string,
+	relativePath: string,
+	folderCache: FolderRoleCache,
+): Promise<SharedSubtreeDocument> {
+	const projection = await projectMarkdown(ctx, document._id);
+	const role = await documentRole(ctx, document._id, { folderCache });
+	return {
+		_id: document._id,
+		workspaceId: document.workspaceId,
+		workspaceName,
+		folderId: document.folderId ?? null,
+		title: document.title,
+		path: document.path ?? null,
+		markdown: projection.markdown,
+		version: projection.version,
+		role,
+		canWrite: canWriteRole(role),
+		updatedAt: document.updatedAt,
+		deletedAt: document.deletedAt,
+		relativePath,
+	};
+}
+
+/**
+ * The subtree "Shared with me" shape (D12). Returns the top-most folders shared
+ * directly with the caller — each carrying its descendant folders + documents
+ * with resolved roles and relative paths — plus the legacy per-document shares.
+ */
 export const listSharedWithMe = query({
 	args: {},
-	handler: async (ctx) => {
+	handler: async (
+		ctx,
+	): Promise<{
+		folders: SharedFolderNode[];
+		documents: SharedSubtreeDocument[];
+	}> => {
 		const userId = await getAuthUserId(ctx);
-		if (!userId) return [];
+		const folderCache: FolderRoleCache = new Map();
 
-		// Fetch all direct user-share rows for this user via the new by_user index.
-		// Link-scope shares (workspace / public) have userId = undefined and are
-		// excluded automatically by the index equality match.
-		const shares = await ctx.db
-			.query("docShares")
-			.withIndex("by_user", (q) => q.eq("userId", userId))
-			.collect();
+		// Per-document shares outside member workspaces (existing behavior).
+		const documents: SharedSubtreeDocument[] = [];
+		for (const document of await directSharedDocuments(ctx)) {
+			documents.push(
+				await buildSharedSubtreeDocument(
+					ctx,
+					document,
+					document.workspaceName,
+					"",
+					folderCache,
+				),
+			);
+		}
+		documents.sort((a, b) => b.updatedAt - a.updatedAt);
 
-		const results = [];
-		for (const share of shares) {
-			const document = await ctx.db.get(share.documentId);
-			// Filter out non-existent or trashed documents, consistent with listWithMarkdown.
-			if (!document || document.deletedAt !== undefined) continue;
+		const folders: SharedFolderNode[] = [];
+		if (userId) {
+			const shares = await ctx.db
+				.query("folderShares")
+				.withIndex("by_user", (q) => q.eq("userId", userId))
+				.collect();
+			const sharedFolderIds = new Set(shares.map((share) => share.folderId));
+			for (const share of shares) {
+				const root = await ctx.db.get(share.folderId);
+				if (!root || root.deletedAt !== undefined) continue;
+				// Only surface the top-most shared node: skip if an ancestor is also
+				// directly shared to this user (inheritance already covers it).
+				if (await hasAncestorIn(ctx, root, sharedFolderIds)) continue;
+				const role = await folderRole(ctx, root._id, { cache: folderCache });
+				if (!role) continue;
+				const workspace = await ctx.db.get(root.workspaceId);
+				const workspaceName = workspace?.name ?? "Shared";
 
-			// Only include documents from workspaces the user is NOT a member of.
-			// Workspace members already receive these documents through listWithMarkdown;
-			// returning them here too would cause double-listing in the Shared-with-me area.
-			const wsRole = await workspaceRole(ctx, document.workspaceId);
-			if (wsRole !== null) continue;
+				const { descendants, documents: subtreeDocs } =
+					await collectFolderSubtree(ctx, root._id);
+				const folderById = new Map<Id<"folders">, Doc<"folders">>();
+				folderById.set(root._id, root);
+				for (const folder of descendants) folderById.set(folder._id, folder);
 
-			const projection = await projectMarkdown(ctx, document._id);
-			const role = await documentRole(ctx, document._id);
-			// documentRole resolves the share row we already know exists, so null
-			// would be a data-integrity anomaly; skip to be safe.
-			if (role === null) continue;
-			const workspace = await ctx.db.get(document.workspaceId);
-			if (!workspace) continue;
+				const nodeDocuments: SharedSubtreeDocument[] = [];
+				for (const doc of subtreeDocs) {
+					const relativePath = doc.folderId
+						? folderRelativePath(doc.folderId, root._id, folderById)
+						: "";
+					nodeDocuments.push(
+						await buildSharedSubtreeDocument(
+							ctx,
+							doc,
+							workspaceName,
+							relativePath,
+							folderCache,
+						),
+					);
+				}
+				nodeDocuments.sort((a, b) => b.updatedAt - a.updatedAt);
 
-			results.push({
-				...document,
-				workspaceName: workspace.name,
-				markdown: projection.markdown,
-				version: projection.version,
-				role,
-				canWrite: canWriteRole(role),
-			});
+				folders.push({
+					folderId: root._id,
+					name: root.name,
+					workspaceId: root.workspaceId,
+					workspaceName,
+					parentId: root.parentId ?? null,
+					role,
+					repoName: root.repoName ?? null,
+					repoRemoteUrl: root.repoRemoteUrl ?? null,
+					folders: descendants
+						.map((folder) => ({
+							_id: folder._id,
+							name: folder.name,
+							parentId: folder.parentId ?? null,
+							relativePath: folderRelativePath(
+								folder._id,
+								root._id,
+								folderById,
+							),
+						}))
+						.sort((a, b) => a.relativePath.localeCompare(b.relativePath)),
+					documents: nodeDocuments,
+				});
+			}
 		}
 
-		// Return newest-first, matching listWithMarkdown's sort order.
+		return { folders, documents };
+	},
+});
+
+/**
+ * Folder-scoped guest variant of `listWithMarkdown`: every active document in
+ * the shared subtree with markdown + resolved role. Authorized by inherited
+ * `folderRole` rather than workspace membership.
+ */
+export const listFolderWithMarkdown = query({
+	args: { folderId: v.id("folders") },
+	handler: async (ctx, { folderId }) => {
+		let rootRole = await folderRole(ctx, folderId);
+		if (!rootRole) {
+			// Workspace-membership fallback (RB3): the repo-link mount is driven by
+			// the folder's own workspace member (the dev), who has no folderShares
+			// row — same pattern as `searchFolder` below.
+			const folder = await ctx.db.get(folderId);
+			const membership =
+				folder && (await isFolderAuthorityActive(ctx, folderId))
+					? await workspaceRole(ctx, folder.workspaceId)
+					: null;
+			rootRole = membership ? "editor" : null;
+		}
+		if (!rootRole) throw new Error("Unauthorized");
+		const folderCache: FolderRoleCache = new Map();
+		const { root, descendants, documents } = await collectFolderSubtree(
+			ctx,
+			folderId,
+		);
+		if (!root || root.deletedAt !== undefined) return [];
+		const workspace = await ctx.db.get(root.workspaceId);
+		const workspaceName = workspace?.name ?? "Shared";
+		const folderById = new Map<Id<"folders">, Doc<"folders">>();
+		folderById.set(root._id, root);
+		for (const folder of descendants) folderById.set(folder._id, folder);
+
+		const results: SharedSubtreeDocument[] = [];
+		for (const doc of documents) {
+			const relativePath = doc.folderId
+				? folderRelativePath(doc.folderId, root._id, folderById)
+				: "";
+			results.push(
+				await buildSharedSubtreeDocument(
+					ctx,
+					doc,
+					workspaceName,
+					relativePath,
+					folderCache,
+				),
+			);
+		}
+		return results.sort((a, b) => b.updatedAt - a.updatedAt);
+	},
+});
+
+/**
+ * Folder-scoped guest search: covers exactly the caller's shared subtree.
+ * Authorized by inherited `folderRole`.
+ */
+export const searchFolder = query({
+	args: {
+		folderId: v.id("folders"),
+		query: v.string(),
+		limit: v.optional(v.number()),
+	},
+	handler: async (ctx, { folderId, query, limit }) => {
+		let rootRole = await folderRole(ctx, folderId);
+		if (!rootRole) {
+			// Workspace-membership fallback (RB2): a member opening a folder invite
+			// link to their own workspace has no folderShares row but may search.
+			const folder = await ctx.db.get(folderId);
+			const membership =
+				folder && (await isFolderAuthorityActive(ctx, folderId))
+					? await workspaceRole(ctx, folder.workspaceId)
+					: null;
+			rootRole = membership ? "editor" : null;
+		}
+		if (!rootRole) throw new Error("Unauthorized");
+		const needle = query.trim().toLowerCase();
+		if (!needle) return [];
+		const { root, documents } = await collectFolderSubtree(ctx, folderId);
+		if (!root || root.deletedAt !== undefined) return [];
+		const results = [];
+		for (const document of documents) {
+			const projection = await projectMarkdown(ctx, document._id);
+			const haystack = `${document.title}\n${document.path ?? ""}\n${projection.markdown}`;
+			if (!haystack.toLowerCase().includes(needle)) continue;
+			results.push({
+				documentId: document._id,
+				folderId: document.folderId ?? null,
+				title: document.title,
+				path: document.path,
+				updatedAt: document.updatedAt,
+				updatedBy: document.updatedBy,
+				revision: projection.version ?? 0,
+				snippet: searchSnippet(projection.markdown, query.trim()),
+			});
+			if (results.length >= (limit ?? 20)) break;
+		}
+		return results;
+	},
+});
+
+export const dashboard = query({
+	args: {
+		recentLimit: v.optional(v.number()),
+		sharedLimit: v.optional(v.number()),
+	},
+	handler: async (ctx, { recentLimit, sharedLimit }) => {
+		const workspaces = await accessibleWorkspaces(ctx);
+		const workspaceDocuments = await readableWorkspaceDocuments(
+			ctx,
+			workspaces,
+		);
+		const sharedWithMe = await directSharedDocuments(ctx);
+		const allDocuments = [...workspaceDocuments, ...sharedWithMe].sort(
+			(a, b) => b.updatedAt - a.updatedAt,
+		);
+		const maxRecents = Math.max(1, Math.min(recentLimit ?? 8, 24));
+		const maxShared = Math.max(1, Math.min(sharedLimit ?? 6, 24));
+
+		return {
+			workspaces: workspaces.sort((a, b) => {
+				if (a.personal !== b.personal) return a.personal ? -1 : 1;
+				return a.name.localeCompare(b.name);
+			}),
+			recents: allDocuments.slice(0, maxRecents),
+			sharedWithMe: sharedWithMe
+				.sort((a, b) => b.updatedAt - a.updatedAt)
+				.slice(0, maxShared),
+		};
+	},
+});
+
+export const searchAll = query({
+	args: {
+		query: v.string(),
+		limit: v.optional(v.number()),
+	},
+	handler: async (ctx, { query, limit }) => {
+		const needle = query.trim().toLowerCase();
+		if (!needle) return [];
+
+		const workspaces = await accessibleWorkspaces(ctx);
+		const workspaceDocuments = await readableWorkspaceDocuments(
+			ctx,
+			workspaces,
+		);
+		const sharedWithMe = await directSharedDocuments(ctx);
+		const documentsById = new Map(
+			[...workspaceDocuments, ...sharedWithMe].map((document) => [
+				document._id,
+				document,
+			]),
+		);
+		const maxResults = Math.max(1, Math.min(limit ?? 20, 50));
+		const results = [];
+
+		for (const document of documentsById.values()) {
+			const projection = await projectMarkdown(ctx, document._id);
+			const haystack = `${document.title}\n${document.path ?? ""}\n${document.workspaceName}\n${projection.markdown}`;
+			if (!haystack.toLowerCase().includes(needle)) continue;
+			results.push({
+				documentId: document._id,
+				workspaceId: document.workspaceId,
+				workspaceName: document.workspaceName,
+				title: document.title,
+				path: document.path,
+				updatedAt: document.updatedAt,
+				updatedBy: document.updatedBy,
+				revision: projection.version ?? 0,
+				role: document.role,
+				canWrite: document.canWrite,
+				snippet: searchSnippet(projection.markdown, query.trim()),
+			});
+			if (results.length >= maxResults) break;
+		}
+
 		return results.sort((a, b) => b.updatedAt - a.updatedAt);
 	},
 });
@@ -1265,16 +1794,50 @@ export const rejectSuggestion = mutation({
 export const create = mutation({
 	args: {
 		workspaceId: v.id("workspaces"),
+		folderId: v.optional(v.id("folders")),
 		title: v.string(),
 		path: v.optional(v.string()),
+		// Optional initial content, converted through the Live Document import
+		// path. This is also the seam RB5's `BRAIN.md` seeding calls.
+		markdown: v.optional(v.string()),
 		actor: v.optional(v.string()),
 	},
-	handler: async (ctx, { workspaceId, title, path, actor }) => {
-		await requireWorkspaceMember(ctx, workspaceId);
+	handler: async (
+		ctx,
+		{ workspaceId, folderId, title, path, markdown, actor },
+	) => {
+		let isMember = (await workspaceRole(ctx, workspaceId)) !== null;
+		if (folderId) {
+			const folder = await ctx.db.get(folderId);
+			if (
+				!folder ||
+				folder.deletedAt !== undefined ||
+				folder.workspaceId !== workspaceId ||
+				!(await isFolderAuthorityActive(ctx, folderId))
+			) {
+				throw new Error("Folder not found");
+			}
+			if (!isMember) {
+				// Guest create (D12): requires inherited editor+ on the folder.
+				const role = await folderRole(ctx, folderId);
+				if (role !== "owner" && role !== "editor") {
+					throw new Error("Unauthorized");
+				}
+			}
+		} else {
+			await requireWorkspaceMember(ctx, workspaceId);
+			isMember = true;
+		}
+
+		if (markdown !== undefined) {
+			assertLiveDocumentMarkdownWithinCap(markdown);
+		}
+
 		const now = Date.now();
 		const resolvedActor = await currentActorName(ctx, actor);
 		const documentId = await ctx.db.insert("documents", {
 			workspaceId,
+			folderId,
 			title: normalizeTitle(title),
 			path: path?.trim() || undefined,
 			createdBy: resolvedActor,
@@ -1282,7 +1845,15 @@ export const create = mutation({
 			updatedBy: resolvedActor,
 			updatedAt: now,
 		});
-		await ensureCurrentUserOwnerShare(ctx, documentId);
+		// Docs created inside a shared folder inherit its shares (D12) — no extra
+		// ACL row. Root-level member creates keep the creator's owner share so the
+		// document remains reachable outside any folder.
+		if (!folderId) {
+			await ensureCurrentUserOwnerShare(ctx, documentId);
+		}
+		if (markdown !== undefined && markdown.length > 0) {
+			await replaceLiveDocumentMarkdown(ctx, documentId, markdown);
+		}
 		return documentId;
 	},
 });
@@ -1290,46 +1861,97 @@ export const create = mutation({
 export const importMarkdown = mutation({
 	args: {
 		workspaceId: v.id("workspaces"),
+		folderId: v.optional(v.id("folders")),
 		path: v.string(),
 		title: v.string(),
 		markdown: v.string(),
+		idempotencyKey: v.string(),
 		actor: v.optional(v.string()),
 	},
-	handler: async (ctx, { workspaceId, path, title, markdown, actor }) => {
-		await requireWorkspaceMember(ctx, workspaceId);
+	handler: async (
+		ctx,
+		{ workspaceId, folderId, path, title, markdown, idempotencyKey, actor },
+	) => {
+		const isMember = (await workspaceRole(ctx, workspaceId)) !== null;
+		if (folderId) {
+			const folder = await ctx.db.get(folderId);
+			if (
+				!folder ||
+				folder.deletedAt !== undefined ||
+				folder.workspaceId !== workspaceId ||
+				!(await isFolderAuthorityActive(ctx, folderId))
+			) {
+				throw new Error("Folder not found");
+			}
+			if (!isMember) {
+				const role = await folderRole(ctx, folderId);
+				if (role !== "owner" && role !== "editor") {
+					throw new Error("Unauthorized");
+				}
+			}
+		} else {
+			await requireWorkspaceMember(ctx, workspaceId);
+		}
 		const resolvedActor = await currentActorName(ctx, actor);
 		const normalizedTitle = normalizeTitle(title);
 		const normalizedPath = path.trim();
 		if (!normalizedPath) throw new Error("Document path is required");
+		const normalizedImportKey = idempotencyKey.trim();
+		if (!normalizedImportKey)
+			throw new Error("Import idempotency key is required");
+		const priorImports = await ctx.db
+			.query("documents")
+			.withIndex("by_workspace_import_key", (q) =>
+				q.eq("workspaceId", workspaceId).eq("importKey", normalizedImportKey),
+			)
+			.order("desc")
+			.take(1);
+		const priorImport = priorImports[0];
+		// Trashing finishes the old operation, so the same source may be imported
+		// again without reviving a document the user intentionally removed.
+		if (priorImport && priorImport.deletedAt === undefined) {
+			if (
+				priorImport.folderId !== folderId ||
+				priorImport.path !== normalizedPath
+			) {
+				throw new Error(
+					"Import idempotency key does not match its destination",
+				);
+			}
+			return {
+				documentId: priorImport._id,
+				path: priorImport.path ?? normalizedPath,
+				title: priorImport.title,
+				created: false,
+			};
+		}
 		const pathMatches = await ctx.db
 			.query("documents")
-			.withIndex("by_workspace_path", (q) =>
-				q.eq("workspaceId", workspaceId).eq("path", normalizedPath),
+			.withIndex("by_workspace_folder_path", (q) =>
+				q
+					.eq("workspaceId", workspaceId)
+					.eq("folderId", folderId)
+					.eq("path", normalizedPath),
 			)
-			.collect();
-		const existing = pathMatches.find(
-			(document) => document.deletedAt === undefined,
-		);
+			.take(2);
+		if (pathMatches.some((document) => document.deletedAt === undefined)) {
+			throw new Error(
+				`A document named "${normalizedPath}" already exists in that destination`,
+			);
+		}
 		const now = Date.now();
-		const documentId = existing
-			? existing._id
-			: await ctx.db.insert("documents", {
-					workspaceId,
-					title: normalizedTitle,
-					path: normalizedPath,
-					createdBy: resolvedActor,
-					createdAt: now,
-					updatedBy: resolvedActor,
-					updatedAt: now,
-				});
-		if (existing) {
-			await ctx.db.patch(documentId, {
-				title: normalizedTitle,
-				path: normalizedPath,
-				updatedBy: resolvedActor,
-				updatedAt: now,
-			});
-		} else {
+		const documentId = await ctx.db.insert("documents", {
+			workspaceId,
+			folderId,
+			title: normalizedTitle,
+			path: normalizedPath,
+			importKey: normalizedImportKey,
+			createdBy: resolvedActor,
+			createdAt: now,
+			updatedBy: resolvedActor,
+			updatedAt: now,
+		});
+		if (!folderId) {
 			await ensureCurrentUserOwnerShare(ctx, documentId);
 		}
 		await replaceLiveDocumentMarkdown(ctx, documentId, markdown);
@@ -1337,7 +1959,7 @@ export const importMarkdown = mutation({
 			documentId,
 			path: normalizedPath,
 			title: normalizedTitle,
-			created: !existing,
+			created: true,
 		};
 	},
 });
@@ -1391,13 +2013,25 @@ export const setUserShareByEmail = mutation({
 		await requireDocumentOwner(ctx, documentId);
 		const normalizedEmail = email.trim().toLowerCase();
 		if (!normalizedEmail) throw new Error("Email is required");
-		const users = await ctx.db.query("users").collect();
-		const user = users.find(
-			(candidate) => candidate.email?.toLowerCase() === normalizedEmail,
-		);
-		if (!user) throw new Error(`No Hubble user found for ${normalizedEmail}`);
-		await ensureDocumentShare(ctx, { documentId, userId: user._id, role });
-		return user._id;
+		const existingUserId = await findUserIdByEmail(ctx, normalizedEmail);
+		if (existingUserId) {
+			await ensureDocumentShare(ctx, {
+				documentId,
+				userId: existingUserId,
+				role,
+			});
+			return { status: "shared" as const, userId: existingUserId };
+		}
+		// No account yet: record a pending invite resolved on the invitee's
+		// signup instead of rejecting the share.
+		const invitedBy = (await getAuthUserId(ctx)) ?? undefined;
+		await upsertDocumentInvite(ctx, {
+			documentId,
+			email: normalizedEmail,
+			role,
+			invitedBy,
+		});
+		return { status: "invited" as const, userId: null };
 	},
 });
 
@@ -1461,6 +2095,12 @@ export const markEdited = mutation({
 		const document = await ctx.db.get(documentId);
 		if (!document || document.deletedAt !== undefined) return;
 		const resolvedActor = await currentActorName(ctx, actor);
+		await materializeRevisionForDocumentIfStale(ctx, {
+			documentId,
+			label: "Autosaved",
+			actor: resolvedActor,
+			minIntervalMs: AUTO_REVISION_MIN_INTERVAL_MS,
+		});
 		await ctx.db.patch(documentId, {
 			updatedBy: resolvedActor,
 			updatedAt: Date.now(),

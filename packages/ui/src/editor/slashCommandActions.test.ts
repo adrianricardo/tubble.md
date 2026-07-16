@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { Editor, type JSONContent } from "@tiptap/core";
+import { Editor, type JSONContent, Node } from "@tiptap/core";
 import { BulletList, ListItem, OrderedList } from "@tiptap/extension-list";
 import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
@@ -19,6 +19,35 @@ const CheckedListItem = ListItem.extend({
 				default: null,
 			},
 		};
+	},
+});
+const Table = Node.create({
+	name: "table",
+	group: "block",
+	content: "tableRow+",
+	renderHTML() {
+		return ["table", ["tbody", 0]];
+	},
+});
+const TableRow = Node.create({
+	name: "tableRow",
+	content: "(tableCell | tableHeader)*",
+	renderHTML() {
+		return ["tr", 0];
+	},
+});
+const TableHeader = Node.create({
+	name: "tableHeader",
+	content: "paragraph",
+	renderHTML() {
+		return ["th", 0];
+	},
+});
+const TableCell = Node.create({
+	name: "tableCell",
+	content: "paragraph",
+	renderHTML() {
+		return ["td", 0];
 	},
 });
 
@@ -118,6 +147,43 @@ describe("slash command document actions", () => {
 		});
 	});
 
+	it("inserts a 3-column table with a header row", () => {
+		const editor = createEditor(docWithParagraph("/table"));
+		const token = expectSlashToken(editor);
+
+		applySlashCommand(editor, token, "table");
+
+		expect(editor.getJSON()).toMatchObject({
+			type: "doc",
+			content: [
+				{
+					type: "table",
+					content: [
+						{
+							type: "tableRow",
+							content: [
+								{ type: "tableHeader", content: [{ type: "paragraph" }] },
+								{ type: "tableHeader", content: [{ type: "paragraph" }] },
+								{ type: "tableHeader", content: [{ type: "paragraph" }] },
+							],
+						},
+						{
+							type: "tableRow",
+							content: [
+								{ type: "tableCell", content: [{ type: "paragraph" }] },
+								{ type: "tableCell", content: [{ type: "paragraph" }] },
+								{ type: "tableCell", content: [{ type: "paragraph" }] },
+							],
+						},
+					],
+				},
+				{ type: "paragraph" },
+			],
+		});
+		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+		expect(editor.state.selection.$from.node(-1).type.name).toBe("tableHeader");
+	});
+
 	it("toggles strikethrough for following typed text", () => {
 		const editor = createEditor(docWithParagraph("/strike"));
 		const token = expectSlashToken(editor);
@@ -155,6 +221,10 @@ function createEditor(content: JSONContent) {
 			BulletList,
 			OrderedList,
 			CheckedListItem,
+			Table,
+			TableRow,
+			TableHeader,
+			TableCell,
 		],
 		content,
 	});

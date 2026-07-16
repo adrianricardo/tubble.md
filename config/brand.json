@@ -1,0 +1,41 @@
+{
+	"$schema": "./brand.schema.json",
+	"_comment": "Single source of truth for MUTABLE public brand values (launch: Tubble.md). A future public rename edits THIS file, then regenerates/validates via `pnpm check:brand`. Compatibility-sensitive identifiers (bundle IDs, protocol schemes, package namespaces, persisted paths) live in compatibility.json, NOT here. Upstream attribution values live in attribution below and are intentionally NOT renamed.",
+	"displayName": "Tubble.md",
+	"productName": "Tubble",
+	"shortName": "Tubble",
+	"slug": "tubble",
+	"tagline": "A fork of Hubble.md — the Markdown notepad for you and your agents.",
+	"repo": {
+		"owner": "adrianricardo",
+		"name": "tubble.md",
+		"url": "https://github.com/adrianricardo/tubble.md"
+	},
+	"web": {
+		"url": "https://tubble.nopalstudio.com"
+	},
+	"links": {
+		"download": "https://github.com/adrianricardo/tubble.md/releases",
+		"releases": "https://github.com/adrianricardo/tubble.md/releases",
+		"issues": "https://github.com/adrianricardo/tubble.md/issues",
+		"security": "https://github.com/adrianricardo/tubble.md/security/advisories/new",
+		"contributing": "CONTRIBUTING.md"
+	},
+	"release": {
+		"provider": "github",
+		"owner": "adrianricardo",
+		"repo": "tubble.md"
+	},
+	"protocol": {
+		"displayLabel": "Tubble URL"
+	},
+	"attribution": {
+		"_comment": "Upstream provenance. Intentionally retained and clearly labeled as the ORIGINAL project, never presented as the fork's own account. MIT copyright notice must be preserved.",
+		"upstreamName": "Hubble.md",
+		"upstreamRepo": "https://github.com/bholmesdev/hubble.md",
+		"upstreamAuthorHandle": "@bholmesdev",
+		"upstreamAuthorUrl": "https://twitter.com/bholmesdev",
+		"upstreamCopyright": "Copyright (c) 2026 Ben Holmes",
+		"upstreamSkillsRepo": "bholmesdev/hubble-skills"
+	}
+}

@@ -1,50 +1,37 @@
 import { api } from "@hubble.md/sync-backend";
-import type { Doc } from "@hubble.md/sync-backend/types";
-import { ConvexHttpClient } from "convex/browser";
+import { useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { saveWorkspace } from "../connection/connection";
 import { categorizeError, describeError } from "../connection/convex-error";
 
-type Workspace = Doc<"workspaces">;
-
 type Props = {
-	url: string;
 	onSelected: (id: string) => void;
-	onDisconnect: () => void;
+	onDisconnect?: () => void;
 };
 
-export function OpenWorkspaceScreen({ url, onSelected, onDisconnect }: Props) {
-	const [client] = useState(() => new ConvexHttpClient(url));
-	const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null);
+// Post-auth workspace picker / first-run create. Auth lives at the router root,
+// so this uses the authenticated Convex context client (useQuery/useMutation)
+// rather than a standalone unauthenticated HTTP client.
+export function OpenWorkspaceScreen({ onSelected, onDisconnect }: Props) {
+	const workspaces = useQuery(api.sync.listWorkspaces, {});
+	const createWorkspace = useMutation(api.sync.createWorkspace);
 	const [error, setError] = useState<string | null>(null);
 	const [name, setName] = useState("");
 	const [busy, setBusy] = useState(false);
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: select uses stable saveWorkspace + props
-	useEffect(() => {
-		let cancelled = false;
-		(async () => {
-			try {
-				const result = await client.query(api.sync.listWorkspaces, {});
-				if (cancelled) return;
-				setWorkspaces(result);
-				if (result.length === 1) {
-					select(result[0]._id);
-				}
-			} catch (err) {
-				if (cancelled) return;
-				setError(describeError(categorizeError(err)));
-			}
-		})();
-		return () => {
-			cancelled = true;
-		};
-	}, [client]);
 
 	const select = (id: string) => {
 		saveWorkspace(id);
 		onSelected(id);
 	};
+
+	// Auto-select when there's exactly one workspace (the common case once a
+	// personal workspace is auto-provisioned on signup).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: select uses stable saveWorkspace + props
+	useEffect(() => {
+		if (workspaces && workspaces.length === 1) {
+			select(workspaces[0]._id);
+		}
+	}, [workspaces]);
 
 	const handleCreate = async (event: React.FormEvent) => {
 		event.preventDefault();
@@ -53,9 +40,7 @@ export function OpenWorkspaceScreen({ url, onSelected, onDisconnect }: Props) {
 		setBusy(true);
 		setError(null);
 		try {
-			const id = await client.mutation(api.sync.createWorkspace, {
-				name: trimmed,
-			});
+			const id = await createWorkspace({ name: trimmed });
 			select(id);
 		} catch (err) {
 			setError(describeError(categorizeError(err)));
@@ -63,27 +48,24 @@ export function OpenWorkspaceScreen({ url, onSelected, onDisconnect }: Props) {
 		}
 	};
 
-	const empty = workspaces !== null && workspaces.length === 0;
+	const empty = workspaces !== undefined && workspaces.length === 0;
 
 	return (
 		<main className="flex h-dvh items-center justify-center bg-background text-foreground">
 			<div className="flex w-full max-w-md flex-col gap-3 rounded-md border border-border bg-sidebar p-6">
 				<div className="flex items-start justify-between gap-3">
-					<div>
-						<h1 className="m-0 text-base font-semibold">
-							{empty ? "Name your Workspace" : "Open a Workspace"}
-						</h1>
-						<p className="m-0 mt-1 break-all text-xs text-muted-foreground">
-							{url}
-						</p>
-					</div>
-					<button
-						type="button"
-						onClick={onDisconnect}
-						className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-					>
-						Disconnect
-					</button>
+					<h1 className="m-0 text-base font-semibold">
+						{empty ? "Name your space" : "Open a space"}
+					</h1>
+					{onDisconnect && (
+						<button
+							type="button"
+							onClick={onDisconnect}
+							className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+						>
+							Sign out
+						</button>
+					)}
 				</div>
 
 				{error && (
@@ -92,7 +74,7 @@ export function OpenWorkspaceScreen({ url, onSelected, onDisconnect }: Props) {
 					</p>
 				)}
 
-				{workspaces === null && !error && (
+				{workspaces === undefined && !error && (
 					<p className="m-0 text-xs text-muted-foreground">Loading…</p>
 				)}
 
@@ -126,7 +108,7 @@ export function OpenWorkspaceScreen({ url, onSelected, onDisconnect }: Props) {
 							required
 							value={name}
 							onChange={(event) => setName(event.target.value)}
-							placeholder="Workspace name"
+							placeholder="Space name"
 							disabled={busy}
 							className="rounded-sm border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring"
 						/>
@@ -135,7 +117,7 @@ export function OpenWorkspaceScreen({ url, onSelected, onDisconnect }: Props) {
 							disabled={busy}
 							className="rounded-sm bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
 						>
-							{busy ? "Creating…" : "Create Workspace"}
+							{busy ? "Creating…" : "Create space"}
 						</button>
 					</form>
 				)}

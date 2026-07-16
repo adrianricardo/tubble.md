@@ -1,16 +1,16 @@
 {
 	"name": "@hubble.md/runtime",
 	"version": "0.0.1",
-	"description": "Runtime injected into Hubble.md HTML Apps and Embeds",
+	"description": "Runtime injected into Tubble.md HTML Apps and Embeds",
 	"license": "MIT",
 	"author": "Ben Holmes <hey@bholmes.dev>",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/bholmesdev/hubble.md.git",
+		"url": "git+https://github.com/adrianricardo/tubble.md.git",
 		"directory": "packages/runtime"
 	},
-	"homepage": "https://hubble.md",
-	"bugs": "https://github.com/bholmesdev/hubble.md/issues",
+	"homepage": "https://tubble.nopalstudio.com",
+	"bugs": "https://github.com/adrianricardo/tubble.md/issues",
 	"type": "module",
 	"exports": {
 		"./html-app-theme.css": "./html-app-theme.css",
@@ -22,5 +22,8 @@
 	],
 	"publishConfig": {
 		"access": "public"
+	},
+	"scripts": {
+		"upstream:audit": "pnpm -w upstream:audit"
 	}
 }

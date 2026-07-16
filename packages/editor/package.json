@@ -1,16 +1,16 @@
 {
 	"name": "@hubble.md/editor",
 	"version": "0.0.1",
-	"description": "Framework-agnostic Markdown editor core for Hubble.md",
+	"description": "Framework-agnostic Markdown editor core for Tubble.md",
 	"license": "MIT",
 	"author": "Ben Holmes <hey@bholmes.dev>",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/bholmesdev/hubble.md.git",
+		"url": "git+https://github.com/adrianricardo/tubble.md.git",
 		"directory": "packages/editor"
 	},
-	"homepage": "https://hubble.md",
-	"bugs": "https://github.com/bholmesdev/hubble.md/issues",
+	"homepage": "https://tubble.nopalstudio.com",
+	"bugs": "https://github.com/adrianricardo/tubble.md/issues",
 	"type": "module",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
@@ -27,6 +27,7 @@
 		"access": "public"
 	},
 	"scripts": {
+		"upstream:audit": "pnpm -w upstream:audit",
 		"build": "tsc -p tsconfig.json",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
@@ -34,7 +35,9 @@
 	},
 	"dependencies": {
 		"@tiptap/core": "^3.4.3",
+		"@tiptap/extension-image": "^3.4.2",
 		"@tiptap/extension-list": "^3.4.2",
+		"@tiptap/extension-table": "^3.4.3",
 		"@tiptap/pm": "^3.3.0",
 		"@tiptap/starter-kit": "^3.4.3",
 		"hast-util-from-html": "^2.0.3",

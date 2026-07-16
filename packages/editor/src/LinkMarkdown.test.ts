@@ -34,7 +34,7 @@ describe("link markdown conversion", () => {
 				},
 			],
 		});
-		expect(markdown).toBe("[OpenAI](https://openai.com)");
+		expect(markdown).toBe("[OpenAI](https://openai.com)\n");
 	});
 });
 
@@ -56,7 +56,7 @@ describe("link where text equals href", () => {
 	});
 
 	it("round-trips through markdown", () => {
-		const input = "[https://example.com](https://example.com)";
+		const input = "[https://example.com](https://example.com)\n";
 		const doc = markdownToTiptapDoc(input);
 		const output = tiptapDocToMarkdown(doc);
 		expect(output).toBe(input);
@@ -83,7 +83,7 @@ describe("wikilink markdown conversion", () => {
 	});
 
 	it("round-trips wikilinks with custom titles", () => {
-		const input = "[[Notes/File 2.md|My link]]";
+		const input = "[[Notes/File 2.md|My link]]\n";
 		const doc = markdownToTiptapDoc(input);
 		const output = tiptapDocToMarkdown(doc);
 		expect(output).toBe(input);
@@ -114,6 +114,6 @@ describe("wikilink markdown conversion", () => {
 				},
 			],
 		});
-		expect(markdown).toBe("[[Notes/File 2.md]]");
+		expect(markdown).toBe("[[Notes/File 2.md]]\n");
 	});
 });

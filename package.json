@@ -2,21 +2,24 @@
 	"name": "hubble-md",
 	"private": true,
 	"version": "0.0.0",
-	"description": "Hubble.md monorepo",
+	"description": "Tubble.md monorepo",
 	"license": "MIT",
 	"author": "Ben Holmes <hey@bholmes.dev>",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/bholmesdev/hubble.md.git"
+		"url": "git+https://github.com/adrianricardo/tubble.md.git"
 	},
-	"homepage": "https://hubble.md",
-	"bugs": "https://github.com/bholmesdev/hubble.md/issues",
+	"homepage": "https://tubble.nopalstudio.com",
+	"bugs": "https://github.com/adrianricardo/tubble.md/issues",
 	"scripts": {
+		"upstream:audit": "node .agents/skills/upstream-intake/scripts/audit-upstream.mjs",
 		"check": "biome check .",
 		"check:fix": "biome check . --write",
+		"check:brand": "node scripts/check-brand.mjs",
 		"typecheck": "pnpm -r --if-present typecheck",
 		"build": "pnpm check && pnpm -r --if-present build && pnpm typecheck",
 		"build:desktop": "pnpm --filter @hubble.md/desktop... --if-present build && pnpm --filter @hubble.md/desktop... --if-present typecheck",
+		"build:desktop:dist": "pnpm --filter @hubble.md/desktop... --if-present build && CSC_IDENTITY_AUTO_DISCOVERY=false pnpm --filter @hubble.md/desktop exec electron-builder --mac zip --publish never",
 		"bundle:desktop": "pnpm --filter @hubble.md/desktop... --if-present build && pnpm --filter @hubble.md/desktop bundle",
 		"postinstall": "pnpm --filter @hubble.md/desktop exec install-electron",
 		"dev:desktop": "pnpm -r --parallel --stream --filter @hubble.md/desktop... --if-present dev",

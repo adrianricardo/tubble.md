@@ -1,0 +1,28 @@
+.popover {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	padding-block: 0.25rem;
+	padding-inline: 0.25rem;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-popover);
+	background: var(--popover);
+	color: var(--popover-foreground);
+	box-shadow: var(--shadow-overlay);
+}
+
+.group {
+	display: flex;
+	align-items: center;
+	gap: 0.125rem;
+}
+
+.button {
+	color: var(--muted-foreground);
+}
+
+.button:hover,
+.active {
+	color: var(--foreground);
+	background: var(--muted);
+}

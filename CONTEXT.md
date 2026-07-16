@@ -1,11 +1,23 @@
-# hubble.md context
+# Tubble.md context
 
 Glossary for shared terms across the project. Implementation details belong in code or ADRs — not here.
+
+> **Target-product note (2026-07-15):** Repository content is Git-authoritative by
+> default. A selected folder may move to Tubble Cloud for realtime collaboration or
+> repository-independent access/privacy, and may move back later. Every folder has one
+> authority at a time; a watched cloud projection is not Git authority. See
+> `/specs/folder-authority-mobility/PRODUCT.md` and ADR-0011. The current implementation
+> still reflects ADR-0010's superseded universal-cloud direction, so this glossary also
+> describes migration-era modes.
 
 ## Flagged ambiguities
 
 - **A Workspace is defined by its configuration, not by the cloud.** Don't conflate "is this a Workspace?" (does the folder have a `.hubble/` configuration) with "is it synced?" ([[Cloud Sync]] enabled). A desktop Workspace can be local-only and gain Cloud Sync later. *(Note: not yet true in code — `init()` requires a Convex backend to mint a `workspaceId`. This is the subject of an active spec; see the deferred-cloud-sync handoff.)*
-- **Live Documents do not redefine all Workspace editing.** A [[Live Document]] is cloud-authoritative, but local-only [[Workspace]] editing, [[Plain Folder]] editing, and [[Loose File]] editing remain file-authoritative.
+- **The mixed-authority Workspace shape is not yet an engineering decision.** The
+  product contract requires one tree with Git and cloud folder boundaries, but the
+  companion technical plan still needs to decide how that maps onto existing
+  Workspace configuration and cloud identity. Do not infer the implementation from
+  this glossary.
 - **"Open folder" (desktop runtime) vs "Workspace."** The desktop editor operates on any open folder path and reads/writes the filesystem directly; that folder may be a [[Workspace Folder]] or a [[Plain Folder]]. Say "open folder" for the runtime notion, "Workspace" for the configured logical entity.
 - **"Open file" can mean OS selection or editor navigation.** In desktop shell language, opening a file may mean choosing a Loose File from the operating system. In [[HTML App]] API language, opening a file means navigating the editor to a [[Markdown File]] inside the current [[Workspace]].
 
@@ -53,7 +65,7 @@ Live Documents are distinct from ordinary [[Markdown File]] editing. Local-only 
 
 ### HTML App
 
-A folder-local `.html` file that Hubble runs as a self-contained, interactive UI. Opening an HTML App directly shows it in the main content panel instead of the Markdown editor. An HTML App reaches files in the open Folder only through a capability-scoped, async **broker**, never directly.
+A folder-local `.html` file that Tubble runs as a self-contained, interactive UI. Opening an HTML App directly shows it in the main content panel instead of the Markdown editor. An HTML App reaches files in the open Folder only through a capability-scoped, async **broker**, never directly.
 
 ### Slash Command
 

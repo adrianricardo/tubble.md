@@ -12,6 +12,7 @@ export type SlashCommandKind =
 	| "taskList"
 	| "blockquote"
 	| "divider"
+	| "table"
 	| "strike";
 
 export type SlashToken = {
@@ -147,6 +148,10 @@ function createEmptyBlock(
 	const listItem = schema.nodes.listItem;
 	const blockquote = schema.nodes.blockquote;
 	const horizontalRule = schema.nodes.horizontalRule;
+	const table = schema.nodes.table;
+	const tableRow = schema.nodes.tableRow;
+	const tableHeader = schema.nodes.tableHeader;
+	const tableCell = schema.nodes.tableCell;
 
 	switch (kind) {
 		case "paragraph":
@@ -173,6 +178,21 @@ function createEmptyBlock(
 			return blockquote.create(null, paragraph.create());
 		case "divider":
 			return horizontalRule.create();
+		case "table":
+			return table.create(null, [
+				tableRow.create(
+					null,
+					Array.from({ length: 3 }, () =>
+						tableHeader.create(null, paragraph.create()),
+					),
+				),
+				tableRow.create(
+					null,
+					Array.from({ length: 3 }, () =>
+						tableCell.create(null, paragraph.create()),
+					),
+				),
+			]);
 		case "strike":
 			return null;
 	}
@@ -183,6 +203,7 @@ function selectionOffsetInsideNode(node: PMNode) {
 	if (node.type.name === "blockquote") return 2;
 	if (node.type.name === "bulletList" || node.type.name === "orderedList")
 		return 3;
+	if (node.type.name === "table") return 4;
 	return 0;
 }
 

@@ -37,6 +37,11 @@ export type ParsedFrontMatter =
 	| { type: "invalid"; raw: string; body: string; error: string }
 	| { type: "valid"; raw: string; body: string; properties: FileProperty[] };
 
+export type VerbatimFrontMatterBlock = {
+	frontMatter: string;
+	body: string;
+};
+
 export function parseMarkdownFrontMatter(markdown: string): ParsedFrontMatter {
 	const split = splitFrontMatter(markdown);
 	if (!split) return { type: "none", body: markdown };
@@ -107,6 +112,23 @@ export function setMarkdownFrontMatter(
 ): string {
 	const parsed = parseMarkdownFrontMatter(markdown);
 	return combineMarkdownFrontMatter(frontMatter, parsed.body);
+}
+
+export function splitVerbatimFrontMatterBlock(
+	markdown: string,
+): VerbatimFrontMatterBlock | null {
+	const start = markdown.match(/^(?:\uFEFF)?---[ \t]*(?:\r?\n)/);
+	if (!start) return null;
+	const startLength = start[0].length;
+	const rest = markdown.slice(startLength);
+	const closing = rest.match(/(?:^|\r?\n)---[ \t]*(?:\r?\n|$)/);
+	if (!closing || closing.index === undefined) return null;
+
+	const bodyStart = startLength + closing.index + closing[0].length;
+	return {
+		frontMatter: markdown.slice(0, bodyStart),
+		body: markdown.slice(bodyStart),
+	};
 }
 
 export function detectFilePropertyType(value: string): FilePropertyType {

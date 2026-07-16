@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hubble — Repo-Brain Storyboard</title>
+<style>
+  :root {
+    --bg: #0c0d11;
+    --bg-soft: #101218;
+    --panel: #16181f;
+    --panel-2: #1c1f28;
+    --panel-3: #232734;
+    --border: #2a2e3a;
+    --border-soft: #22252f;
+    --text: #e8eaf0;
+    --muted: #969cab;
+    --faint: #6b7280;
+    --brand: #ff6a45;
+    --brand-soft: #ff8a67;
+    --cloud: #a78bfa;   /* the single cloud regime */
+    --p1: #4aa8ff;
+    --p2: #ff5db1;
+    --ok: #45d17a;
+    --radius: 16px;
+    --shadow: 0 24px 60px -20px rgba(0,0,0,.7);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(255,106,69,.10), transparent 60%),
+      radial-gradient(1000px 700px at -10% 20%, rgba(167,139,250,.09), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+
+  .wrap {
+    max-inline-size: 1080px;
+    margin-inline: auto;
+    padding-inline: clamp(20px, 5vw, 48px);
+  }
+
+  /* header */
+  header.hero { padding-block: clamp(64px, 12vh, 128px) 40px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 12px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--brand-soft);
+    padding-block: 6px; padding-inline: 12px;
+    border: 1px solid rgba(255,106,69,.28); border-radius: 999px;
+    background: rgba(255,106,69,.06);
+  }
+  .eyebrow::before {
+    content: ""; inline-size: 6px; block-size: 6px; border-radius: 50%;
+    background: var(--brand); box-shadow: 0 0 12px 2px var(--brand);
+  }
+  h1 {
+    font-size: clamp(34px, 6vw, 60px); line-height: 1.04; letter-spacing: -.02em;
+    margin-block: 22px 18px; font-weight: 680;
+  }
+  h1 .grad {
+    background: linear-gradient(100deg, var(--brand), var(--cloud) 90%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lede { font-size: clamp(16px, 2.1vw, 20px); color: var(--muted); max-inline-size: 62ch; margin-block: 0; }
+
+  /* legend */
+  .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-block: 44px 8px; }
+  .legend .card { border: 1px solid var(--border); background: linear-gradient(180deg, var(--panel), var(--bg-soft)); border-radius: 14px; padding-block: 16px; padding-inline: 18px; }
+  .legend .card h4 { margin-block: 0 6px; font-size: 14px; letter-spacing: -.01em; display: flex; align-items: center; gap: 9px; }
+  .legend .card p { margin-block: 0; font-size: 13px; color: var(--muted); }
+  .dot { inline-size: 10px; block-size: 10px; border-radius: 50%; flex: none; }
+  .dot.cloud { background: var(--cloud); box-shadow: 0 0 10px var(--cloud); }
+  .dot.brand { background: var(--brand); box-shadow: 0 0 10px var(--brand); }
+  .dot.web { background: var(--p1); box-shadow: 0 0 10px var(--p1); }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+
+  /* scenes */
+  .scenes { position: relative; padding-block: 40px 100px; }
+  .spine { position: absolute; inset-block: 0; inset-inline-start: clamp(20px, 5vw, 48px); inline-size: 2px; background: linear-gradient(180deg, transparent, var(--border) 6%, var(--border) 94%, transparent); opacity: .7; }
+  @media (max-width: 720px) { .spine { display:none; } }
+
+  .scene { position: relative; display: grid; grid-template-columns: 1fr; gap: 22px; padding-block: 34px; }
+  @media (min-width: 860px) { .scene { grid-template-columns: 340px 1fr; gap: 40px; align-items: start; } }
+  .scene .narr { position: relative; }
+  @media (min-width: 860px) { .scene .narr { position: sticky; inset-block-start: 28px; } }
+
+  .num { font-family: var(--mono); font-size: 13px; color: var(--bg); background: var(--brand); inline-size: 34px; block-size: 34px; display: inline-grid; place-items: center; border-radius: 50%; font-weight: 700; box-shadow: 0 0 0 6px rgba(255,106,69,.12); margin-block-end: 14px; }
+  .scene h3 { margin-block: 0 8px; font-size: 22px; letter-spacing: -.015em; }
+  .scene .say { margin-block: 0 12px; color: var(--muted); font-size: 15px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 7px; }
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .02em; padding-block: 4px; padding-inline: 9px; border-radius: 7px; border: 1px solid var(--border); color: var(--muted); background: var(--panel); }
+  .tag.cloud { color: var(--cloud); border-color: rgba(167,139,250,.4); background: rgba(167,139,250,.08); }
+  .tag.web { color: var(--p1); border-color: rgba(74,168,255,.4); background: rgba(74,168,255,.08); }
+
+  /* devices */
+  .device { border: 1px solid var(--border); border-radius: var(--radius); background: linear-gradient(180deg, var(--panel), var(--bg-soft)); box-shadow: var(--shadow); overflow: hidden; }
+  .titlebar { display: flex; align-items: center; gap: 8px; padding-block: 11px; padding-inline: 14px; border-block-end: 1px solid var(--border-soft); background: rgba(255,255,255,.015); }
+  .traffic { display: flex; gap: 7px; }
+  .traffic i { inline-size: 11px; block-size: 11px; border-radius: 50%; display: block; }
+  .traffic i:nth-child(1){ background:#ff5f57; }
+  .traffic i:nth-child(2){ background:#febc2e; }
+  .traffic i:nth-child(3){ background:#28c840; }
+  .titlebar .name { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-inline-start: 6px; }
+  .titlebar .pill { margin-inline-start: auto; font-family: var(--mono); font-size: 11px; color: var(--faint); padding-block: 3px; padding-inline: 9px; border: 1px solid var(--border); border-radius: 999px; }
+  .screen { padding-block: 16px; padding-inline: 16px; }
+
+  .app { display: grid; grid-template-columns: 210px 1fr; min-block-size: 240px; }
+  @media (max-width: 520px){ .app { grid-template-columns: 1fr; } .app .side { display:none; } }
+  .side { border-inline-end: 1px solid var(--border-soft); padding-block: 14px; padding-inline: 12px; background: rgba(0,0,0,.16); }
+  .side .brandrow { display:flex; align-items:center; gap:9px; margin-block-end: 14px; }
+  .logo { inline-size: 22px; block-size: 22px; border-radius: 7px; background: conic-gradient(from 200deg, var(--brand), var(--cloud), var(--brand)); box-shadow: 0 0 16px rgba(255,106,69,.4); }
+  .side .brandrow b { font-size: 13px; letter-spacing: -.01em; }
+  .sec { font-family: var(--mono); font-size: 10px; letter-spacing:.12em; text-transform:uppercase; color: var(--faint); margin-block: 12px 7px; }
+  .row { display:flex; align-items:center; gap:8px; padding-block: 6px; padding-inline: 8px; border-radius: 8px; font-size: 13px; color: var(--muted); }
+  .row.indent { padding-inline-start: 22px; }
+  .row .ic { color: var(--faint); font-size: 12px; }
+  .row.folder .ic { color: var(--cloud); }
+  .row.repo .ic { color: var(--brand-soft); }
+  .row.active { background: var(--panel-3); color: var(--text); }
+  .row .grow { margin-inline-start: auto; }
+  .mini { font-family: var(--mono); font-size: 10px; color: var(--faint); }
+
+  .main { padding-block: 16px; padding-inline: 18px; }
+  .doctitle { display:flex; align-items:center; gap:10px; margin-block-end: 10px; }
+  .doctitle h5 { margin:0; font-size: 16px; letter-spacing:-.01em; }
+  .badge { font-family: var(--mono); font-size: 10px; padding-block: 3px; padding-inline: 8px; border-radius: 6px; border:1px solid var(--border); }
+  .badge.cloud { color: var(--cloud); border-color: rgba(167,139,250,.45); background: rgba(167,139,250,.08); }
+  .prose p { margin-block: 0 9px; font-size: 13.5px; color: #cfd3dd; }
+  .prose .h { font-weight: 640; color: var(--text); font-size: 14.5px; }
+  .cursor { position: relative; display: inline-block; inline-size: 2px; block-size: 15px; vertical-align: text-bottom; border-radius: 2px; margin-inline: 1px; }
+  .cursor::after { content: attr(data-who); position: absolute; inset-block-start: -19px; inset-inline-start: -2px; font-family: var(--mono); font-size: 9px; color:#fff; padding-block: 1px; padding-inline: 5px; border-radius: 5px 5px 5px 0; white-space: nowrap; }
+  .cursor.p1 { background: var(--p1); } .cursor.p1::after { background: var(--p1); }
+  .cursor.p2 { background: var(--p2); } .cursor.p2::after { background: var(--p2); }
+
+  .presbar { display:flex; align-items:center; margin-inline-start:auto; }
+  .ava { inline-size: 24px; block-size: 24px; border-radius: 50%; display:grid; place-items:center; font-size: 10px; font-weight:700; color:#0c0d11; border: 2px solid var(--panel); margin-inline-start: -7px; font-family: var(--mono); }
+  .ava.p1 { background: var(--p1); } .ava.p2 { background: var(--p2); } .ava.brand { background: var(--brand); }
+
+  .term { font-family: var(--mono); font-size: 12.5px; background:#0a0b0f; }
+  .term .line { padding-inline: 16px; padding-block: 2px; color:#c7ccd6; }
+  .term .prompt { color: var(--brand-soft); }
+  .term .ok { color: var(--ok); }
+  .term .dim { color: var(--faint); }
+  .term .cloudc { color: var(--cloud); }
+  .term .barin { display:flex; align-items:center; gap:8px; margin-block-start: 10px; padding-block: 9px; padding-inline: 14px; border-block-start: 1px solid var(--border-soft); color: var(--faint); font-size: 12px; }
+  .term .barin .chip { color: var(--muted); border:1px solid var(--border); border-radius:6px; padding-block:2px; padding-inline:7px; }
+
+  .finder { font-family: var(--mono); font-size: 12.5px; }
+  .fitem { display:flex; align-items:center; gap:10px; padding-block:7px; padding-inline:14px; color:#c7ccd6; border-block-end:1px solid var(--border-soft); }
+  .fitem:last-child { border-block-end:0; }
+  .fitem .ic { color: var(--cloud); }
+  .fitem .sz { margin-inline-start:auto; color: var(--faint); }
+
+  .link-input { display:flex; align-items:center; gap:10px; background:#0a0b0f; border:1px solid var(--border); border-radius:10px; padding-block: 11px; padding-inline: 14px; font-family: var(--mono); font-size: 12.5px; }
+  .link-input .url { color: var(--cloud); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .link-input .copy { margin-inline-start:auto; color: var(--bg); background: var(--brand); border-radius:7px; padding-block:5px; padding-inline:11px; font-weight:700; }
+
+  .flow { display:grid; gap:12px; grid-template-columns: 1fr; }
+  @media (min-width: 620px){ .flow { grid-template-columns: 1fr auto 1fr; align-items:center; } }
+  .node { border:1px solid var(--border); border-radius:12px; background: var(--panel); padding-block: 14px; padding-inline: 15px; text-align:center; }
+  .node .k { font-family: var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color: var(--faint); }
+  .node .v { font-size: 13.5px; margin-block-start: 5px; }
+  .node.bridge { border-color: rgba(255,106,69,.5); background: rgba(255,106,69,.06); box-shadow: 0 0 30px -10px rgba(255,106,69,.5); }
+  .arrow { text-align:center; color: var(--brand-soft); font-size: 18px; }
+  @media (max-width: 619px){ .arrow { transform: rotate(90deg); } }
+
+  .callout { display:flex; gap:12px; margin-block-start: 16px; padding-block: 13px; padding-inline: 15px; border-radius: 12px; background: rgba(167,139,250,.07); border:1px solid rgba(167,139,250,.25); }
+  .callout.ok { background: rgba(69,209,122,.06); border-color: rgba(69,209,122,.24); }
+  .callout .ci { font-size: 18px; flex:none; }
+  .callout p { margin:0; font-size: 13px; color:#cfd3dd; }
+  .callout b { color: var(--text); }
+
+  /* model tree */
+  .tree { font-family: var(--mono); font-size: 13px; line-height: 2; color: #cfd3dd; padding-inline: 8px; }
+  .tree .w { color: var(--text); font-weight: 640; }
+  .tree .f { color: var(--cloud); }
+  .tree .r { color: var(--brand-soft); }
+  .tree .d { color: var(--muted); }
+  .tree .cm { color: var(--faint); }
+
+  footer { border-block-start: 1px solid var(--border-soft); padding-block: 40px 80px; color: var(--faint); font-size: 13px; }
+  footer a { color: var(--brand-soft); text-decoration: none; }
+  .kicker { font-family: var(--mono); font-size: 12px; color: var(--faint); letter-spacing:.05em; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="hero">
+    <span class="eyebrow">v1.1 storyboard · repo-brain · agent-init · all-cloud</span>
+    <h1><span class="grad">init</span> from your coding agent.<br/>A teammate joins without ever touching git.</h1>
+    <p class="lede">The happy path, scene by scene: a developer runs <b>init</b> from Claude Code / Codex
+      inside their repo, the agent triages which docs move to a repo-linked cloud folder and which stay
+      in git, the desktop app picks up syncing — then a non-technical, agent-native teammate joins
+      <em>zero-install</em> and the two co-create in real time. One cloud authority, one universal bridge, nothing in git.</p>
+
+    <div class="legend">
+      <div class="card"><h4><span class="dot brand"></span>Workspace</h4><p>Your top container — where membership lives. Holds folders.</p></div>
+      <div class="card"><h4><span class="dot cloud"></span>Folders (nest &amp; share)</h4><p>Organize docs, link to a repo, and share with collaborators. A "brain" is just a repo-linked folder.</p></div>
+      <div class="card"><h4><span class="dot ok"></span>Cloud-only docs</h4><p>Every doc lives in the cloud CRDT. Never in git → deletable, revocable, no permanent history to leak.</p></div>
+      <div class="card"><h4><span class="dot web"></span>Two surfaces, one entry</h4><p>Web = zero-install human editing. Desktop app = the local bridge for agents. Entry = an init skill run from Claude Code / Codex.</p></div>
+    </div>
+  </header>
+</div>
+
+<div class="wrap">
+<div class="scenes">
+  <div class="spine"></div>
+
+  <!-- SCENE 1 -->
+  <section class="scene">
+    <div class="narr">
+      <div class="num">1</div>
+      <h3>Run <em>init</em> from the coding agent</h3>
+      <p class="say">The dev is already in their repo, inside Claude Code or Codex. They run the Hubble init skill against a context directory (here <code>brain/</code>). The agent scans the repo for durable, prose-shaped context — no desktop UI to open first, no new tool to learn.</p>
+      <div class="tags"><span class="tag">claude code · codex</span><span class="tag">hubble init skill</span><span class="tag cloud">repo-linked folder</span></div>
+    </div>
+    <div class="device">
+      <div class="titlebar"><div class="traffic"><i></i><i></i><i></i></div><span class="name">claude code — ~/code/orbital</span><span class="pill">agent · local</span></div>
+      <div class="screen term" style="padding-inline:0;">
+        <div class="line"><span class="dim"># working dir: ~/code/orbital</span></div>
+        <div class="line"><span class="prompt">›</span> /hubble-init brain/</div>
+        <div class="line dim">scanning repo for durable context…</div>
+        <div class="line">found <span class="cloudc">brain/</span> (4 docs) · <span class="cloudc">specs/</span> (3) · <span class="cloudc">notes/pricing-bets.md</span></div>
+        <div class="line">found <span class="dim">README.md · CLAUDE.md · docs/adr/ (code-coupled)</span></div>
+        <div class="line"><span class="ok">✓</span> triage proposal ready — review below</div>
+        <div class="barin"><span class="chip">Claude</span> <span class="chip">hubble</span> <span class="chip">Auto</span> <span style="margin-inline-start:auto">orbital</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE 2 -->
+  <section class="scene">
+    <div class="narr">
+      <div class="num">2</div>
+      <h3>Triage — what moves, what stays</h3>
+      <p class="say">The agent walks the dev through a split: <em>opinion, strategy, evolving prose</em> — anything a non-dev collaborator needs — moves to the cloud folder. <em>Code-coupled truth</em> — README, CLAUDE.md, ADRs, anything the codebase needs at clone time — stays in git. The dev edits the list and confirms.</p>
+      <div class="tags"><span class="tag cloud">move → cloud · revocable</span><span class="tag">keep → git · code-coupled</span></div>
+    </div>
+    <div class="device">
+      <div class="titlebar"><div class="traffic"><i></i><i></i><i></i></div><span class="name">claude code — triage proposal</span><span class="pill">confirm to apply</span></div>
+      <div class="screen term" style="padding-inline:0;">
+        <div class="line"><span class="cloudc">move → Hubble folder "Orbital" (cloud-only):</span></div>
+        <div class="line"><span class="ok">✓</span> brain/positioning.md <span class="dim">— opinion · evolves · share w/ non-devs</span></div>
+        <div class="line"><span class="ok">✓</span> brain/q3-narrative.md <span class="dim">— strategy · collaborative</span></div>
+        <div class="line"><span class="ok">✓</span> notes/pricing-bets.md <span class="dim">— sensitive · should be revocable</span></div>
+        <div class="line"><span class="ok">✓</span> specs/architecture.md <span class="dim">— living doc · agents read it</span></div>
+        <div class="line"><span class="dim">keep in git (code-coupled):</span></div>
+        <div class="line dim">· README.md — the repo's front door</div>
+        <div class="line dim">· CLAUDE.md — agent config, belongs to the clone</div>
+        <div class="line dim">· docs/adr/ — engineering record, wants line diffs</div>
+        <div class="line"><span class="prompt">›</span> confirm? <span class="dim">[enter = apply · e = edit list]</span></div>
+      </div>
+    </div>
+    <div style="grid-column: 1 / -1;">
+      <div class="callout"><span class="ci">⚖️</span><p><b>The heuristic:</b> if it's opinion that evolves and someone without repo access needs it → <b style="color:var(--cloud)">cloud</b>. If the codebase itself needs it at clone/build time → <b>git</b>.</p></div>
+      <div class="callout ok"><span class="ci">🕰️</span><p><b>Honest scope:</b> files already committed keep their git history — moving stops <em>future</em> history, it doesn't erase the past. Brand-new docs get the full revocability guarantee from day one.</p></div>
+    </div>
+  </section>
+
+  <!-- SCENE 3 -->
+  <section class="scene">
+    <div class="narr">
+      <div class="num">3</div>
+      <h3>The skill ensures the bridge, then hands off</h3>
+      <p class="say">Syncing needs the desktop app — it's the one watcher bridge. The skill checks for it, installs it if missing, signs the dev in, then opens it via deep link straight to the new workspace. The moved docs are now cloud-only, mounted back into the repo as a git-excluded projection, with a seeded BRAIN.md.</p>
+      <div class="tags"><span class="tag">ensure desktop installed</span><span class="tag">deep-link open</span><span class="tag cloud">mounted · git-excluded</span></div>
+    </div>
+    <div class="device">
+      <div class="titlebar"><div class="traffic"><i></i><i></i><i></i></div><span class="name">claude code — ~/code/orbital</span><span class="pill">handing off…</span></div>
+      <div class="screen term" style="padding-inline:0;">
+        <div class="line"><span class="ok">✓</span> moved 4 docs → <span class="cloudc">Orbital</span> (cloud) · originals removed from working tree</div>
+        <div class="line"><span class="ok">✓</span> mounted <span class="cloudc">~/code/orbital/Orbital/</span> · added to .git/info/exclude</div>
+        <div class="line"><span class="ok">✓</span> seeded <span class="cloudc">BRAIN.md</span> — folder purpose · doc index · how agents work here</div>
+        <div class="line"><span class="dim">! hubble desktop not found →</span> installing…</div>
+        <div class="line"><span class="ok">✓</span> hubble desktop installed · signed in as dana</div>
+        <div class="line"><span class="ok">✓</span> opening <span class="cloudc">hubble://folder/orbital</span> — your new workspace</div>
+      </div>
+      <div class="titlebar" style="border-block-start:1px solid var(--border-soft);"><div class="traffic"><i></i><i></i><i></i></div><span class="name">hubble · Orbital</span><span class="pill">synced ✓ · 5 docs</span></div>
+      <div class="screen">
+        <div class="app">
+          <div class="side">
+            <div class="brandrow"><span class="logo"></span><b>Orbital</b> <span class="grow mini" style="color:var(--brand-soft)">↳ orbital</span></div>
+            <div class="sec">Docs</div>
+            <div class="row indent"><span class="ic">🧠</span> BRAIN.md</div>
+            <div class="row indent active"><span class="ic">📄</span> positioning.md</div>
+            <div class="row indent"><span class="ic">📄</span> q3-narrative.md</div>
+            <div class="row indent"><span class="ic">📄</span> pricing-bets.md</div>
+            <div class="row indent"><span class="ic">📄</span> architecture.md</div>
+          </div>
+          <div class="main">
+            <div class="doctitle"><h5>positioning.md</h5><span class="badge cloud">cloud-only</span></div>
+            <div class="prose">
+              <p class="h">Who we're really for</p>
+              <p>The non-technical operator who already runs their day through an agent — but has no shared, trustworthy context to point it at.</p>
+              <p class="mini" style="color:var(--muted)">Moved from brain/ by the init skill. Cloud-only now — opinion, and opinion should be revocable.</p>
+            </div>
+            <div class="callout"><span class="ci">🔗</span><p><b>The repo is the anchor, not the storage.</b> Nobody you invite clones it or sees git.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE 4 -->
+  <section class="scene">
+    <div class="narr">
+      <div class="num">4</div>
+      <h3>Why nothing is in git</h3>
+      <p class="say">All-cloud isn't a limitation — it's the privacy guarantee. Anything in git has permanent history that can't be revoked. Keeping everything cloud-only makes "un-share and delete" behave like a Google Doc, with no asterisk.</p>
+      <div class="tags"><span class="tag cloud">absolute revocability</span></div>
+    </div>
+    <div class="device">
+      <div class="screen">
+        <div class="flow">
+          <div class="node"><div class="k">In git</div><div class="v">history is forever · leaks on clone · merge conflicts</div></div>
+          <div class="arrow">✕</div>
+          <div class="node bridge"><div class="k">Cloud-only</div><div class="v">deletable · re-permissionable · CRDT merges, no conflicts</div></div>
+        </div>
+        <div class="callout ok"><span class="ci">📄</span><p><b>Agents still get files</b> — docs project to a <b>gitignored</b> synced folder on disk. On-disk ≠ in-git. Version history &amp; comments live in the cloud, richer than line-diffs.</p></div>
+        <div class="callout"><span class="ci">🧭</span><p><b>Later, optional:</b> a folder-level "sync back to the repo" export, for the few docs that genuinely belong in the codebase. Not v1.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE 5 -->
+  <section class="scene">
+    <div class="narr">
+      <div class="num">5</div>
+      <h3>Share the folder</h3>
+      <p class="say">The dev shares the <em>folder</em> — and its whole subtree — with a link. Sharing is folder-level, so scope is automatic: Priya gets Orbital, never Lander. No repo access, no git, no clone.</p>
+      <div class="tags"><span class="tag">folder-level share</span><span class="tag cloud">scoped subtree</span></div>
+    </div>
+    <div class="device">
+      <div class="titlebar"><div class="traffic"><i></i><i></i><i></i></div><span class="name">share · Orbital</span></div>
+      <div class="screen" style="padding-inline:22px;">
+        <div class="doctitle" style="margin-block-end:14px;"><h5>Share the <span style="color:var(--cloud)">Orbital</span> folder</h5><span class="badge cloud">+ subtree</span></div>
+        <div class="link-input"><span class="url">hubble.md/j/orbital-3f9a…</span><span class="copy">Copy</span></div>
+        <div class="callout ok" style="margin-block-start:14px;"><span class="ci">🚫</span><p>This link grants <b>no repo access and no git history</b> — only the cloud docs inside this folder. Nothing on disk, nothing committed.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE 6 -->
+  <section class="scene">
+    <div class="narr">
+      <div class="num">6</div>
+      <h3>The teammate lands — zero install</h3>
+      <p class="say">Priya opens the link in a browser. She's immediately in the folder: reading, editing, and seeing Dana's live cursor. No download yet. The web is the complete human experience on its own.</p>
+      <div class="tags"><span class="tag web">web · no install</span><span class="tag">live presence</span></div>
+    </div>
+    <div class="device">
+      <div class="titlebar"><div class="traffic"><i></i><i></i><i></i></div><span class="name">hubble.md/orbital — Priya (browser)</span>
+        <div class="presbar"><span class="ava p1">D</span><span class="ava p2">P</span></div>
+      </div>
+      <div class="screen">
+        <div class="app">
+          <div class="side">
+            <div class="brandrow"><span class="logo"></span><b>Orbital</b></div>
+            <div class="sec">Shared with you</div>
+            <div class="row folder"><span class="ic">📁</span> Strategy</div>
+            <div class="row indent active"><span class="ic">📄</span> positioning.md</div>
+            <div class="row indent"><span class="ic">📄</span> pricing-bets.md</div>
+            <div class="row folder"><span class="ic">📁</span> Product</div>
+          </div>
+          <div class="main">
+            <div class="doctitle"><h5>positioning.md</h5><span class="badge cloud">cloud-only</span></div>
+            <div class="prose">
+              <p class="h">Who we're really for</p>
+              <p>The non-technical operator who already runs their day through an agent<span class="cursor p1" data-who="Dana"></span> — but has no shared, trustworthy context to point it at. We should say this in the first line<span class="cursor p2" data-who="Priya"></span></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE 7 -->
+  <section class="scene">
+    <div class="narr">
+      <div class="num">7</div>
+      <h3>Install the app to bring her agent in</h3>
+      <p class="say">To let her own agent work the docs, Priya installs the Hubble desktop app — a consumer app, signed in from the same link. It materializes a gitignored synced folder of just her shared docs. Still no git, still no clone.</p>
+      <div class="tags"><span class="tag">desktop app</span><span class="tag cloud">gitignored projection</span></div>
+    </div>
+    <div class="device">
+      <div class="titlebar"><div class="traffic"><i></i><i></i><i></i></div><span class="name">Finder · ~/Hubble/Orbital</span><span class="pill">synced ✓</span></div>
+      <div class="screen" style="padding-inline:0; padding-block:6px;">
+        <div class="finder">
+          <div class="fitem"><span class="ic">📁</span> Strategy/ <span class="sz">cloud</span></div>
+          <div class="fitem"><span class="ic">📄</span> Strategy/positioning.md <span class="sz">4 KB</span></div>
+          <div class="fitem"><span class="ic">📄</span> Strategy/pricing-bets.md <span class="sz">2 KB</span></div>
+          <div class="fitem"><span class="ic">🧠</span> BRAIN.md <span class="sz">auto · context</span></div>
+        </div>
+        <div class="callout" style="margin-inline:16px;"><span class="ci">🧠</span><p>Hubble drops an auto-generated <b>BRAIN.md</b> so her agent instantly understands the folder — the dev's payoff: <b>shared, durable agent context</b>.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE 8 -->
+  <section class="scene">
+    <div class="narr">
+      <div class="num">8</div>
+      <h3>She points Cowork at the folder</h3>
+      <p class="say">Priya's local agent (Claude Cowork) runs on her own machine, pointed at the synced folder as its working directory — exactly like Claude Code. It reads the context, does a task, and writes files.</p>
+      <div class="tags"><span class="tag">claude cowork · local</span><span class="tag cloud">edits files</span></div>
+    </div>
+    <div class="device">
+      <div class="titlebar"><div class="traffic"><i></i><i></i><i></i></div><span class="name">cowork — ~/Hubble/Orbital</span><span class="pill">Claude · local</span></div>
+      <div class="screen term" style="padding-inline:0;">
+        <div class="line"><span class="dim"># working dir: ~/Hubble/Orbital</span></div>
+        <div class="line"><span class="prompt">›</span> tighten positioning.md around the agent-native operator</div>
+        <div class="line dim">reading BRAIN.md, Strategy/positioning.md …</div>
+        <div class="line"><span class="ok">✓</span> rewrote opening line · <span class="cloudc">Strategy/positioning.md</span></div>
+        <div class="line"><span class="ok">✓</span> saved</div>
+        <div class="barin"><span class="chip">Claude</span> <span class="chip">Tools 4</span> <span class="chip">Auto</span> <span style="margin-inline-start:auto">Orbital</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE 9 -->
+  <section class="scene">
+    <div class="narr">
+      <div class="num">9</div>
+      <h3>The one bridge: the watcher reconciles</h3>
+      <p class="say">The desktop app watches the <em>filesystem</em>, not any app. So a Cowork save and a TextEdit save are identical to it: diff against the base → scoped patch → merge into the cloud CRDT. This bridge is universal and can never be retired.</p>
+      <div class="tags"><span class="tag">watcher</span><span class="tag">any editor · same path</span></div>
+    </div>
+    <div class="device">
+      <div class="screen">
+        <div class="flow">
+          <div class="node"><div class="k">Any editor</div><div class="v">Cowork · TextEdit · vim · hand</div></div>
+          <div class="arrow">→</div>
+          <div class="node bridge"><div class="k">The one bridge</div><div class="v">watcher → diff → scoped patch</div></div>
+        </div>
+        <div class="flow" style="margin-block-start:12px;">
+          <div class="node"><div class="k">Cloud</div><div class="v">CRDT merges conflict-free</div></div>
+          <div class="arrow">→</div>
+          <div class="node"><div class="k">Everyone</div><div class="v">live to web + dev, attributed</div></div>
+        </div>
+        <div class="callout ok"><span class="ci">♾️</span><p>Because a plain app can only <b>write a file</b>, the watcher is load-bearing forever. Cowork needs <b>no special integration</b> — it's just pointed at the folder.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE 10 -->
+  <section class="scene">
+    <div class="narr">
+      <div class="num">10</div>
+      <h3>It round-trips to the dev, live</h3>
+      <p class="say">Dana sees Priya's agent's edit appear in real time on the web and on her own disk. Dana works the same cloud docs — projected to her own gitignored folder so her agent reads them too. Same folder, two people, two agents, one authority.</p>
+      <div class="tags"><span class="tag web">live on web</span><span class="tag cloud">attributed</span></div>
+    </div>
+    <div class="device">
+      <div class="titlebar"><div class="traffic"><i></i><i></i><i></i></div><span class="name">hubble.md/orbital — Dana</span>
+        <div class="presbar"><span class="ava brand">🤖</span><span class="ava p2">P</span><span class="ava p1">D</span></div>
+      </div>
+      <div class="screen">
+        <div class="app">
+          <div class="side">
+            <div class="brandrow"><span class="logo"></span><b>Orbital</b></div>
+            <div class="sec">Activity</div>
+            <div class="row"><span class="ic">🟣</span> Cowork edited <span class="grow mini">now</span></div>
+            <div class="row"><span class="ic">🩷</span> Priya viewing <span class="grow mini">now</span></div>
+          </div>
+          <div class="main">
+            <div class="doctitle"><h5>positioning.md</h5><span class="badge cloud">cloud-only</span> <span class="mini" style="margin-inline-start:auto">edited by Cowork · via Priya</span></div>
+            <div class="prose">
+              <p class="h">Who we're really for</p>
+              <p><span style="background:rgba(167,139,250,.18); border-radius:3px; padding-inline:2px;">If you already run your day through an agent, this is the context you've been missing.</span> The non-technical operator, finally pointed at something shared and trustworthy.</p>
+            </div>
+            <div class="callout ok"><span class="ci">🔀</span><p><b>No conflicts, no commits, no git.</b> The CRDT merged the agent's file save with the humans' live edits and broadcast it everywhere.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE ✦ — MODEL -->
+  <section class="scene">
+    <div class="narr">
+      <div class="num">✦</div>
+      <h3>The whole model, three nouns</h3>
+      <p class="say">Everything collapses to a workspace, nested folders, and cloud docs. "Brain" is just a nickname for a repo-linked folder. One storage regime, one bridge, no git.</p>
+      <div class="tags"><span class="tag cloud">workspace · folders · docs</span></div>
+    </div>
+    <div class="device">
+      <div class="screen">
+        <div class="tree">
+          <div><span class="w">Workspace</span> <span class="cm">— membership lives here</span></div>
+          <div>└─ <span class="f">📁 Orbital</span> <span class="r">↳ linked: orbital</span> <span class="cm">· shared → Priya</span></div>
+          <div>&nbsp;&nbsp;&nbsp;├─ <span class="f">📁 Strategy</span></div>
+          <div>&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;├─ <span class="d">📄 positioning.md</span> <span class="cm">cloud-only</span></div>
+          <div>&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;└─ <span class="d">📄 pricing-bets.md</span> <span class="cm">cloud-only</span></div>
+          <div>&nbsp;&nbsp;&nbsp;└─ <span class="f">📁 Implementation</span></div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ <span class="d">📄 architecture.md</span> <span class="cm">cloud-only</span></div>
+        </div>
+        <div class="callout"><span class="ci">🧭</span><p><b>Deferred / only-if-earned:</b> folder-level git-export, a local MCP server (cleaner agent attribution), cloud-hosted agents, an embedded chat UI, and the web-first front door. None are needed for v1.</p></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+</div>
+
+<div class="wrap">
+  <footer>
+    <div class="kicker">HUBBLE · REPO-BRAIN VISION · v1.1 STORYBOARD · AGENT-INIT · ALL-CLOUD · 2026-07-09</div>
+    <p style="margin-block:12px 0; max-inline-size:64ch;">
+      Companion to <a href="REPO-BRAIN-VISION.md">REPO-BRAIN-VISION.md</a>.
+      Model locked: <b style="color:var(--text)">Workspace ⊃ nested Folders ⊃ cloud Docs</b>;
+      "brain" is informal for a repo-linked folder; everything is
+      <b style="color:var(--cloud)">cloud-only</b>, nothing in git.
+    </p>
+    <p style="margin-block:12px 0; max-inline-size:64ch;">
+      <b style="color:var(--text)">Revision 2026-07-09:</b> the entry point moves from the desktop app
+      to an <b style="color:var(--brand-soft)">init skill run inside Claude Code / Codex</b> — agent-assisted
+      triage of what moves to the cloud folder vs. stays in git (scenes 1–3). This supersedes
+      REPO-BRAIN-VISION.md Decided #13 ("no agent-drafted seed flow in v1"); the vision doc still
+      needs a matching update. Requires: a <code>hubble-init</code> skill, an authenticated CLI/headless
+      repo-link path, desktop-app install detection, and a <code>hubble://</code> deep link.
+    </p>
+  </footer>
+</div>
+
+</body>
+</html>

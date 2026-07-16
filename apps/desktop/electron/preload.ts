@@ -1,6 +1,7 @@
 import os from "node:os";
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { DesktopApi } from "../src/desktopApi/types";
+import { encodeTextForIpc } from "./textFileIpc";
 
 function subscribe<T extends unknown[]>(
 	channel: string,
@@ -19,6 +20,34 @@ const desktopApi = {
 	homeDir: os.homedir(),
 	listDirectory: (path) =>
 		ipcRenderer.invoke("desktop:list-directory", { path }),
+	listFolderAuthorityPlacements: () =>
+		ipcRenderer.invoke("desktop:folder-authority:list"),
+	listAuthorityTransferOperations: () =>
+		ipcRenderer.invoke("desktop:authority-transfer:list"),
+	saveAuthorityTransferOperation: (operation) =>
+		ipcRenderer.invoke("desktop:authority-transfer:save", operation),
+	cancelAuthorityTransferOperation: (operationId) =>
+		ipcRenderer.invoke("desktop:authority-transfer:cancel", { operationId }),
+	inspectGitAuthorityFolder: (path) =>
+		ipcRenderer.invoke("desktop:git-authority:inspect-folder", path),
+	inspectGitAuthorityDestination: (input) =>
+		ipcRenderer.invoke("desktop:git-authority:inspect-destination", input),
+	moveGitFolderToCloud: (input) =>
+		ipcRenderer.invoke("desktop:git-authority:move-to-cloud", input),
+	cancelGitToCloudAuthorityMove: (input) =>
+		ipcRenderer.invoke("desktop:git-authority:cancel-move-to-cloud", input),
+	moveCloudFolderToGit: (input) =>
+		ipcRenderer.invoke("desktop:cloud-authority:move-to-git", input),
+	cancelCloudToGitAuthorityMove: (input) =>
+		ipcRenderer.invoke("desktop:cloud-authority:cancel-move-to-git", input),
+	getCloudToGitUndoEligibility: (operationId) =>
+		ipcRenderer.invoke("desktop:cloud-authority:undo-eligibility", {
+			operationId,
+		}),
+	undoCloudToGitAuthorityMove: (input) =>
+		ipcRenderer.invoke("desktop:cloud-authority:undo-move-to-git", input),
+	onFolderAuthorityChanged: (callback) =>
+		subscribe("desktop:folder-authority:changed", callback),
 	listHtmlAppFiles: (workspacePath, glob) =>
 		ipcRenderer.invoke("desktop:html-app-list-files", { workspacePath, glob }),
 	readWorkspaceConfig: (workspacePath) =>
@@ -30,8 +59,16 @@ const desktopApi = {
 		}),
 	readFileText: (path) =>
 		ipcRenderer.invoke("desktop:read-file-text", { path }),
+	pathForDroppedFile: (file) =>
+		ipcRenderer.invoke(
+			"desktop:path-for-dropped-file",
+			webUtils.getPathForFile(file),
+		),
 	writeFileText: (path, content) =>
-		ipcRenderer.invoke("desktop:write-file-text", { path, content }),
+		ipcRenderer.invoke("desktop:write-file-text", {
+			path,
+			bytes: encodeTextForIpc(content),
+		}),
 	renameFile: (fromPath, toPath) =>
 		ipcRenderer.invoke("desktop:rename-file", { fromPath, toPath }),
 	pathExists: (path) => ipcRenderer.invoke("desktop:path-exists", { path }),
@@ -46,7 +83,8 @@ const desktopApi = {
 	openFilePicker: (options) =>
 		ipcRenderer.invoke("desktop:open-file-picker", options),
 	openFolderPicker: () => ipcRenderer.invoke("desktop:open-folder-picker"),
-	createFolderPicker: () => ipcRenderer.invoke("desktop:create-folder-picker"),
+	createFolderPicker: (options) =>
+		ipcRenderer.invoke("desktop:create-folder-picker", options),
 	saveMarkdownFilePicker: (options) =>
 		ipcRenderer.invoke("desktop:save-markdown-file-picker", options),
 	watchPath: async (path, options, callback) => {
@@ -90,10 +128,69 @@ const desktopApi = {
 		ipcRenderer.invoke("desktop:live-sync:disconnect-folder"),
 	getSyncedFolderStatus: () =>
 		ipcRenderer.invoke("desktop:live-sync:status-folder"),
+	listPendingProjectionOperations: () =>
+		ipcRenderer.invoke("desktop:live-sync:list-pending-operations"),
+	approvePendingProjectionMove: (operationId) =>
+		ipcRenderer.invoke("desktop:live-sync:approve-pending-move", {
+			operationId,
+		}),
+	cancelPendingProjectionMove: (operationId) =>
+		ipcRenderer.invoke("desktop:live-sync:cancel-pending-move", {
+			operationId,
+		}),
+	approvePendingProjectionDeletion: (operationId) =>
+		ipcRenderer.invoke("desktop:live-sync:approve-pending-deletion", {
+			operationId,
+		}),
+	cancelPendingProjectionDeletion: (operationId) =>
+		ipcRenderer.invoke("desktop:live-sync:cancel-pending-deletion", {
+			operationId,
+		}),
+	undoTrashedProjectionDocument: (operationId) =>
+		ipcRenderer.invoke("desktop:live-sync:undo-trash", { operationId }),
+	dismissProjectionTrashUndo: (operationId) =>
+		ipcRenderer.invoke("desktop:live-sync:dismiss-trash-undo", { operationId }),
+	listLocalAvailability: () =>
+		ipcRenderer.invoke("desktop:local-availability:list"),
+	createLocalAvailability: (input) =>
+		ipcRenderer.invoke("desktop:local-availability:create", input),
+	inspectLocalAvailability: (scopeKey) =>
+		ipcRenderer.invoke("desktop:local-availability:inspect", scopeKey),
+	relocateLocalAvailability: (input) =>
+		ipcRenderer.invoke("desktop:local-availability:relocate", input),
+	stopLocalAvailability: (input) =>
+		ipcRenderer.invoke("desktop:local-availability:stop", input),
+	reconnectLocalAvailability: (input) =>
+		ipcRenderer.invoke("desktop:local-availability:reconnect", input),
+	onLocalAvailabilityProgress: (callback) =>
+		subscribe("desktop:local-availability:progress", callback),
+	linkRepoFolder: (input) =>
+		ipcRenderer.invoke("desktop:repo-link:link", input),
+	resolveGitRepoRoot: (selectedDir) =>
+		ipcRenderer.invoke("desktop:repo-link:resolve-root", selectedDir),
+	undoRepoLink: (input) => ipcRenderer.invoke("desktop:repo-link:undo", input),
+	unlinkRepoFolder: (folderId) =>
+		ipcRenderer.invoke("desktop:repo-link:unlink", folderId),
+	inspectRepoMount: (folderId) =>
+		ipcRenderer.invoke("desktop:repo-link:inspect", folderId),
+	stopRepoMount: (input) => ipcRenderer.invoke("desktop:repo-link:stop", input),
+	relocateRepoMount: (input) =>
+		ipcRenderer.invoke("desktop:repo-link:relocate", input),
+	listRepoMounts: () => ipcRenderer.invoke("desktop:repo-link:list"),
+	reconnectRepoMounts: (input) =>
+		ipcRenderer.invoke("desktop:repo-link:reconnect", input),
 	isSyncedFolderDocument: (absPath) =>
 		ipcRenderer.invoke("desktop:live-sync:is-live-document", absPath),
 	onSyncedFolderEvent: (callback) =>
 		subscribe("desktop:live-sync:event", callback),
+	setAuthState: (state) => ipcRenderer.invoke("desktop:auth-state", state),
+	onAuthHandoff: (callback) => {
+		const unsubscribe = subscribe("desktop:auth-handoff", callback);
+		void ipcRenderer.invoke("desktop:auth-handoff-ready");
+		return unsubscribe;
+	},
+	onRepoLinkLinked: (callback) =>
+		subscribe("desktop:repo-link:linked", callback),
 	getUpdateState: () => ipcRenderer.invoke("desktop:get-update-state"),
 	getFullScreen: () => ipcRenderer.invoke("desktop:get-fullscreen"),
 	checkForUpdates: () => ipcRenderer.invoke("desktop:check-for-updates"),

@@ -1,3 +1,10 @@
+import { ConvexAuthProvider } from "@convex-dev/auth/react";
+import {
+	Authenticated,
+	AuthLoading,
+	ConvexReactClient,
+	Unauthenticated,
+} from "convex/react";
 import { useState } from "react";
 import {
 	BrowserRouter,
@@ -8,251 +15,251 @@ import {
 	useNavigate,
 	useParams,
 } from "react-router";
-import { disconnect, readConnection } from "./connection/connection";
-import { ConnectScreen } from "./screens/ConnectScreen";
-import { OpenWorkspaceScreen } from "./screens/OpenWorkspaceScreen";
-import { realtimeCollabEnabled } from "./realtimeFlag";
+import { AuthStatus, SignInScreen } from "./auth/AuthScreens";
+import { clearWorkspace, saveWorkspace } from "./connection/connection";
+import { DashboardScreen } from "./screens/DashboardScreen";
+import { DeviceAuthScreen } from "./screens/DeviceAuthScreen";
+import { GuestFolderScreen } from "./screens/GuestFolderScreen";
 import { AppShell } from "./shell/AppShell";
-import { workspaceStore } from "./store/state";
 
 export type TestIdentity = {
 	userId: string;
 	name: string;
 };
 
-type Connection = {
-	url: string;
-	workspaceId: string | null;
-	testIdentity: TestIdentity | null;
-};
-
 const TEST_IDENTITY_STORAGE_KEY = "hubble.testIdentity";
 
-function initialConnection(): Connection | null {
-	const testConnection = readTestBootstrap();
-	if (testConnection) return testConnection;
-	const storedConnection = readConnection();
-	return storedConnection ? { ...storedConnection, testIdentity: null } : null;
-}
+// The product app talks to a single, build-time Convex deployment. The old
+// "paste your Convex URL" ConnectScreen is gone (A1a). The test bootstrap url is
+// a dev fallback so ?test=1 keeps working when only VITE_TEST_CONVEX_URL is set.
+const CONVEX_URL =
+	import.meta.env.VITE_CONVEX_URL ?? import.meta.env.VITE_TEST_CONVEX_URL ?? "";
 
-// Agent test bootstrap: navigating to /?test=1 skips the connect + workspace
-// screens by reading VITE_TEST_CONVEX_URL / VITE_TEST_WORKSPACE_ID from
-// apps/www/.env.local. Without the query param the env vars are inert, so
-// human dev sessions are unaffected.
-function readTestBootstrap(): Connection | null {
-	const params = new URLSearchParams(window.location.search);
-	if (params.get("test") !== "1") return null;
-	const url = import.meta.env.VITE_TEST_CONVEX_URL;
-	const workspaceId = import.meta.env.VITE_TEST_WORKSPACE_ID;
-	if (!url || !workspaceId) {
-		console.warn(
-			"?test=1 set but VITE_TEST_CONVEX_URL / VITE_TEST_WORKSPACE_ID are missing — falling back to normal routing.",
-		);
-		return null;
-	}
-	return { url, workspaceId, testIdentity: readTestIdentity(params) };
-}
+const convexClient = CONVEX_URL ? new ConvexReactClient(CONVEX_URL) : null;
 
 export default function App() {
+	if (!convexClient) {
+		return <AuthStatus message="VITE_CONVEX_URL is not configured." />;
+	}
 	return (
-		<BrowserRouter>
-			<AppRoutes />
-		</BrowserRouter>
+		<ConvexAuthProvider client={convexClient}>
+			<BrowserRouter>
+				<AppRoutes />
+			</BrowserRouter>
+		</ConvexAuthProvider>
 	);
 }
 
 function AppRoutes() {
-	const [connection, setConnection] = useState<Connection | null>(
-		initialConnection,
+	// ?test=1 stays an anonymous bypass for the realtime POC (see A3 — replaced by
+	// real signed-in presence in a later phase). Everything else is auth-gated.
+	const [testIdentity, setTestIdentity] = useState<TestIdentity | null>(
+		readTestIdentity,
 	);
-	const navigate = useNavigate();
+
+	if (isTestBootstrap()) {
+		if (!testIdentity) {
+			return (
+				<TestIdentityGate
+					onSelected={(identity) => {
+						writeTestIdentity(identity);
+						setTestIdentity(identity);
+					}}
+				/>
+			);
+		}
+		return <RoutedApp testIdentity={testIdentity} />;
+	}
+
+	return (
+		<>
+			<AuthLoading>
+				<AuthStatus message="Checking session…" />
+			</AuthLoading>
+			<Unauthenticated>
+				<SignedOutRoute />
+			</Unauthenticated>
+			<Authenticated>
+				<RoutedApp testIdentity={null} />
+			</Authenticated>
+		</>
+	);
+}
+
+// Invite-link (RB2) folder join route: `/folder/<folderId>` and its document
+// sub-route. Signed-out visitors must NOT be redirected away from this path —
+// unlike every other non-root route, it needs to survive the auth gate so a
+// guest who opens the link, then signs in/up, lands right back on the folder
+// they were invited to (the URL bar already carries the destination, so no
+// separate "restore" step is needed once we stop discarding it here).
+const JOIN_ROUTE_PATTERN = /^\/folder\/[^/]+/;
+
+function isJoinRoute(pathname: string): boolean {
+	return JOIN_ROUTE_PATTERN.test(pathname);
+}
+
+function isDeviceAuthRoute(pathname: string): boolean {
+	return pathname === "/device";
+}
+
+function SignedOutRoute() {
 	const location = useLocation();
-
-	const handleDisconnect = () => {
-		disconnect();
-		setConnection(null);
-		navigate("/", { replace: true });
-	};
-
-	const handleConnected = (url: string) => {
-		setConnection({
-			url,
-			workspaceId: getWorkspaceIdFromPath(location.pathname),
-			testIdentity: null,
-		});
-	};
-
-	const handleWorkspaceLoaded = (workspaceId: string) => {
-		setConnection((current) =>
-			current ? { ...current, workspaceId } : current,
+	if (isJoinRoute(location.pathname)) {
+		return (
+			<SignInScreen
+				defaultMode="signUp"
+				heading="Open your shared folder"
+				banner="Someone on your team shared a folder of living docs with you — the same context they (and their agents) work from every day. No code, no install required to read or edit here."
+			/>
 		);
-	};
-
-	const handleTestIdentitySelected = (identity: TestIdentity) => {
-		writeTestIdentity(identity);
-		setConnection((current) =>
-			current ? { ...current, testIdentity: identity } : current,
+	}
+	if (isDeviceAuthRoute(location.pathname)) {
+		return (
+			<SignInScreen
+				heading="Sign in to approve CLI access"
+				banner="After sign-in, you will return to the device approval screen."
+			/>
 		);
-	};
+	}
+	if (location.pathname !== "/") {
+		// Avoid carrying a stale workspace/document route into the next account.
+		clearWorkspace();
+		return <Navigate to="/" replace />;
+	}
+	return <SignInScreen />;
+}
 
+function RoutedApp({ testIdentity }: { testIdentity: TestIdentity | null }) {
+	const navigate = useNavigate();
 	return (
 		<Routes>
 			<Route
 				path="/"
 				element={
 					<HomeRoute
-						connection={connection}
-						onConnected={handleConnected}
+						testIdentity={testIdentity}
 						onSelected={(workspaceId) => {
-							handleWorkspaceLoaded(workspaceId);
-							navigate(workspaceRoute(workspaceId));
+							navigate(withTestSearch(workspaceRoute(workspaceId)));
 						}}
-						onTestIdentitySelected={handleTestIdentitySelected}
-						onDisconnect={handleDisconnect}
+						onOpenDocument={(workspaceId, documentId) => {
+							navigate(
+								withTestSearch(workspaceDocumentRoute(workspaceId, documentId)),
+							);
+						}}
+						onOpenFolder={(folderId) => {
+							navigate(`/folder/${encodeURIComponent(folderId)}`);
+						}}
 					/>
 				}
 			/>
 			<Route
 				path="/w/:workspaceId"
-				element={
-					<WorkspaceRoute
-						connection={connection}
-						filePath={null}
-						onConnected={handleConnected}
-						onTestIdentitySelected={handleTestIdentitySelected}
-						onWorkspaceLoaded={handleWorkspaceLoaded}
-						onDisconnect={handleDisconnect}
-					/>
-				}
+				element={<WorkspaceRoute testIdentity={testIdentity} filePath={null} />}
 			/>
 			<Route
 				path="/w/:workspaceId/f/*"
-				element={
-					<WorkspaceRoute
-						connection={connection}
-						onConnected={handleConnected}
-						onTestIdentitySelected={handleTestIdentitySelected}
-						onWorkspaceLoaded={handleWorkspaceLoaded}
-						onDisconnect={handleDisconnect}
-					/>
-				}
+				element={<WorkspaceRoute testIdentity={testIdentity} />}
 			/>
-			{realtimeCollabEnabled ? (
-				<Route
-					path="/w/:workspaceId/d/:documentId"
-					element={
-						<WorkspaceRoute
-							connection={connection}
-							filePath={null}
-							onConnected={handleConnected}
-							onTestIdentitySelected={handleTestIdentitySelected}
-							onWorkspaceLoaded={handleWorkspaceLoaded}
-							onDisconnect={handleDisconnect}
-						/>
-					}
-				/>
-			) : null}
+			<Route
+				path="/w/:workspaceId/d/:documentId"
+				element={<WorkspaceRoute testIdentity={testIdentity} filePath={null} />}
+			/>
+			<Route path="/folder/:folderId" element={<GuestFolderRoute />} />
+			<Route
+				path="/folder/:folderId/d/:documentId"
+				element={<GuestFolderRoute />}
+			/>
+			<Route path="/device" element={<DeviceAuthScreen />} />
 			<Route path="*" element={<Navigate to="/" replace />} />
 		</Routes>
 	);
 }
 
+function GuestFolderRoute() {
+	const params = useParams();
+	const navigate = useNavigate();
+	const folderId = params.folderId;
+	const documentId = params.documentId ?? null;
+	if (!folderId) return <Navigate to="/" replace />;
+
+	return (
+		<GuestFolderScreen
+			folderId={folderId}
+			documentId={documentId}
+			onSelectDocument={(id) => navigate(`/folder/${folderId}/d/${id}`)}
+		/>
+	);
+}
+
 function HomeRoute({
-	connection,
-	onConnected,
+	testIdentity,
 	onSelected,
-	onTestIdentitySelected,
-	onDisconnect,
+	onOpenDocument,
+	onOpenFolder,
 }: {
-	connection: Connection | null;
-	onConnected: (url: string) => void;
+	testIdentity: TestIdentity | null;
 	onSelected: (workspaceId: string) => void;
-	onTestIdentitySelected: (identity: TestIdentity) => void;
-	onDisconnect: () => void;
+	onOpenDocument: (workspaceId: string, documentId: string) => void;
+	onOpenFolder: (folderId: string) => void;
 }) {
-	if (!connection) {
-		return <ConnectScreen onConnected={onConnected} />;
-	}
-
-	if (connection.workspaceId && !connection.testIdentity && isTestBootstrap()) {
-		return <TestIdentityGate onSelected={onTestIdentitySelected} />;
-	}
-
-	if (connection.workspaceId) {
-		const lastOpenedPath =
-			workspaceStore.get().lastOpenedPaths[connection.workspaceId];
-		return (
-			<Navigate
-				to={
-					lastOpenedPath
-						? workspaceFileRoute(connection.workspaceId, lastOpenedPath)
-						: workspaceRoute(connection.workspaceId)
-				}
-				replace
-			/>
-		);
+	// Test bootstrap jumps straight to the configured workspace.
+	if (testIdentity) {
+		const workspaceId = import.meta.env.VITE_TEST_WORKSPACE_ID;
+		if (workspaceId) {
+			return (
+				<Navigate to={withTestSearch(workspaceRoute(workspaceId))} replace />
+			);
+		}
 	}
 
 	return (
-		<OpenWorkspaceScreen
-			url={connection.url}
-			onSelected={onSelected}
-			onDisconnect={onDisconnect}
+		<DashboardScreen
+			onOpenDocument={onOpenDocument}
+			onOpenWorkspace={onSelected}
+			onOpenFolder={onOpenFolder}
 		/>
 	);
 }
 
 function WorkspaceRoute({
-	connection,
+	testIdentity,
 	filePath,
-	onConnected,
-	onTestIdentitySelected,
-	onWorkspaceLoaded,
-	onDisconnect,
 }: {
-	connection: Connection | null;
+	testIdentity: TestIdentity | null;
 	filePath?: string | null;
-	onConnected: (url: string) => void;
-	onTestIdentitySelected: (identity: TestIdentity) => void;
-	onWorkspaceLoaded: (workspaceId: string) => void;
-	onDisconnect: () => void;
 }) {
 	const params = useParams();
 	const navigate = useNavigate();
 	const workspaceId = params.workspaceId;
-	const documentId = realtimeCollabEnabled ? (params.documentId ?? null) : null;
+	const documentId = params.documentId ?? null;
 	const routeFilePath =
 		filePath === undefined ? (params["*"] ?? null) : filePath;
 
 	if (!workspaceId) return <Navigate to="/" replace />;
 
-	if (!connection) {
-		return <ConnectScreen onConnected={onConnected} />;
-	}
-
-	if (!connection.testIdentity && isTestBootstrap()) {
-		return <TestIdentityGate onSelected={onTestIdentitySelected} />;
-	}
-
 	return (
 		<AppShell
-			url={connection.url}
+			url={CONVEX_URL}
 			workspaceId={workspaceId}
 			filePath={routeFilePath}
 			documentId={documentId}
-			testIdentity={connection.testIdentity}
+			testIdentity={testIdentity}
 			onSelectFile={(path) => {
-				navigate(workspaceFileRoute(workspaceId, path));
+				navigate(withTestSearch(workspaceFileRoute(workspaceId, path)));
 			}}
 			onSelectDocument={(id) => {
-				if (!realtimeCollabEnabled) return;
-				navigate(workspaceDocumentRoute(workspaceId, id));
+				navigate(withTestSearch(workspaceDocumentRoute(workspaceId, id)));
 			}}
 			onSwitch={(id) => {
-				navigate(workspaceRoute(id));
+				navigate(withTestSearch(workspaceRoute(id)));
 			}}
-			onWorkspaceLoaded={onWorkspaceLoaded}
-			onDisconnect={onDisconnect}
+			onWorkspaceLoaded={(id) => {
+				saveWorkspace(id);
+			}}
+			onDisconnect={() => {
+				clearWorkspace();
+				navigate("/");
+			}}
 		/>
 	);
 }
@@ -275,16 +282,20 @@ function workspaceDocumentRoute(
 	return `${workspaceRoute(workspaceId)}/d/${encodeURIComponent(documentId)}`;
 }
 
-function getWorkspaceIdFromPath(pathname: string): string | null {
-	const match = /^\/w\/([^/]+)/.exec(pathname);
-	return match ? decodeURIComponent(match[1]) : null;
-}
-
 function isTestBootstrap(): boolean {
 	return new URLSearchParams(window.location.search).get("test") === "1";
 }
 
-function readTestIdentity(params: URLSearchParams): TestIdentity | null {
+// In test-bootstrap mode, re-attach the current query string (?test=1&testUser=…)
+// to in-app navigation targets so the address-bar URL stays copy-pasteable into
+// a second browser/machine. Outside test mode this is a no-op.
+function withTestSearch(path: string): string {
+	if (!isTestBootstrap()) return path;
+	return `${path}${window.location.search}`;
+}
+
+function readTestIdentity(): TestIdentity | null {
+	const params = new URLSearchParams(window.location.search);
 	const queryName = params.get("testUser")?.trim();
 	if (queryName) {
 		const identity = identityFromName(queryName);

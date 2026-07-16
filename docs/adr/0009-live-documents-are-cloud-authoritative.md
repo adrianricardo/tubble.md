@@ -1,5 +1,12 @@
 # Live Documents are cloud-authoritative
 
+> **Superseded in part by ADR-0010 (2026-07-11):** Cloud authority remains.
+> `/specs/desktop-cloud-workspace/PRODUCT.md` supersedes the parallel user-facing
+> local-authority modes and the read/export-only interpretation of projections for the
+> planned desktop: watched Markdown is a normal writable interface, including across
+> offline and app-quit periods. This ADR still documents current code and the original
+> authority decision; ADR-0010 owns the writable-projection and unified-desktop model.
+
 Hubble currently has file-authoritative editing modes. Desktop Workspace folders,
 Plain Folders, and Loose Files are edited through markdown files on disk. Cloud
 Sync, when present, reconciles those files with Convex.
