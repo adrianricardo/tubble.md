@@ -934,3 +934,11 @@ acceptance roots. Desktop tests pass 166/166 and `pnpm build:desktop` passes. Mi
   external links return successful signed-out HTTP destinations and all relative links
   exist. The literal clean-browser audit remains pending because the in-app browser
   failed to start due to a local native-module signature error.
+- 2026-07-16 — Implemented the launch-critical hosted-trial boundary in account
+  creation. Signup now names the lack of uptime, backup, support, security-review, and
+  maintenance guarantees; warns against critical, sensitive, or irreplaceable data;
+  recommends independent copies; and links to the independent-deployment guide. The
+  notice progressively reveals only in signup, respects reduced motion, and removes its
+  collapsed link from the accessibility tree and tab order. Added two focused render
+  tests and a user-facing changelog entry. Web tests pass 6/6, www typecheck passes,
+  changed-file Biome passes, and the review-readiness simplify/comments pass is clean.

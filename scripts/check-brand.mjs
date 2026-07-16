@@ -48,6 +48,11 @@ const publicSurfaces = [
 		divergent: (t) => t.includes(`${upstreamRepoSlug}/releases/latest`),
 	},
 	{
+		label: "Changelog public identity",
+		file: "CHANGELOG.md",
+		divergent: (t) => /All notable user-facing changes to Hubble/.test(t),
+	},
+	{
 		label: "Hosted web app tab title",
 		file: "apps/www/index.html",
 		divergent: (t) => /<title>\s*hubble\.md\s*<\/title>/i.test(t),

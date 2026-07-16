@@ -27,6 +27,9 @@ as one verified commit. No push, deployment, or release has occurred.
 - Signed-out HTTP audit passes for every README/security external URL and every relative
   target exists. A literal clean-browser pass remains pending because the in-app browser
   could not start on this host.
+- Phase 3 signup boundary is implemented: account creation now states the best-effort
+  trial limits before submission and links to independent deployment. Web tests (6/6),
+  www typecheck, and changed-file Biome pass.
 
 **Immediate open items (pick any; none block the others except where noted):**
 1. **Resolve hosted web URL** (Phase 1 step 7): set `config/brand.json` → `web.url`,
@@ -37,7 +40,8 @@ as one verified commit. No push, deployment, or release has occurred.
    fills its verification record (needs a real Convex account + web host).
 4. **Internal CLEANUP** (non-launch-blocking): agent docs / `CLAUDE.md` / `docs/agents/*`
    / `.agents/skills/*` still reference `bholmesdev/hubble.md` issue tracker.
-5. **Phase 3**: stand up production hosted deployment + trial-boundary copy in signup.
+5. **Phase 3**: stand up the production hosted deployment and complete the remaining
+   first-use/operational gates; signup trial-boundary copy is done.
 
 Other previously-pending work (selective-authority acceptance, Phase 6 recovery,
 cross-device matrix, Adrian's todos 1–5) remains tracked in its own sections below and

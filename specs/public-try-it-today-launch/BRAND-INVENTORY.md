@@ -32,6 +32,7 @@ RENAME.
 | Location | Current value | Class | Notes |
 | --- | --- | --- | --- |
 | `README.md` Download / Releases / Contributing / social links | `bholmesdev/hubble.md`, `@bholmesdev` | PUBLIC RENAME | Front door; must resolve to fork-owned destinations + labeled upstream attribution. |
+| `CHANGELOG.md` current product introduction | `All notable user-facing changes to Hubble` | PUBLIC RENAME | Release-note front matter names the current fork; historical version entries retain their shipped names. |
 | `README.md` skills link | `bholmesdev/hubble-skills` | COMPAT ALIAS or PUBLIC | Skills repo is upstream-owned; keep as attribution unless a fork skills repo exists. |
 | `apps/www/index.html` `<title>` | `hubble.md` | PUBLIC RENAME | Hosted web app tab title. |
 | `apps/www/src/auth/AuthScreens.tsx` | "Sign in to Hubble" | PUBLIC RENAME | Visible auth copy. |

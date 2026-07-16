@@ -2,6 +2,9 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useState } from "react";
 import { categorizeError, describeError } from "../connection/convex-error";
 
+const DEPLOY_GUIDE_URL =
+	"https://github.com/adrianricardo/tubble.md/blob/main/specs/public-try-it-today-launch/DEPLOY.md";
+
 // Root-level auth surface. Lifted out of AppShell (P2/A1b) so the auth gate can
 // live at the router root instead of inside a per-workspace shell.
 export function SignInScreen({
@@ -53,6 +56,7 @@ export function SignInScreen({
 					{heading ??
 						(mode === "signIn" ? "Sign in to Tubble" : "Create your account")}
 				</h1>
+				<HostedTrialNotice visible={mode === "signUp"} />
 				<label
 					htmlFor="auth-email"
 					className="mt-4 block text-sm font-medium text-foreground"
@@ -119,6 +123,37 @@ export function SignInScreen({
 				</button>
 			</form>
 		</main>
+	);
+}
+
+export function HostedTrialNotice({ visible }: { visible: boolean }) {
+	// Keep the notice mounted for the mode transition; collapse it out of both the
+	// accessibility tree and keyboard order while sign-in is active.
+	return (
+		<div
+			aria-hidden={!visible}
+			className={`grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${
+				visible ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+			}`}
+		>
+			<div className="overflow-hidden">
+				<div className="mt-3 rounded-sm border border-border bg-muted/50 text-xs leading-relaxed text-muted-foreground [padding-block:0.625rem] [padding-inline:0.75rem]">
+					<p className="font-medium text-foreground">About this public trial</p>
+					<p className="mt-1">
+						This is a best-effort service with no uptime, backup, support,
+						security-review, or maintenance guarantee. Don&apos;t use it for
+						critical, sensitive, or irreplaceable work. Keep your own copies.
+					</p>
+					<a
+						href={DEPLOY_GUIDE_URL}
+						tabIndex={visible ? undefined : -1}
+						className="mt-1 inline-block font-medium text-foreground underline decoration-border underline-offset-2 transition-colors duration-150 ease-[cubic-bezier(0.2,0,0,1)] hover:decoration-foreground"
+					>
+						Deploy your own for more control
+					</a>
+				</div>
+			</div>
+		</div>
 	);
 }
 
