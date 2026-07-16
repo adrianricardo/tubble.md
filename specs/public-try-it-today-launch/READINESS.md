@@ -39,11 +39,16 @@ These results still need to be included in the exact revision deployed and relea
 - The production web artifact built successfully against
   `https://rugged-mastiff-510.convex.cloud`; an artifact scan found the production
   URL and no development deployment, test-variable, or private-key markers.
-- Frontend revision `fce0a1eb1250892d5512d5dee24d03a58542dcf6` is active as
-  Cloudflare Worker version `7e6d5f82-a52a-4909-9dbf-28306a33094a` at
-  `https://tubble.nopalstudio.com`. Wrangler reports that version at 100% with one
-  custom-domain route. Six consecutive bare-root checks returned the new asset after
-  the edge cache converged.
+- Frontend revision `fce0a1eb1250892d5512d5dee24d03a58542dcf6` was the first
+  authenticated-branding build, deployed as Worker version
+  `7e6d5f82-a52a-4909-9dbf-28306a33094a`.
+- Public `main` merge revision `56345cef1097041083d3f35efcff05fec2c6830d` is now
+  active as Cloudflare Worker version `87470941-99aa-4077-acba-ddd4fd1c020f` at
+  `https://tubble.nopalstudio.com`. Wrangler 4.111.0 reports that version at 100%
+  with the existing custom-domain route. The deployed HTML references
+  `assets/index-jzJ2yh7Z.js`; the production endpoint is present and the artifact
+  contains no development deployment, test-variable, private-key, or signup-control
+  marker.
 - Public DNS returns Cloudflare A/AAAA addresses. HTTPS returns HTTP/2 200 through
   Cloudflare with a valid `*.nopalstudio.com` certificate; an unknown path also returns
   the SPA document with 200. The page title is `tubble.md`.
@@ -149,14 +154,59 @@ www build containing the final public links, and rerun this isolated-browser tab
 No push or deployment is authorized by this record. DEPLOY-5 becomes the next major
 gate only after this link audit passes.
 
+## Clean-browser remediation and passing rerun — 2026-07-16T21:30Z
+
+PR [#7](https://github.com/adrianricardo/tubble.md/pull/7) merged the release branch
+into public `main` as `56345cef1097041083d3f35efcff05fec2c6830d`. The remediation
+corrected the public contribution, desktop, and context identity;
+published `DEPLOY.md` plus both brand JSON files; expanded strict brand coverage; and
+replaced the misleading `releases/latest` download claim with an honestly labeled
+fork-owned releases index. The existing unsigned development assets were not changed.
+
+The www build from that exact merge revision targeted production Convex
+`rugged-mastiff-510` and was deployed to Worker version
+`87470941-99aa-4077-acba-ddd4fd1c020f`, confirmed at 100%. A new Chrome 150 profile
+then began with **0 cookies** and opened every unique tracked destination. GitHub
+rendered anonymous **Sign in** state, X used guest-only state, and the hosted trial
+retained zero cookies/local-storage/session-storage entries. No account or credential
+was supplied. The temporary profile was deleted after the run.
+
+| Tracked destination | Passing browser result |
+| --- | --- |
+| Fork repository / public README | **200**, fork-owned Tubble README and “Try it today” copy |
+| Original Hubble repository | **200**, correctly labeled upstream attribution |
+| Upstream author | **200**, redirected `twitter.com` → `x.com/bholmesdev` |
+| Fork releases index (README + download UI) | **200**, fork-owned “Tubble Desktop Dev (latest)” with visible unsigned-development metadata |
+| `CONTRIBUTING.md` | **200**, “Contributing to Tubble” |
+| Original `hubble-skills` repository | **200**, correctly labeled upstream dependency |
+| `https://tubble.nopalstudio.com` | **200**, trailing-slash normalization, Tubble auth/trial/deploy copy, zero browser storage |
+| Convex | **200**, redirected to `www.convex.dev` with expected provider brand |
+| `DEPLOY.md` (README + www copy) | **200**, “Deploy your own Tubble.md” and independent-deployment warning |
+| Node.js download | **200**, expected Node.js download page |
+| pnpm installation | **200**, expected pnpm installation page |
+| `apps/desktop/README.md` | **200**, Tubble identity and fork-owned release destination |
+| `config/compatibility.json` | **200**, intentional compatibility identifiers including retained app ID |
+| `config/brand.json` | **200**, Tubble identity and production URL |
+| `CONTEXT.md` | **200**, Tubble context and cloud terminology |
+| `CODE_OF_CONDUCT.md` | **200**, fork-owned Contributor Covenant content |
+| `SECURITY.md` | **200**, Tubble identity and fork-owned private advisory destination |
+| `LICENSE` | **200**, fork-owned MIT page with required upstream notice |
+| Private-advisory form | **200**, expected redirect to GitHub sign-in with the fork advisory URL preserved in `return_to` |
+
+**Gate result: pass.** Phase 1 step 6 is complete. This does not complete the separate
+signed/notarized public macOS release gate: current public copy explicitly labels the
+existing artifacts as unsigned development builds. The exact next major launch gate is
+Phase 2 DEPLOY-5, which requires a second operator using their own Convex account,
+host, and Mac.
+
 ## Pending before launch
 
 | Area | Required evidence | Status / dependency |
 | --- | --- | --- |
 | Public destination | Configure DNS/TLS/hosting for the selected temporary URL, deploy Tubble there, verify control, then set it in `config/brand.json`, README, and package homepages. A dedicated custom domain comes later. | **Complete at `https://tubble.nopalstudio.com`; DNS, TLS, SPA hosting, app control, and brand boundary verified.** |
-| Fresh-browser links | Open every README, download, security, and www public destination in a clean browser. | **Full every-link browser run completed but failed.** The isolated profile started with 0 cookies; owned/app/provider/upstream destinations rendered anonymously. Public `main` still serves the old README and stale Hubble-linked docs; `DEPLOY.md`, `config/compatibility.json`, and `config/brand.json` are 404; and `releases/latest` exposes only the unsigned development prerelease. Land/deploy the current public docs and corrected linked copy, then rerun. |
+| Fresh-browser links | Open every README, download, security, and www public destination in a clean browser. | **Complete.** Public `main` revision `56345ce` and Worker version `87470941-99aa-4077-acba-ddd4fd1c020f` passed all 19 unique tracked destinations from a 0-cookie isolated profile. Expected Twitter/Convex/GitHub-auth redirects were recorded; no auth/session leakage appeared. Existing macOS artifacts remain explicitly labeled unsigned development builds. |
 | Independent deployment | A second operator follows `DEPLOY.md` from a clean clone, records corrections, and proves web create/edit/reload plus macOS sign-in/local-agent edit on their deployment. | **Needs a second operator, Convex account, host, and Mac.** |
-| Production trial | Create a production Convex project separate from development, configure auth/secrets, deploy the backend, host `apps/www` against it, and record backend/frontend revisions. | **Infrastructure complete: backend `c40f963`, frontend `fce0a1e`, auth and real URL verified; approved smoke identities now exist.** |
+| Production trial | Create a production Convex project separate from development, configure auth/secrets, deploy the backend, host `apps/www` against it, and record backend/frontend revisions. | **Infrastructure complete: backend `c40f963`, public-main frontend `56345ce` / Worker `87470941-99aa-4077-acba-ddd4fd1c020f`, auth and real URL verified; approved smoke identities now exist.** |
 | Trial first use | From signed out on the real URL: see the trial boundary and availability, create an account/private Workspace/document, reload, sign out/in, and recover the same content. | **Complete on production.** The replacement disposable identity passed signup, private Space, create/edit, cache-bypassing reload, sign-out denial, same-identity sign-in, and exact marker recovery. |
 | Trial failure states | Verify reached-cap, operator-pause, outage, deployment mismatch, and unavailable-account copy on the production configuration. | **Implementation exists for cap/pause; production evidence pending.** |
 | Operational floor | Name deployment ownership; prove secret rotation/revocation, error visibility, pause/reopen signups, backup/export, and a service/retirement notice path. | **Partially documented; operator choices and production drills pending.** |

@@ -9,7 +9,7 @@ Implementation of the public "try it today" launch is underway (plan:
 `specs/public-try-it-today-launch/PLAN.md`; contract: same dir `PRODUCT.md`). The
 Phase 1 identity work is complete and production hosted-trial infrastructure is now
 live at `https://tubble.nopalstudio.com`. Production smoke identities now exist; no
-push, desktop release, or announcement has occurred.
+desktop release or announcement has occurred.
 
 **Done & verified (Phase 1 steps 1–6, in-repo):**
 - Brand boundary built: `config/brand.json` (source of truth), `config/compatibility.json`
@@ -25,11 +25,11 @@ push, desktop release, or announcement has occurred.
 - GitHub repository is `adrianricardo/tubble.md`; local `origin` now targets it, the old
   repository URL redirects, and `desktop-dev-latest` plus its assets resolve. The live
   prerelease title and future workflow presentation use Tubble.
-- Signed-out HTTP audit passes for every README/security external URL and every relative
-  target exists locally. The literal isolated-browser pass is now complete and found
-  public-deployment failures: public `main` still serves the old Hubble README/copy,
-  `DEPLOY.md` plus both public brand JSON targets are 404, and `releases/latest` exposes
-  only the unsigned development prerelease. The gate has evidence but does not pass.
+- Public `main` revision `56345ce` now contains the Tubble README, deploy guide, brand
+  files, and corrected linked docs. The literal isolated-browser pass succeeds for all
+  19 unique README/download/security/www destinations from a 0-cookie profile with no
+  auth/session leakage. Existing macOS artifacts are honestly labeled unsigned
+  development builds; their separate signed-release gate remains open.
 - Phase 3 signup boundary is implemented: account creation now states the best-effort
   trial limits before submission and links to independent deployment. Web tests (6/6),
   www typecheck, and changed-file Biome pass.
@@ -53,7 +53,9 @@ push, desktop release, or announcement has occurred.
   wildcard TLS, root + SPA 200 responses, production-backend targeting, and signed-out
   trial-boundary rendering are verified. Frontend commit `fce0a1e` is Worker version
   `7e6d5f82-a52a-4909-9dbf-28306a33094a` at 100%; the bare root converged on its new
-  asset in six consecutive checks.
+  asset in six consecutive checks. Public-main frontend revision `56345ce` supersedes
+  that build as Worker version `87470941-99aa-4077-acba-ddd4fd1c020f` at 100%; its
+  artifact targets production Convex and contains no dev/test/secret markers.
 - Adrian approved and the first production account was created as
   `tubble-smoke-20260716182713@example.com`. Its private starter Space appeared with
   no teams/shares, and `Hosted Trial Persistence 2026-07-16` retained an exact marker
@@ -76,21 +78,17 @@ push, desktop release, or announcement has occurred.
   browser plugin remains locally blocked because Apple reports its bundled native
   certificate as revoked, but the isolated Chrome fallback passed the public-root
   signed-out boundary. A second clean profile began with 0 cookies and completed the
-  every-link audit at `2026-07-16T19:50Z`; results are in `READINESS.md`. No auth/session
-  leakage appeared, but the undeployed/stale GitHub documentation and development-only
-  release metadata fail the gate.
+  every-link audit at `2026-07-16T19:50Z`, exposing stale public docs. PR #7 landed the
+  remediation, and a third 0-cookie isolated profile passed all 19 destinations at
+  `2026-07-16T21:30Z`. Exact redirects, ownership/brand checks, and release metadata are
+  in `READINESS.md`.
 
 **Immediate open items (pick any; none block the others except where noted):**
-1. **Clean-browser public-link audit** (Phase 1 step 6): the every-link run is complete
-   but **failed**. Land the current Tubble documentation/brand files on the public repo,
-   correct linked docs that still expose stale Hubble brand/ownership, redeploy www with
-   the final URLs, then rerun the table in `READINESS.md`. Do not push/deploy without
-   authorization.
-2. **Phase 2 DEPLOY-5**: a second operator follows `DEPLOY.md` from a clean clone and
+1. **Phase 2 DEPLOY-5**: a second operator follows `DEPLOY.md` from a clean clone and
    fills its verification record (needs a real Convex account + web host).
-3. **Internal CLEANUP** (non-launch-blocking): agent docs / `CLAUDE.md` / `docs/agents/*`
+2. **Internal CLEANUP** (non-launch-blocking): agent docs / `CLAUDE.md` / `docs/agents/*`
    / `.agents/skills/*` still reference `bholmesdev/hubble.md` issue tracker.
-4. **Phase 3**: production Convex/Auth/hosting, signed-out boundary, first use,
+3. **Phase 3**: production Convex/Auth/hosting, signed-out boundary, first use,
    reload/sign-in persistence, signed-out denial, and private-Space isolation are
    verified; finish sharing, failure-state, and operational gates.
 
@@ -140,7 +138,7 @@ application control, and the manifest-driven public URL boundary are verified.
 Source: `brain/sources/2026-07-15-public-launch-milestone.md`. Observable contract:
 `/specs/public-try-it-today-launch/PRODUCT.md`.
 
-### Phase 1 identity and hosted URL applied; full link audit failed (2026-07-16)
+### Phase 1 identity and hosted URL applied; full link audit passed (2026-07-16)
 
 The brand boundary is in place AND the in-repo rename is applied. `pnpm check:brand`
 now reports **0 divergent and 0 unresolved public values** (down from 24 + 1).
@@ -158,16 +156,16 @@ box). Compatibility map corrected: `productName`/`appName`/userData follow the r
 (no public installs to migrate); appId + `hubble://` scheme + `@hubble.md/*` namespace +
 `hubble` CLI bin + upstream `hubble-skills` remain retained/documented.
 
-**Remaining (Phase 1 step 6):**
+**Phase 1 step 6 complete:**
 
-- The literal browser audit is recorded in `READINESS.md`. A fresh Chrome profile with
-  0 initial cookies rendered the complete source-derived link set, with no session
-  leakage. It failed because the current docs are not public: public `main` still shows
-  the old Hubble README and stale linked copy; the deploy guide and both brand JSON
-  links are 404; and the fork has only an unsigned development prerelease. Land/deploy
-  the corrected public revision, then rerun. The in-app browser remains independently
-  blocked by its revoked bundled native certificate; no macOS security setting was
-  weakened.
+- PR #7 merged the release branch and link remediation into public `main` as `56345ce`.
+  The matching www build is Worker version
+  `87470941-99aa-4077-acba-ddd4fd1c020f`. A fresh Chrome profile began with 0 cookies
+  and passed all 19 unique tracked destinations, including the formerly missing deploy
+  guide and brand files. Expected provider/auth redirects and unsigned-development
+  release metadata are recorded in `READINESS.md`; no session leakage appeared. The
+  in-app browser remains independently blocked by its revoked bundled native
+  certificate, and no macOS security setting was weakened.
 
 Internal CLEANUP still stale (non-launch-blocking): agent docs / `CLAUDE.md` /
 `docs/agents/*` / `.agents/skills/*` still say `bholmesdev/hubble.md` for the issue

@@ -1037,3 +1037,23 @@ acceptance roots. Desktop tests pass 166/166 and `pnpm build:desktop` passes. Mi
   public values, and `pnpm build:desktop` passes. No push, deploy, release
   publication/replacement, account action, credential use, DNS/Cloudflare change, or
   other external mutation occurred.
+- 2026-07-16 — Remediated and completed the public-link launch gate with Adrian's
+  authorization. Merged current `main` into `codex/public-doc-launch`, retaining the
+  Tubble dev-release title/assets while incorporating main's pnpm CI fix; corrected the
+  public contribution, desktop, and context docs; narrowed macOS download copy to the
+  fork-owned releases index with an explicit unsigned-development warning; and expanded
+  strict brand coverage to those linked surfaces. PR #7 merged to public `main` as
+  `56345cef1097041083d3f35efcff05fec2c6830d`. Built www against production Convex
+  `rugged-mastiff-510`, found no dev/test/private-key/signup-control markers, and
+  deployed Worker version `87470941-99aa-4077-acba-ddd4fd1c020f`; Wrangler reports it
+  at 100% on `tubble.nopalstudio.com`. A new Chrome 150 profile began with 0 cookies and
+  passed all 19 unique README/download/security/www destinations, including the three
+  formerly missing GitHub files; expected Twitter, Convex, and private-advisory
+  redirects passed; hosted-trial storage remained empty; and no auth/session leakage
+  appeared. The temporary profile was deleted. Verification passes strict brand 0/0,
+  www tests 7/7, www typecheck, targeted Biome, `git diff --check`, and
+  `pnpm build:desktop`. External writes were the review branch push, PR #7 creation and
+  merge, public `main` update, and `tubble-trial` Worker deployment. No backend deploy,
+  DNS/TLS change, account/data mutation, release asset publication/replacement,
+  credential disclosure, tag, or announcement occurred. Phase 1 step 6 passes; the
+  exact next major gate is second-operator DEPLOY-5.
