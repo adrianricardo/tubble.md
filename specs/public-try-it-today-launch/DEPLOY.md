@@ -115,6 +115,7 @@ Required deployment env vars, to confirm with `npx convex env list`:
 | `SITE_URL` | you set it (placeholder above) | public web app URL for redirects/handoff |
 | `CONVEX_SITE_URL` | provided automatically by Convex | auth domain (`.convex.site`) |
 | `AUTH_SESSION_TOTAL_DURATION_MS` | optional | session lifetime override |
+| `LAUNCH_SIGNUPS_DISABLED` | optional; you set it | set to `true` to pause new accounts while preserving sign-in |
 
 > Secrets are represented only by placeholders here. Never commit `.env.local`,
 > `JWT_PRIVATE_KEY`, or any deployment secret.
@@ -124,9 +125,19 @@ Required deployment env vars, to confirm with `npx convex env list`:
 - Email + password signup, one private starter Workspace created per account on first
   login (`ensurePersonalWorkspace`).
 - **Signups are capped at 100 per UTC day** (`DAILY_SIGNUP_CAP` in
-  `packages/sync-backend/convex/auth.ts`). This is a code constant, not an env var — to
-  raise, lower, or effectively disable signups, edit it and redeploy. Over the cap,
-  signup fails with "Daily signup limit reached."
+  `packages/sync-backend/convex/auth.ts`). This is a code constant; change and redeploy
+  to adjust the capacity. Over the cap, the signed-out app disables signup before
+  submission and explains when it reopens. The backend enforces the cap again during
+  account creation.
+- To pause new accounts without blocking existing users, set
+  `LAUNCH_SIGNUPS_DISABLED=true` on the deployment. The signed-out app shows the pause
+  before submission and the backend enforces it again. Reopen signups by removing the
+  variable:
+
+  ```sh
+  npx convex env set LAUNCH_SIGNUPS_DISABLED true
+  npx convex env remove LAUNCH_SIGNUPS_DISABLED
+  ```
 - The desktop app signs in via a short-lived single-use handoff code, not by copying a
   long-lived token.
 

@@ -1,4 +1,6 @@
 import { useAuthActions } from "@convex-dev/auth/react";
+import { api } from "@hubble.md/sync-backend";
+import { useQuery } from "convex/react";
 import { useState } from "react";
 import { categorizeError, describeError } from "../connection/convex-error";
 
@@ -25,10 +27,21 @@ export function SignInScreen({
 	const [mode, setMode] = useState<"signIn" | "signUp">(defaultMode);
 	const [error, setError] = useState<string | null>(null);
 	const [pending, setPending] = useState(false);
+	const signupAvailability = useQuery(
+		api.auth.signupAvailability,
+		mode === "signUp" ? {} : "skip",
+	);
+	const signupBlocked =
+		mode === "signUp" && signupAvailability?.status !== "available";
+	const signupStatusMessage =
+		mode !== "signUp" || signupAvailability?.status === "available"
+			? null
+			: (signupAvailability?.message ?? "Checking signup availability…");
 
 	const submit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		setError(null);
+		if (signupBlocked) return;
 		setPending(true);
 		const formData = new FormData(event.currentTarget);
 		formData.set("flow", mode);
@@ -57,6 +70,7 @@ export function SignInScreen({
 						(mode === "signIn" ? "Sign in to Tubble" : "Create your account")}
 				</h1>
 				<HostedTrialNotice visible={mode === "signUp"} />
+				<SignupAvailabilityNotice message={signupStatusMessage} />
 				<label
 					htmlFor="auth-email"
 					className="mt-4 block text-sm font-medium text-foreground"
@@ -106,10 +120,16 @@ export function SignInScreen({
 				{error && <p className="mt-3 text-sm text-destructive">{error}</p>}
 				<button
 					type="submit"
-					disabled={pending}
+					disabled={pending || signupBlocked}
 					className="mt-4 w-full rounded-sm bg-primary text-sm font-medium text-primary-foreground disabled:opacity-60 [padding-block:0.5rem] [padding-inline:0.75rem]"
 				>
-					{pending ? "Working…" : mode === "signIn" ? "Sign in" : "Sign up"}
+					{pending
+						? "Working…"
+						: mode === "signIn"
+							? "Sign in"
+							: signupBlocked
+								? "Signups unavailable"
+								: "Sign up"}
 				</button>
 				<button
 					type="button"
@@ -123,6 +143,28 @@ export function SignInScreen({
 				</button>
 			</form>
 		</main>
+	);
+}
+
+export function SignupAvailabilityNotice({
+	message,
+}: {
+	message: string | null;
+}) {
+	return (
+		<div
+			aria-hidden={!message}
+			aria-live="polite"
+			className={`grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${
+				message ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+			}`}
+		>
+			<div className="overflow-hidden">
+				<p className="mt-3 rounded-sm border border-border bg-muted/50 text-xs leading-relaxed text-foreground [padding-block:0.625rem] [padding-inline:0.75rem]">
+					{message}
+				</p>
+			</div>
+		</div>
 	);
 }
 
@@ -170,6 +212,9 @@ function describeAuthError(err: unknown, mode: "signIn" | "signUp"): string {
 	}
 	if (lower.includes("daily signup limit")) {
 		return "Daily signup limit reached. Signups reopen tomorrow.";
+	}
+	if (lower.includes("signups are temporarily paused")) {
+		return "New signups are temporarily paused. Existing accounts can still sign in.";
 	}
 	return describeError(categorizeError(err));
 }

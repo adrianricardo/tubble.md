@@ -198,6 +198,7 @@ on them:
 ## Planning references
 
 - Observable contract: `PRODUCT.md`
+- Current evidence and pending gates: `READINESS.md`
 - Current product authority behavior: `../folder-authority-mobility/PRODUCT.md`
 - Current build state: `../../brain/synthesized/roadmap.md`
 - Convex managed production overview:

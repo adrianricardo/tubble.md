@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { HostedTrialNotice } from "./AuthScreens";
+import { HostedTrialNotice, SignupAvailabilityNotice } from "./AuthScreens";
 
 describe("HostedTrialNotice", () => {
 	it("states the trial boundary and links to independent deployment", () => {
@@ -20,5 +20,17 @@ describe("HostedTrialNotice", () => {
 
 		expect(html).toContain('aria-hidden="true"');
 		expect(html).toContain('tabindex="-1"');
+	});
+});
+
+describe("SignupAvailabilityNotice", () => {
+	it("announces an operator pause without hiding the sign-in path", () => {
+		const html = renderToStaticMarkup(
+			<SignupAvailabilityNotice message="New signups are temporarily paused. Existing accounts can still sign in." />,
+		);
+
+		expect(html).toContain('aria-live="polite"');
+		expect(html).toContain("New signups are temporarily paused");
+		expect(html).toContain("Existing accounts can still sign in");
 	});
 });

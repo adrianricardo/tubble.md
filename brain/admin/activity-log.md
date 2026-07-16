@@ -942,3 +942,15 @@ acceptance roots. Desktop tests pass 166/166 and `pnpm build:desktop` passes. Mi
   collapsed link from the accessibility tree and tab order. Added two focused render
   tests and a user-facing changelog entry. Web tests pass 6/6, www typecheck passes,
   changed-file Biome passes, and the review-readiness simplify/comments pass is clean.
+- 2026-07-16 — Continued the public-launch milestone with capacity honesty and the
+  operational signup control. Added a public reactive availability query for the
+  100-account UTC-day cap and `LAUNCH_SIGNUPS_DISABLED`; the signup surface checks it
+  before enabling submission while backend account creation independently enforces
+  both states. Existing users can still sign in during a pause. Updated the independent
+  deployment guide and added `specs/public-try-it-today-launch/READINESS.md` as the
+  complete claim-shaped evidence/dependency index. The literal clean-browser audit was
+  retried but remains locally blocked by the browser runtime's invalid native-module
+  signature. Sync-backend tests pass 89/89, web tests pass 7/7, www typecheck passes,
+  `pnpm check:brand` reports 0 divergent values plus the known unresolved URL, and
+  `pnpm build:desktop` passes. No deployment, release, push, or production fixture
+  mutation occurred.

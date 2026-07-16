@@ -30,6 +30,15 @@ as one verified commit. No push, deployment, or release has occurred.
 - Phase 3 signup boundary is implemented: account creation now states the best-effort
   trial limits before submission and links to independent deployment. Web tests (6/6),
   www typecheck, and changed-file Biome pass.
+- Phase 3 signup operations are implemented locally: signed-out visitors see a reached
+  daily-cap or operator-pause state before submission; the backend enforces both; and
+  `LAUNCH_SIGNUPS_DISABLED` pauses new accounts without blocking existing sign-in.
+  The deployment guide documents pause/reopen. Production deployment evidence remains
+  pending. Sync-backend tests pass 89/89, web tests pass 7/7, www typecheck passes,
+  `pnpm check:brand` remains at 0 divergent + 1 unresolved URL, and
+  `pnpm build:desktop` passes.
+- The milestone's complete evidence and dependency matrix now lives in
+  `specs/public-try-it-today-launch/READINESS.md`.
 
 **Immediate open items (pick any; none block the others except where noted):**
 1. **Resolve hosted web URL** (Phase 1 step 7): set `config/brand.json` → `web.url`,
